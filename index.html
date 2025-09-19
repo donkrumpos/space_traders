@@ -10,7 +10,7 @@
             padding: 0;
             background: #000;
             font-family: 'Courier New', monospace;
-            color: #00ff00;
+            color: #333333;
             overflow: hidden;
         }
         
@@ -21,27 +21,36 @@
         
         #gameCanvas {
             background: #000;
-            border: 2px solid #00ff00;
+            border: 1px solid #222222;
+            flex: 1;
         }
         
         #ui {
             width: 300px;
-            background: #001100;
-            border: 2px solid #00ff00;
+            max-width: 30vw;
+            background: #111111;
+            border: 1px solid #222222;
             padding: 10px;
             overflow-y: auto;
+            transition: width 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        #ui.trading {
+            width: 400px;
+            max-width: 40vw;
         }
         
         .panel {
-            border: 1px solid #00ff00;
+            border: 1px solid #222222;
             margin: 10px 0;
             padding: 10px;
-            background: #002200;
+            background: #111111;
         }
         
         .panel h3 {
             margin: 0 0 10px 0;
-            color: #00ffff;
+            color: #444444;
         }
         
         .cargo-item {
@@ -55,8 +64,8 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: #002200;
-            border: 3px solid #00ff00;
+            background: #111111;
+            border: 3px solid #222222;
             padding: 20px;
             display: none;
             max-width: 500px;
@@ -69,39 +78,39 @@
             align-items: center;
             margin: 10px 0;
             padding: 5px;
-            border: 1px solid #004400;
+            border: 1px solid #222222;
         }
         
         button {
-            background: #004400;
-            color: #00ff00;
-            border: 1px solid #00ff00;
+            background: #222222;
+            color: #333333;
+            border: 1px solid #333333;
             padding: 5px 10px;
             cursor: pointer;
             font-family: 'Courier New', monospace;
         }
         
         button:hover {
-            background: #006600;
+            background: #333333;
         }
         
         #controls {
             position: fixed;
             bottom: 10px;
             left: 10px;
-            color: #00ff00;
+            color: #333333;
             font-size: 12px;
         }
     </style>
 </head>
 <body>
     <div id="gameContainer">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <canvas id="gameCanvas"></canvas>
         <div id="ui">
             <div class="panel">
                 <h3>Ship Status</h3>
                 <div>Credits: $<span id="credits">1000</span></div>
-                <div>Fuel: <span id="fuel">100</span>/100</div>
+                <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
                 <div>Hull: <span id="hull">100</span>/100</div>
                 <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
             </div>
@@ -126,17 +135,34 @@
                 <div>Shields: Level <span id="shieldLevel">1</span></div>
                 <div>Cargo: Level <span id="cargoLevel">1</span></div>
             </div>
+            
+            <div class="panel" id="tradingPanel" style="display: none;">
+                <h3 id="tradingTitle">Trading</h3>
+                <div id="stationInfo" style="margin-bottom: 15px; color: #00ffff; font-size: 12px;"></div>
+                
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: #00ffff;">Available for Purchase:</strong>
+                </div>
+                <div id="buyingSection"></div>
+                
+                <div style="margin: 15px 0;">
+                    <strong style="color: #00ffff;">Selling to Station:</strong>
+                </div>
+                <div id="sellingSection"></div>
+                
+                <div style="margin-top: 15px;">
+                    <button onclick="undock()" style="background: #333333; border-color: #444444;">Emergency Undock (ESC)</button>
+                </div>
+            </div>
         </div>
     </div>
     
-    <div id="tradeDialog">
-        <h3 id="tradeTitle">Trading Post</h3>
-        <div id="tradeContent"></div>
-        <button onclick="closeTrade()">Close</button>
+    <div id="tradeDialog" style="display: none;">
+        <!-- Removed - trading now happens in side panel -->
     </div>
     
     <div id="controls">
-        Controls: Arrow Keys to rotate and thrust | Space to dock when near planet
+        Controls: Arrow Keys to rotate and thrust | Down Arrow to brake | Space to dock | ESC to undock
     </div>
 
     <script>
@@ -149,7 +175,8 @@
                 y: 300,
                 angle: 0,
                 velocity: { x: 0, y: 0 },
-                fuel: 100,
+                fuel: 500,
+                fuelMax: 500,
                 hull: 100,
                 credits: 1000,
                 cargo: {},
@@ -159,7 +186,9 @@
             keys: {},
             planets: [],
             stars: [],
-            currentPlanet: null
+            nearPlanet: null,
+            inDockingRange: false,
+            isDocked: false
         };
         
         // Trade goods
@@ -218,6 +247,10 @@
             game.canvas = document.getElementById('gameCanvas');
             game.ctx = game.canvas.getContext('2d');
             
+            // Set canvas size to fill available space
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
             // Initialize planets
             game.planets = planetData.map(p => ({
                 ...p,
@@ -238,7 +271,21 @@
                 game.keys[e.code] = true;
                 if (e.code === 'Space') {
                     e.preventDefault();
-                    tryDock();
+                    if (game.isDocked) {
+                        undock();
+                    } else {
+                        tryDock();
+                    }
+                }
+                if (e.code === 'Escape') {
+                    e.preventDefault();
+                    if (game.isDocked) {
+                        undock();
+                    }
+                }
+                // Emergency undock on any movement key while docked
+                if (game.isDocked && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+                    undock();
                 }
             });
             
@@ -248,6 +295,26 @@
             
             updateUI();
             gameLoop();
+        }
+        
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            const ui = document.getElementById('ui');
+            const canvas = game.canvas;
+            
+            // Get the actual current width of the UI panel
+            const uiWidth = ui.offsetWidth;
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            
+            // Canvas takes remaining space after UI panel
+            canvas.width = containerWidth - uiWidth - 20; // Account for borders and padding
+            canvas.height = containerHeight - 4; // Account for borders
+            
+            // Ensure minimum canvas width
+            if (canvas.width < 400) {
+                canvas.width = 400;
+            }
         }
         
         function gameLoop() {
@@ -349,13 +416,13 @@
                     screenY >= -50 && screenY <= game.canvas.height + 50) {
                     
                     // Planet
-                    ctx.fillStyle = planet.color;
+                    ctx.fillStyle = '#333333';
                     ctx.beginPath();
                     ctx.arc(screenX, screenY, planet.size, 0, Math.PI * 2);
                     ctx.fill();
                     
                     // Planet name
-                    ctx.fillStyle = '#ffffff';
+                    ctx.fillStyle = '#444444';
                     ctx.font = '12px Courier New';
                     ctx.textAlign = 'center';
                     ctx.fillText(planet.name, screenX, screenY + planet.size + 15);
@@ -367,8 +434,8 @@
                     );
                     
                     if (distance < 60) {
-                        ctx.strokeStyle = '#00ff00';
-                        ctx.lineWidth = 2;
+                        ctx.strokeStyle = '#444444';
+                        ctx.lineWidth = 1;
                         ctx.beginPath();
                         ctx.arc(screenX, screenY, 40, 0, Math.PI * 2);
                         ctx.stroke();
@@ -385,8 +452,8 @@
             ctx.rotate(game.ship.angle);
             
             // Ship body
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#444444';
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(10, 0);
             ctx.lineTo(-10, -5);
@@ -397,7 +464,7 @@
             
             // Thrust indicator
             if (game.keys['ArrowUp'] && game.ship.fuel > 0) {
-                ctx.strokeStyle = '#ff8800';
+                ctx.strokeStyle = '#555555';
                 ctx.beginPath();
                 ctx.moveTo(-10, -2);
                 ctx.lineTo(-15, 0);
@@ -410,52 +477,104 @@
         }
         
         function tryDock() {
-            game.planets.forEach(planet => {
-                const distance = Math.sqrt(
-                    Math.pow(game.ship.x - planet.x, 2) + 
-                    Math.pow(game.ship.y - planet.y, 2)
-                );
-                
-                if (distance < 60) {
-                    openTrade(planet);
-                }
-            });
+            if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
+                dock(game.nearPlanet);
+            }
         }
         
-        function openTrade(planet) {
+        function dock(planet) {
+            game.isDocked = true;
             game.currentPlanet = planet;
-            document.getElementById('tradeTitle').textContent = planet.name;
             
-            let content = '<div style="margin-bottom: 20px;">';
-            content += `<div style="color: #00ffff; margin-bottom: 10px;">Welcome to ${planet.name}</div>`;
-            content += '<div style="font-size: 12px;">Type: ' + planet.type + '</div>';
-            content += '</div>';
+            // Stop the ship
+            game.ship.velocity.x = 0;
+            game.ship.velocity.y = 0;
             
-            // Show what they're selling
-            content += '<div style="margin-bottom: 15px;"><strong>Available for Purchase:</strong></div>';
+            // Expand UI panel and show trading
+            document.getElementById('ui').classList.add('trading');
+            document.getElementById('tradingPanel').style.display = 'block';
+            
+            // Resize canvas to account for expanded UI
+            setTimeout(() => {
+                resizeCanvas();
+            }, 300); // Wait for CSS transition
+            
+            // Populate trading interface
+            updateTradingInterface(planet);
+        }
+        
+        function undock() {
+            game.isDocked = false;
+            game.currentPlanet = null;
+            
+            // Collapse UI panel and hide trading
+            document.getElementById('ui').classList.remove('trading');
+            document.getElementById('tradingPanel').style.display = 'none';
+            
+            // Resize canvas back
+            setTimeout(() => {
+                resizeCanvas();
+            }, 300); // Wait for CSS transition
+        }
+        
+        function updateTradingInterface(planet) {
+            document.getElementById('tradingTitle').textContent = planet.name;
+            document.getElementById('stationInfo').textContent = `Type: ${planet.type} | Status: DOCKED`;
+            
+            // Update buying section (what the station sells)
+            const buyingSection = document.getElementById('buyingSection');
+            buyingSection.innerHTML = '';
             Object.keys(planet.produces).forEach(goodType => {
                 const price = planet.produces[goodType];
-                content += `<div class="trade-item">
+                buyingSection.innerHTML += `<div class="trade-item">
                     <span>${goods[goodType].name}</span>
-                    <span>$${price}</span>
+                    <span>${price}</span>
                     <button onclick="buyGood('${goodType}', ${price})">Buy</button>
                 </div>`;
             });
             
-            // Show what they're buying
-            content += '<div style="margin: 15px 0;"><strong>Purchasing:</strong></div>';
+            if (Object.keys(planet.produces).length === 0) {
+                buyingSection.innerHTML = '<div style="color: #666;">Nothing for sale</div>';
+            }
+            
+            // Update selling section (what the station buys)
+            updateSellingSectionUI();
+        }
+        
+        function updateSellingSectionUI() {
+            const sellingSection = document.getElementById('sellingSection');
+            const planet = game.currentPlanet;
+            
+            sellingSection.innerHTML = '';
             Object.keys(planet.demands).forEach(goodType => {
                 const price = planet.demands[goodType];
                 const playerHas = game.ship.cargo[goodType] || 0;
-                content += `<div class="trade-item">
+                sellingSection.innerHTML += `<div class="trade-item">
                     <span>${goods[goodType].name} (You have: ${playerHas})</span>
-                    <span>$${price}</span>
+                    <span>${price}</span>
                     <button onclick="sellGood('${goodType}', ${price})" ${playerHas === 0 ? 'disabled' : ''}>Sell</button>
                 </div>`;
             });
+        }
+        
+        function buyFuel() {
+            const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
+            if (fuelNeeded === 0) {
+                alert('Fuel tank is already full!');
+                return;
+            }
             
-            document.getElementById('tradeContent').innerHTML = content;
-            document.getElementById('tradeDialog').style.display = 'block';
+            const fuelCost = fuelNeeded * 2;
+            if (game.ship.credits < fuelCost) {
+                alert(`Insufficient credits! Need ${fuelCost} to fill tank.`);
+                return;
+            }
+            
+            game.ship.credits -= fuelCost;
+            game.ship.fuel = game.ship.fuelMax;
+            
+            updateUI();
+            updateTradingInterface(game.currentPlanet); // Refresh interface
         }
         
         function buyGood(goodType, price) {
@@ -475,7 +594,7 @@
             game.ship.cargo[goodType] = (game.ship.cargo[goodType] || 0) + 1;
             
             updateUI();
-            openTrade(game.currentPlanet); // Refresh dialog
+            updateSellingSectionUI(); // Refresh the selling section with new cargo
         }
         
         function sellGood(goodType, price) {
@@ -491,17 +610,13 @@
             }
             
             updateUI();
-            openTrade(game.currentPlanet); // Refresh dialog
-        }
-        
-        function closeTrade() {
-            document.getElementById('tradeDialog').style.display = 'none';
-            game.currentPlanet = null;
+            updateSellingSectionUI(); // Refresh the selling section
         }
         
         function updateUI() {
             document.getElementById('credits').textContent = game.ship.credits;
             document.getElementById('fuel').textContent = Math.floor(game.ship.fuel);
+            document.getElementById('fuelMax').textContent = game.ship.fuelMax;
             document.getElementById('hull').textContent = Math.floor(game.ship.hull);
             
             const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
@@ -530,16 +645,24 @@
             const nearby = document.getElementById('nearbyObjects');
             nearby.innerHTML = '';
             
-            game.planets.forEach(planet => {
-                const distance = Math.sqrt(
-                    Math.pow(game.ship.x - planet.x, 2) + 
-                    Math.pow(game.ship.y - planet.y, 2)
-                );
-                
-                if (distance < 100) {
-                    nearby.innerHTML += `<div style="color: #ffff00;">Near: ${planet.name}</div>`;
-                }
-            });
+            if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
+                nearby.innerHTML += `<div style="color: #444444; font-weight: bold;">DOCKING RANGE</div>`;
+                nearby.innerHTML += `<div style="color: #555555;">Press SPACE to dock with ${game.nearPlanet.name}</div>`;
+            } else if (game.isDocked) {
+                nearby.innerHTML += `<div style="color: #444444; font-weight: bold;">DOCKED at ${game.currentPlanet.name}</div>`;
+                nearby.innerHTML += `<div style="color: #555555;">Press ESC or movement keys for emergency undock</div>`;
+            } else {
+                game.planets.forEach(planet => {
+                    const distance = Math.sqrt(
+                        Math.pow(game.ship.x - planet.x, 2) + 
+                        Math.pow(game.ship.y - planet.y, 2)
+                    );
+                    
+                    if (distance < 200) {
+                        nearby.innerHTML += `<div style="color: #333333;">Nearby: ${planet.name}</div>`;
+                    }
+                });
+            }
         }
         
         // Start the game
