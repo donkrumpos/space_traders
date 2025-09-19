@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Trader</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #gameCanvas {
+            background: #000;
+            border: 2px solid #00ff00;
+        }
+        
+        #ui {
+            width: 300px;
+            background: #001100;
+            border: 2px solid #00ff00;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        .panel {
+            border: 1px solid #00ff00;
+            margin: 10px 0;
+            padding: 10px;
+            background: #002200;
+        }
+        
+        .panel h3 {
+            margin: 0 0 10px 0;
+            color: #00ffff;
+        }
+        
+        .cargo-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        
+        #tradeDialog {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #002200;
+            border: 3px solid #00ff00;
+            padding: 20px;
+            display: none;
+            max-width: 500px;
+            z-index: 1000;
+        }
+        
+        .trade-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 5px;
+            border: 1px solid #004400;
+        }
+        
+        button {
+            background: #004400;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+        
+        button:hover {
+            background: #006600;
+        }
+        
+        #controls {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: #00ff00;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div class="panel">
+                <h3>Ship Status</h3>
+                <div>Credits: $<span id="credits">1000</span></div>
+                <div>Fuel: <span id="fuel">100</span>/100</div>
+                <div>Hull: <span id="hull">100</span>/100</div>
+                <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
+            </div>
+            
+            <div class="panel">
+                <h3>Cargo Hold</h3>
+                <div id="cargoList">
+                    <div class="cargo-item">Empty</div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h3>Navigation</h3>
+                <div>Position: (<span id="posX">0</span>, <span id="posY">0</span>)</div>
+                <div>Sector: <span id="sector">Deep Space</span></div>
+                <div id="nearbyObjects"></div>
+            </div>
+            
+            <div class="panel">
+                <h3>Ship Upgrades</h3>
+                <div>Engines: Level <span id="engineLevel">1</span></div>
+                <div>Shields: Level <span id="shieldLevel">1</span></div>
+                <div>Cargo: Level <span id="cargoLevel">1</span></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="tradeDialog">
+        <h3 id="tradeTitle">Trading Post</h3>
+        <div id="tradeContent"></div>
+        <button onclick="closeTrade()">Close</button>
+    </div>
+    
+    <div id="controls">
+        Controls: Arrow Keys to rotate and thrust | Space to dock when near planet
+    </div>
+
+    <script>
+        // Game state
+        const game = {
+            canvas: null,
+            ctx: null,
+            ship: {
+                x: 400,
+                y: 300,
+                angle: 0,
+                velocity: { x: 0, y: 0 },
+                fuel: 100,
+                hull: 100,
+                credits: 1000,
+                cargo: {},
+                cargoMax: 10
+            },
+            camera: { x: 0, y: 0 },
+            keys: {},
+            planets: [],
+            stars: [],
+            currentPlanet: null
+        };
+        
+        // Trade goods
+        const goods = {
+            food: { name: 'Food', color: '#ffff00' },
+            technology: { name: 'Technology', color: '#00ffff' },
+            materials: { name: 'Raw Materials', color: '#ff8800' },
+            luxury: { name: 'Luxury Goods', color: '#ff00ff' }
+        };
+        
+        // Planet definitions
+        const planetData = [
+            {
+                name: 'Agricon Prime',
+                x: 1000, y: 800,
+                type: 'agricultural',
+                color: '#00ff00',
+                produces: { food: 50 },
+                demands: { technology: 200, luxury: 150 }
+            },
+            {
+                name: 'Mining Station 7',
+                x: 2000, y: 1200,
+                type: 'industrial',
+                color: '#888888',
+                produces: { materials: 60 },
+                demands: { food: 180, luxury: 140 }
+            },
+            {
+                name: 'Tech Hub Alpha',
+                x: 1500, y: 400,
+                type: 'technology',
+                color: '#00ffff',
+                produces: { technology: 80, luxury: 120 },
+                demands: { materials: 160, food: 100 }
+            },
+            {
+                name: 'Frontier Outpost',
+                x: 3000, y: 2000,
+                type: 'frontier',
+                color: '#ff0000',
+                produces: {},
+                demands: { food: 300, technology: 280, materials: 250, luxury: 200 }
+            },
+            {
+                name: 'Core World Central',
+                x: 800, y: 1600,
+                type: 'core',
+                color: '#ffff00',
+                produces: { luxury: 90 },
+                demands: { materials: 130, technology: 110 }
+            }
+        ];
+        
+        function init() {
+            game.canvas = document.getElementById('gameCanvas');
+            game.ctx = game.canvas.getContext('2d');
+            
+            // Initialize planets
+            game.planets = planetData.map(p => ({
+                ...p,
+                size: 20
+            }));
+            
+            // Generate starfield
+            for (let i = 0; i < 200; i++) {
+                game.stars.push({
+                    x: Math.random() * 4000,
+                    y: Math.random() * 3000,
+                    brightness: Math.random()
+                });
+            }
+            
+            // Event listeners
+            document.addEventListener('keydown', (e) => {
+                game.keys[e.code] = true;
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    tryDock();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                game.keys[e.code] = false;
+            });
+            
+            updateUI();
+            gameLoop();
+        }
+        
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            // Ship controls (Asteroids style)
+            if (game.keys['ArrowLeft']) {
+                game.ship.angle -= 0.1;
+            }
+            if (game.keys['ArrowRight']) {
+                game.ship.angle += 0.1;
+            }
+            if (game.keys['ArrowUp'] && game.ship.fuel > 0) {
+                const thrust = 0.2;
+                game.ship.velocity.x += Math.cos(game.ship.angle) * thrust;
+                game.ship.velocity.y += Math.sin(game.ship.angle) * thrust;
+                game.ship.fuel -= 0.1;
+            }
+            
+            // Apply velocity
+            game.ship.x += game.ship.velocity.x;
+            game.ship.y += game.ship.velocity.y;
+            
+            // Apply drag
+            game.ship.velocity.x *= 0.99;
+            game.ship.velocity.y *= 0.99;
+            
+            // Update camera to follow ship
+            game.camera.x = game.ship.x - game.canvas.width / 2;
+            game.camera.y = game.ship.y - game.canvas.height / 2;
+            
+            updateUI();
+        }
+        
+        function render() {
+            const ctx = game.ctx;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+            
+            // Draw stars
+            ctx.fillStyle = '#ffffff';
+            game.stars.forEach(star => {
+                const screenX = star.x - game.camera.x;
+                const screenY = star.y - game.camera.y;
+                
+                if (screenX >= 0 && screenX <= game.canvas.width && 
+                    screenY >= 0 && screenY <= game.canvas.height) {
+                    ctx.globalAlpha = star.brightness;
+                    ctx.fillRect(screenX, screenY, 1, 1);
+                }
+            });
+            ctx.globalAlpha = 1;
+            
+            // Draw planets
+            game.planets.forEach(planet => {
+                const screenX = planet.x - game.camera.x;
+                const screenY = planet.y - game.camera.y;
+                
+                if (screenX >= -50 && screenX <= game.canvas.width + 50 && 
+                    screenY >= -50 && screenY <= game.canvas.height + 50) {
+                    
+                    // Planet
+                    ctx.fillStyle = planet.color;
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, planet.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Planet name
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '12px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(planet.name, screenX, screenY + planet.size + 15);
+                    
+                    // Docking range indicator
+                    const distance = Math.sqrt(
+                        Math.pow(game.ship.x - planet.x, 2) + 
+                        Math.pow(game.ship.y - planet.y, 2)
+                    );
+                    
+                    if (distance < 60) {
+                        ctx.strokeStyle = '#00ff00';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(screenX, screenY, 40, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+            });
+            
+            // Draw ship (always in center)
+            const shipX = game.canvas.width / 2;
+            const shipY = game.canvas.height / 2;
+            
+            ctx.save();
+            ctx.translate(shipX, shipY);
+            ctx.rotate(game.ship.angle);
+            
+            // Ship body
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(10, 0);
+            ctx.lineTo(-10, -5);
+            ctx.lineTo(-5, 0);
+            ctx.lineTo(-10, 5);
+            ctx.closePath();
+            ctx.stroke();
+            
+            // Thrust indicator
+            if (game.keys['ArrowUp'] && game.ship.fuel > 0) {
+                ctx.strokeStyle = '#ff8800';
+                ctx.beginPath();
+                ctx.moveTo(-10, -2);
+                ctx.lineTo(-15, 0);
+                ctx.moveTo(-10, 2);
+                ctx.lineTo(-15, 0);
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+        
+        function tryDock() {
+            game.planets.forEach(planet => {
+                const distance = Math.sqrt(
+                    Math.pow(game.ship.x - planet.x, 2) + 
+                    Math.pow(game.ship.y - planet.y, 2)
+                );
+                
+                if (distance < 60) {
+                    openTrade(planet);
+                }
+            });
+        }
+        
+        function openTrade(planet) {
+            game.currentPlanet = planet;
+            document.getElementById('tradeTitle').textContent = planet.name;
+            
+            let content = '<div style="margin-bottom: 20px;">';
+            content += `<div style="color: #00ffff; margin-bottom: 10px;">Welcome to ${planet.name}</div>`;
+            content += '<div style="font-size: 12px;">Type: ' + planet.type + '</div>';
+            content += '</div>';
+            
+            // Show what they're selling
+            content += '<div style="margin-bottom: 15px;"><strong>Available for Purchase:</strong></div>';
+            Object.keys(planet.produces).forEach(goodType => {
+                const price = planet.produces[goodType];
+                content += `<div class="trade-item">
+                    <span>${goods[goodType].name}</span>
+                    <span>$${price}</span>
+                    <button onclick="buyGood('${goodType}', ${price})">Buy</button>
+                </div>`;
+            });
+            
+            // Show what they're buying
+            content += '<div style="margin: 15px 0;"><strong>Purchasing:</strong></div>';
+            Object.keys(planet.demands).forEach(goodType => {
+                const price = planet.demands[goodType];
+                const playerHas = game.ship.cargo[goodType] || 0;
+                content += `<div class="trade-item">
+                    <span>${goods[goodType].name} (You have: ${playerHas})</span>
+                    <span>$${price}</span>
+                    <button onclick="sellGood('${goodType}', ${price})" ${playerHas === 0 ? 'disabled' : ''}>Sell</button>
+                </div>`;
+            });
+            
+            document.getElementById('tradeContent').innerHTML = content;
+            document.getElementById('tradeDialog').style.display = 'block';
+        }
+        
+        function buyGood(goodType, price) {
+            const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+            
+            if (cargoUsed >= game.ship.cargoMax) {
+                alert('Cargo hold is full!');
+                return;
+            }
+            
+            if (game.ship.credits < price) {
+                alert('Insufficient credits!');
+                return;
+            }
+            
+            game.ship.credits -= price;
+            game.ship.cargo[goodType] = (game.ship.cargo[goodType] || 0) + 1;
+            
+            updateUI();
+            openTrade(game.currentPlanet); // Refresh dialog
+        }
+        
+        function sellGood(goodType, price) {
+            if ((game.ship.cargo[goodType] || 0) === 0) {
+                alert('You don\'t have any ' + goods[goodType].name + '!');
+                return;
+            }
+            
+            game.ship.credits += price;
+            game.ship.cargo[goodType]--;
+            if (game.ship.cargo[goodType] === 0) {
+                delete game.ship.cargo[goodType];
+            }
+            
+            updateUI();
+            openTrade(game.currentPlanet); // Refresh dialog
+        }
+        
+        function closeTrade() {
+            document.getElementById('tradeDialog').style.display = 'none';
+            game.currentPlanet = null;
+        }
+        
+        function updateUI() {
+            document.getElementById('credits').textContent = game.ship.credits;
+            document.getElementById('fuel').textContent = Math.floor(game.ship.fuel);
+            document.getElementById('hull').textContent = Math.floor(game.ship.hull);
+            
+            const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+            document.getElementById('cargoUsed').textContent = cargoUsed;
+            document.getElementById('cargoMax').textContent = game.ship.cargoMax;
+            
+            document.getElementById('posX').textContent = Math.floor(game.ship.x);
+            document.getElementById('posY').textContent = Math.floor(game.ship.y);
+            
+            // Update cargo list
+            const cargoList = document.getElementById('cargoList');
+            if (Object.keys(game.ship.cargo).length === 0) {
+                cargoList.innerHTML = '<div class="cargo-item">Empty</div>';
+            } else {
+                cargoList.innerHTML = '';
+                Object.keys(game.ship.cargo).forEach(goodType => {
+                    const amount = game.ship.cargo[goodType];
+                    cargoList.innerHTML += `<div class="cargo-item">
+                        <span>${goods[goodType].name}</span>
+                        <span>${amount}</span>
+                    </div>`;
+                });
+            }
+            
+            // Check for nearby objects
+            const nearby = document.getElementById('nearbyObjects');
+            nearby.innerHTML = '';
+            
+            game.planets.forEach(planet => {
+                const distance = Math.sqrt(
+                    Math.pow(game.ship.x - planet.x, 2) + 
+                    Math.pow(game.ship.y - planet.y, 2)
+                );
+                
+                if (distance < 100) {
+                    nearby.innerHTML += `<div style="color: #ffff00;">Near: ${planet.name}</div>`;
+                }
+            });
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
