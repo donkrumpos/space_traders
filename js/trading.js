@@ -1,5 +1,12 @@
 function tryDock() {
-    if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
+    // Check for event interaction first (but not if already engaged or docked)
+    if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked && !game.isEngaged) {
+        interactWithEvent(eventSystem.nearEvent);
+        return;
+    }
+
+    // Then check for planet docking (but not if already engaged)
+    if (game.inDockingRange && game.nearPlanet && !game.isDocked && !game.isEngaged) {
         dock(game.nearPlanet);
     }
 }

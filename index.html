@@ -75,6 +75,25 @@
                     <button onclick="undock()" style="background: #333333; border-color: #444444;">Emergency Undock (ESC)</button>
                 </div>
             </div>
+
+            <div class="panel" id="eventPanel" style="display: none;">
+                <h3 id="eventTitle">Event Interaction</h3>
+                <div id="eventInfo" style="margin-bottom: 15px; color: #00ffff; font-size: 12px;"></div>
+
+                <div style="margin-bottom: 15px;">
+                    <strong style="color: #00ffff;">Event Description:</strong>
+                </div>
+                <div id="eventDescription" style="color: #cccccc; line-height: 1.4; margin-bottom: 20px;"></div>
+
+                <div style="margin: 15px 0;">
+                    <strong style="color: #00ffff;">Available Actions:</strong>
+                </div>
+                <div id="eventActions"></div>
+
+                <div style="margin-top: 20px;">
+                    <button onclick="disengage()" style="background: #333333; border-color: #444444;">Disengage (ESC)</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -97,7 +116,8 @@
     </div>
 
     <div id="controls">
-        Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | M for map | ESC to undock
+        Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | M for map | ESC to undock<br>
+        🌟 Random events occur during travel - make choices to earn rewards or avoid risks!
     </div>
 
     <!-- Game Scripts -->
@@ -107,6 +127,7 @@
     <script src="js/trading.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/navigation.js"></script>
+    <script src="js/events.js"></script>
     <script>
         // Start the game after all scripts are loaded
         startGame();

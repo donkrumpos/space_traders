@@ -38,6 +38,37 @@ function updateMiniMap() {
     ctx.arc(centerX, centerY, range * scale, 0, Math.PI * 2);
     ctx.stroke();
 
+    // Draw event objects on mini-map
+    if (typeof eventSystem !== 'undefined' && eventSystem.activeEvents) {
+        eventSystem.activeEvents.forEach(event => {
+            const dx = event.x - game.ship.x;
+            const dy = event.y - game.ship.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= range) {
+                const mapX = centerX + (dx * scale);
+                const mapY = centerY + (dy * scale);
+
+                // Event indicator - yellow/orange for events
+                ctx.fillStyle = '#ffaa00';
+                ctx.beginPath();
+                ctx.arc(mapX, mapY, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Event symbol
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(event.symbol, mapX, mapY + 2);
+
+                // Distance
+                ctx.fillStyle = '#ffaa00';
+                ctx.font = '5px Courier New';
+                ctx.fillText(Math.floor(distance), mapX, mapY + 10);
+            }
+        });
+    }
+
     // Draw ALL planets in range - strategic overview
     game.planets.forEach(planet => {
         const dx = planet.x - game.ship.x;

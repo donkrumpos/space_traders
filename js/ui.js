@@ -38,7 +38,21 @@ function updateUI() {
     const nearby = document.getElementById('nearbyObjects');
     nearby.innerHTML = '';
 
-    if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
+    // Check for event engagement first
+    if (game.isEngaged) {
+        nearby.innerHTML += `<div style="color: #ffaa00; font-weight: bold;">ENGAGED with ${game.currentEvent.name}</div>`;
+        nearby.innerHTML += `<div style="color: #ffff00;">Use side panel for choices | ESC or movement keys to disengage</div>`;
+    } else if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked) {
+        const event = eventSystem.nearEvent;
+        nearby.innerHTML += `<div style="color: #ffaa00; font-weight: bold;">EVENT DETECTED</div>`;
+        nearby.innerHTML += `<div style="color: #ffff00;">Press SPACE to ${event.interactionText}</div>`;
+        nearby.innerHTML += `<div style="color: #cccccc; font-size: 10px;">${event.description}</div>`;
+        if (event.fuelCost > 0) {
+            const canAfford = game.ship.fuel >= event.fuelCost;
+            const color = canAfford ? '#88ff88' : '#ff8888';
+            nearby.innerHTML += `<div style="color: ${color};">Fuel cost: ${event.fuelCost}</div>`;
+        }
+    } else if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
         nearby.innerHTML += `<div style="color: #00ff00; font-weight: bold;">DOCKING RANGE</div>`;
         nearby.innerHTML += `<div style="color: #ffff00;">Press SPACE to dock with ${game.nearPlanet.name}</div>`;
     } else if (game.isDocked) {
@@ -85,6 +99,16 @@ function updateUI() {
                 nearbyCount++;
             }
         });
+
+        // Event system status
+        if (typeof eventSystem !== 'undefined') {
+            const distanceToNextEvent = eventSystem.eventTriggerDistance - eventSystem.travelDistance;
+            if (distanceToNextEvent < 100 && distanceToNextEvent > 0) {
+                nearby.innerHTML += `<div style="color: #ffaa00; margin-top: 5px;">🌟 Event imminent</div>`;
+            } else if (eventSystem.eventCooldown > 0) {
+                nearby.innerHTML += `<div style="color: #666666; margin-top: 2px;">Event cooldown: ${Math.ceil(eventSystem.eventCooldown/60)}s</div>`;
+            }
+        }
 
         // Navigation hint
         nearby.innerHTML += `<div style="color: #444444; margin-top: 5px;">Press M for map</div>`;

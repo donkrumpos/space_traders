@@ -37,6 +37,8 @@ const game = {
     nearPlanet: null,
     inDockingRange: false,
     isDocked: false,
+    isEngaged: false,
+    currentEvent: null,
     map: {
         showFullMap: false,
         miniMapSize: 150,
@@ -202,6 +204,8 @@ function init() {
             e.preventDefault();
             if (game.map.showFullMap) {
                 game.map.showFullMap = false;
+            } else if (game.isEngaged) {
+                disengage();
             } else if (game.isDocked) {
                 undock();
             }
@@ -210,9 +214,13 @@ function init() {
             e.preventDefault();
             game.map.showFullMap = !game.map.showFullMap;
         }
-        // Emergency undock on any movement key while docked
-        if (game.isDocked && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-            undock();
+        // Emergency undock/disengage on any movement key while docked or engaged
+        if ((game.isDocked || game.isEngaged) && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+            if (game.isEngaged) {
+                disengage();
+            } else if (game.isDocked) {
+                undock();
+            }
         }
     });
 
@@ -221,6 +229,7 @@ function init() {
     });
 
     updateUI();
+    initEvents();
     gameLoop();
 }
 

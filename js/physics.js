@@ -75,6 +75,7 @@ function update() {
 
     updateUI();
     updateMaps();
+    updateEventSystem();
 }
 
 function updateThrustSystem() {

@@ -51,6 +51,50 @@ function render() {
     });
     ctx.globalAlpha = 1;
 
+    // Draw event objects
+    if (typeof eventSystem !== 'undefined' && eventSystem.activeEvents) {
+        eventSystem.activeEvents.forEach(event => {
+            const screenX = event.x - game.camera.x;
+            const screenY = event.y - game.camera.y;
+
+            if (screenX >= -50 && screenX <= game.canvas.width + 50 &&
+                screenY >= -50 && screenY <= game.canvas.height + 50) {
+
+                // Event object
+                ctx.fillStyle = event.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, event.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Event name
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '10px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(event.name, screenX, screenY + event.size + 15);
+
+                // Interaction range indicator
+                const distance = Math.sqrt(
+                    Math.pow(game.ship.x - event.x, 2) +
+                    Math.pow(game.ship.y - event.y, 2)
+                );
+
+                if (distance < 60) {
+                    ctx.strokeStyle = '#ffff00';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, 40, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Event symbol/icon overlay
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(event.symbol, screenX, screenY + 5);
+            }
+        });
+    }
+
     // Draw planets
     game.planets.forEach(planet => {
         const screenX = planet.x - game.camera.x;
