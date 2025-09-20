@@ -78,8 +78,26 @@
         </div>
     </div>
 
+    <!-- Mini-map -->
+    <div id="miniMap">
+        <canvas id="miniMapCanvas" width="150" height="150"></canvas>
+        <div id="miniMapTitle">Strategic Nav</div>
+    </div>
+
+    <!-- Full map overlay -->
+    <div id="fullMapOverlay" style="display: none;">
+        <div id="fullMapContainer">
+            <canvas id="fullMapCanvas"></canvas>
+            <div id="fullMapTitle">Galaxy Map - Press M or ESC to close</div>
+            <div id="mapLegend">
+                <div>🟢 Agricultural  🔵 Technology  🔴 Frontier</div>
+                <div>⚫ Industrial  🟡 Core World  ⭐ Your Ship</div>
+            </div>
+        </div>
+    </div>
+
     <div id="controls">
-        Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | ESC to undock
+        Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | M for map | ESC to undock
     </div>
 
     <!-- Game Scripts -->
@@ -88,6 +106,7 @@
     <script src="js/render.js"></script>
     <script src="js/trading.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/navigation.js"></script>
     <script>
         // Start the game after all scripts are loaded
         startGame();

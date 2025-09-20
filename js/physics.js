@@ -74,6 +74,7 @@ function update() {
     game.camera.y = game.ship.y - game.canvas.height / 2;
 
     updateUI();
+    updateMaps();
 }
 
 function updateThrustSystem() {

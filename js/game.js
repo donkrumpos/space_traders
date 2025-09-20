@@ -36,7 +36,12 @@ const game = {
     stars: [],
     nearPlanet: null,
     inDockingRange: false,
-    isDocked: false
+    isDocked: false,
+    map: {
+        showFullMap: false,
+        miniMapSize: 150,
+        miniMapRange: 1500  // 5x wider than typical main screen view (~300 units)
+    }
 };
 
 // Trade goods
@@ -195,9 +200,15 @@ function init() {
         }
         if (e.code === 'Escape') {
             e.preventDefault();
-            if (game.isDocked) {
+            if (game.map.showFullMap) {
+                game.map.showFullMap = false;
+            } else if (game.isDocked) {
                 undock();
             }
+        }
+        if (e.code === 'KeyM') {
+            e.preventDefault();
+            game.map.showFullMap = !game.map.showFullMap;
         }
         // Emergency undock on any movement key while docked
         if (game.isDocked && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {

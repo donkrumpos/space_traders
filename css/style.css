@@ -100,3 +100,78 @@ button:disabled {
     color: #00ff00;
     font-size: 12px;
 }
+
+/* Mini-map */
+#miniMap {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 150px;
+    height: 170px;
+    background: #001100;
+    border: 2px solid #00ff00;
+    padding: 5px;
+    z-index: 100;
+}
+
+#miniMapCanvas {
+    border: 1px solid #004400;
+    background: #000;
+}
+
+#miniMapTitle {
+    color: #00ffff;
+    font-size: 10px;
+    text-align: center;
+    margin-top: 5px;
+}
+
+/* Full map overlay */
+#fullMapOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#fullMapContainer {
+    width: 80vw;
+    height: 80vh;
+    max-width: 800px;
+    max-height: 600px;
+    background: #001100;
+    border: 3px solid #00ff00;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+#fullMapCanvas {
+    flex: 1;
+    border: 2px solid #004400;
+    background: #000;
+}
+
+#fullMapTitle {
+    color: #00ffff;
+    font-size: 14px;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+#mapLegend {
+    color: #00ff00;
+    font-size: 10px;
+    text-align: center;
+    margin-top: 10px;
+}
+
+#mapLegend div {
+    margin: 2px 0;
+}
