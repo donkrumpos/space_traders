@@ -20,6 +20,14 @@ const game = {
             shields: 1,
             fuel_tank: 1,
             hull: 1
+        },
+        thrust: {
+            current: 0,        // Current thrust power (0-1)
+            target: 0,         // Target thrust power (0-1)
+            rampUpTime: 0,     // Time spent ramping up
+            rampDownTime: 0,   // Time spent ramping down
+            isThrusting: false,
+            isReversing: false
         }
     },
     camera: { x: 0, y: 0 },
@@ -62,7 +70,7 @@ const planetData = [
         demands: { food: 180, luxury: 140 },
         upgrades: {
             hull: { name: 'Hull Reinforcement', baseCost: 1000, description: 'Increases hull strength by 50 points' },
-            engine: { name: 'Industrial Thrusters', baseCost: 1200, description: 'Improves thrust power and fuel efficiency' }
+            engine: { name: 'Industrial Thrusters', baseCost: 1200, description: 'Faster acceleration (2s to max thrust) and improved fuel efficiency' }
         }
     },
     {
@@ -74,7 +82,7 @@ const planetData = [
         demands: { materials: 160, food: 100 },
         upgrades: {
             shields: { name: 'Shield Generator', baseCost: 1500, description: 'Advanced shield system for protection' },
-            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'High-efficiency propulsion system' }
+            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency' }
         }
     },
     {
@@ -86,7 +94,8 @@ const planetData = [
         demands: { food: 300, technology: 280, materials: 250, luxury: 200 },
         upgrades: {
             shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
-            hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' }
+            hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' },
+            engine: { name: 'Military Drive Core', baseCost: 4000, description: 'Instant acceleration (0.5s to max thrust) with maximum fuel efficiency' }
         }
     },
     {
@@ -117,12 +126,59 @@ function init() {
         size: 20
     }));
 
-    // Generate starfield
-    for (let i = 0; i < 200; i++) {
+    // Generate starfield with variety and depth
+    const starColors = ['#ffffff', '#aaccff', '#ffffaa', '#ffccaa', '#ffaaaa'];
+    const starColorNames = ['white', 'blue', 'yellow', 'orange', 'red'];
+
+    // Background stars (far) - 80% small stars
+    for (let i = 0; i < 160; i++) {
         game.stars.push({
-            x: Math.random() * 4000,
-            y: Math.random() * 3000,
-            brightness: Math.random()
+            x: Math.random() * 8000, // Larger field for background
+            y: Math.random() * 6000,
+            size: 1,
+            brightness: 0.3 + Math.random() * 0.4, // Dimmer background stars
+            color: starColors[Math.floor(Math.random() * starColors.length)],
+            depth: 0.3, // Far background - slow parallax
+            layer: 'background'
+        });
+    }
+
+    // Mid-distance stars - 15% medium stars
+    for (let i = 0; i < 30; i++) {
+        game.stars.push({
+            x: Math.random() * 6000,
+            y: Math.random() * 4500,
+            size: 2 + Math.random(), // 2-3px
+            brightness: 0.5 + Math.random() * 0.4,
+            color: starColors[Math.floor(Math.random() * starColors.length)],
+            depth: 0.6, // Medium parallax
+            layer: 'middle'
+        });
+    }
+
+    // Close stars - 4% large stars
+    for (let i = 0; i < 8; i++) {
+        game.stars.push({
+            x: Math.random() * 5000,
+            y: Math.random() * 4000,
+            size: 4 + Math.random() * 2, // 4-6px
+            brightness: 0.7 + Math.random() * 0.3,
+            color: starColors[Math.floor(Math.random() * starColors.length)],
+            depth: 0.9, // Fast parallax
+            layer: 'close'
+        });
+    }
+
+    // Giant stars - 1% rare giants
+    for (let i = 0; i < 2; i++) {
+        game.stars.push({
+            x: Math.random() * 4500,
+            y: Math.random() * 3500,
+            size: 8 + Math.random() * 2, // 8-10px
+            brightness: 0.8 + Math.random() * 0.2,
+            color: starColors[Math.floor(Math.random() * starColors.length)],
+            depth: 1.2, // Very fast parallax (appears closest)
+            layer: 'giant'
         });
     }
 

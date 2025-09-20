@@ -3,16 +3,50 @@ function render() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
 
-    // Draw stars
-    ctx.fillStyle = '#ffffff';
+    // Draw stars with parallax effect (back to front)
     game.stars.forEach(star => {
-        const screenX = star.x - game.camera.x;
-        const screenY = star.y - game.camera.y;
+        // Apply parallax - closer stars move faster with camera
+        const parallaxX = game.camera.x * star.depth;
+        const parallaxY = game.camera.y * star.depth;
 
-        if (screenX >= 0 && screenX <= game.canvas.width &&
-            screenY >= 0 && screenY <= game.canvas.height) {
+        const screenX = star.x - parallaxX;
+        const screenY = star.y - parallaxY;
+
+        // Expanded culling bounds for larger stars
+        const margin = star.size + 5;
+        if (screenX >= -margin && screenX <= game.canvas.width + margin &&
+            screenY >= -margin && screenY <= game.canvas.height + margin) {
+
             ctx.globalAlpha = star.brightness;
-            ctx.fillRect(screenX, screenY, 1, 1);
+            ctx.fillStyle = star.color;
+
+            if (star.size === 1) {
+                // Optimize single pixel stars
+                ctx.fillRect(Math.floor(screenX), Math.floor(screenY), 1, 1);
+            } else if (star.size <= 3) {
+                // Small-medium stars: simple circle
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, star.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                // Large stars: add glow effect
+                // Create gradient for each large star (only a few of these)
+                const gradient = ctx.createRadialGradient(screenX, screenY, 0, screenX, screenY, star.size);
+                gradient.addColorStop(0, star.color);
+                gradient.addColorStop(0.7, star.color + '80'); // Add transparency
+                gradient.addColorStop(1, star.color + '00'); // Fully transparent
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, star.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Bright core
+                ctx.fillStyle = star.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, star.size / 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     });
     ctx.globalAlpha = 1;
@@ -72,28 +106,40 @@ function render() {
     ctx.closePath();
     ctx.stroke();
 
-    // Forward thrust indicator
-    if (game.keys['ArrowUp'] && game.ship.fuel > 0) {
+    // Forward thrust indicator - intensity based on current thrust
+    if (game.ship.thrust.isThrusting && game.ship.fuel > 0) {
+        const intensity = game.ship.thrust.current;
+        const alpha = 0.3 + (intensity * 0.7); // 30% to 100% opacity
+        const flameLength = 5 + (intensity * 10); // 5 to 15 pixel flame
+
+        ctx.globalAlpha = alpha;
         ctx.strokeStyle = '#ff8800';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1 + intensity; // Thicker line at full thrust
         ctx.beginPath();
-        ctx.moveTo(-10, -2);
-        ctx.lineTo(-15, 0);
-        ctx.moveTo(-10, 2);
-        ctx.lineTo(-15, 0);
+        ctx.moveTo(-10, -2 * intensity);
+        ctx.lineTo(-10 - flameLength, 0);
+        ctx.moveTo(-10, 2 * intensity);
+        ctx.lineTo(-10 - flameLength, 0);
         ctx.stroke();
+        ctx.globalAlpha = 1;
     }
 
-    // Reverse thrust indicator (smaller, blue)
-    if (game.keys['ArrowDown'] && game.ship.fuel > 0) {
+    // Reverse thrust indicator (smaller, blue) - intensity based on current thrust
+    if (game.ship.thrust.isReversing && game.ship.fuel > 0) {
+        const intensity = game.ship.thrust.current;
+        const alpha = 0.3 + (intensity * 0.7);
+        const flameLength = 3 + (intensity * 5); // Smaller reverse flame
+
+        ctx.globalAlpha = alpha;
         ctx.strokeStyle = '#4488ff';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1 + (intensity * 0.5);
         ctx.beginPath();
-        ctx.moveTo(10, -1);
-        ctx.lineTo(13, 0);
-        ctx.moveTo(10, 1);
-        ctx.lineTo(13, 0);
+        ctx.moveTo(10, -1 * intensity);
+        ctx.lineTo(10 + flameLength, 0);
+        ctx.moveTo(10, 1 * intensity);
+        ctx.lineTo(10 + flameLength, 0);
         ctx.stroke();
+        ctx.globalAlpha = 1;
     }
 
     ctx.restore();
