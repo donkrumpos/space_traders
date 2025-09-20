@@ -1,0 +1,102 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+    overflow: hidden;
+}
+
+#gameContainer {
+    display: flex;
+    height: 100vh;
+}
+
+#gameCanvas {
+    background: #000;
+    border: 2px solid #00ff00;
+    flex: 1;
+}
+
+#ui {
+    width: 300px;
+    max-width: 30vw;
+    background: #001100;
+    border: 2px solid #00ff00;
+    padding: 10px;
+    overflow-y: auto;
+    transition: width 0.3s ease;
+    flex-shrink: 0;
+}
+
+#ui.trading {
+    width: 400px;
+    max-width: 40vw;
+}
+
+.panel {
+    border: 1px solid #00ff00;
+    margin: 10px 0;
+    padding: 10px;
+    background: #002200;
+}
+
+.panel h3 {
+    margin: 0 0 10px 0;
+    color: #00ffff;
+}
+
+.cargo-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 5px 0;
+}
+
+#tradeDialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #002200;
+    border: 3px solid #00ff00;
+    padding: 20px;
+    display: none;
+    max-width: 500px;
+    z-index: 1000;
+}
+
+.trade-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 10px 0;
+    padding: 5px;
+    border: 1px solid #004400;
+}
+
+button {
+    background: #004400;
+    color: #00ff00;
+    border: 1px solid #00ff00;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+}
+
+button:hover {
+    background: #006600;
+}
+
+button:disabled {
+    background: #333;
+    color: #666;
+    cursor: not-allowed;
+}
+
+#controls {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    color: #00ff00;
+    font-size: 12px;
+}

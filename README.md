@@ -14,30 +14,62 @@ Create an engaging text-based space trading simulation with:
 ## Current Progress
 
 ### ✅ Completed
-- [x] Basic project structure
-- [x] Initial HTML game shell
-- [x] Basic game state management
-- [x] Simple status display
+- [x] Modular project structure (HTML/CSS/JS separation)
+- [x] Asteroids-style ship movement and physics
+- [x] Trading system with 4 goods between 5 planets
+- [x] Fuel management and refueling system
+- [x] Dynamic side-panel docking interface
+- [x] Ship upgrade system with exponential pricing
+- [x] All planet specializations with unique upgrades
+- [x] Responsive UI with proper state management
 
 ### 🚧 In Development
-- [ ] Core trading mechanics
-- [ ] Multiple locations/systems
-- [ ] Inventory management
-- [ ] Ship upgrade system
-
-### 📋 Planned Features
-- [ ] Dynamic pricing system
+- [ ] Combat mechanics
 - [ ] Random events and encounters
 - [ ] Mission/contract system
+
+### 📋 Planned Features
 - [ ] Save/load functionality
 - [ ] Advanced ship customization
-- [ ] Combat mechanics
 - [ ] Faction relationships
+- [ ] Multiple star systems
+- [ ] Resource scarcity mechanics
+
+## Project Structure
+
+```
+space_traders/
+├── index.html              # Main game page
+├── css/
+│   └── style.css           # Game styling
+├── js/
+│   ├── game.js             # Core game state and initialization
+│   ├── physics.js          # Ship movement and physics
+│   ├── render.js           # Canvas rendering
+│   ├── trading.js          # Trading and upgrade mechanics
+│   └── ui.js               # UI updates and display
+├── assets/                 # Future sprites and sounds
+├── docs/                   # Design docs and notes
+└── README.md
+```
 
 ## Development Notes
 
-The game is built as a single-page application using vanilla HTML/CSS/JavaScript for simplicity and easy deployment.
+The game uses vanilla HTML/CSS/JavaScript with a modular architecture. Each JS file handles a specific game system for maintainability.
 
 ## Getting Started
 
+### Quick Start
 Simply open `index.html` in your browser to start playing.
+
+### Development Server
+For development with proper file loading:
+```bash
+npm run dev
+```
+Then visit `http://localhost:8000`
+
+### Controls
+- **Arrow Keys**: Rotate ship (left/right) and thrust (up/down)
+- **Space**: Dock with nearby planets
+- **ESC**: Emergency undock
