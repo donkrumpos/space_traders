@@ -19,7 +19,12 @@ const game = {
             engine: 1,
             shields: 1,
             fuel_tank: 1,
-            hull: 1
+            hull: 1,
+            weapons: 1
+        },
+        weapons: {
+            lasers: { cooldown: 0, maxCooldown: 500 }, // 500ms between shots
+            missiles: { cooldown: 0, maxCooldown: 2000, ammo: 5, maxAmmo: 5 }
         },
         thrust: {
             current: 0,        // Current thrust power (0-1)
@@ -34,6 +39,7 @@ const game = {
     keys: {},
     planets: [],
     stars: [],
+    projectiles: [],
     nearPlanet: null,
     inDockingRange: false,
     isDocked: false,
@@ -89,7 +95,8 @@ const planetData = [
         demands: { materials: 160, food: 100 },
         upgrades: {
             shields: { name: 'Shield Generator', baseCost: 1500, description: 'Advanced shield system for protection' },
-            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency' }
+            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency' },
+            weapons: { name: 'Advanced Targeting', baseCost: 1800, description: 'Improved laser damage and missile capacity' }
         }
     },
     {
@@ -102,7 +109,8 @@ const planetData = [
         upgrades: {
             shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
             hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' },
-            engine: { name: 'Military Drive Core', baseCost: 4000, description: 'Instant acceleration (0.5s to max thrust) with maximum fuel efficiency' }
+            engine: { name: 'Military Drive Core', baseCost: 4000, description: 'Instant acceleration (0.5s to max thrust) with maximum fuel efficiency' },
+            weapons: { name: 'Military Weapons', baseCost: 3500, description: 'Heavy laser cannons and missile pods for combat' }
         }
     },
     {
@@ -213,6 +221,17 @@ function init() {
         if (e.code === 'KeyM') {
             e.preventDefault();
             game.map.showFullMap = !game.map.showFullMap;
+        }
+        // Weapon firing controls (only when not docked/engaged)
+        if (!game.isDocked && !game.isEngaged) {
+            if (e.code === 'KeyX') {
+                e.preventDefault();
+                fireLaser();
+            }
+            if (e.code === 'KeyC') {
+                e.preventDefault();
+                fireMissile();
+            }
         }
         // Emergency undock/disengage on any movement key while docked or engaged
         if ((game.isDocked || game.isEngaged) && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {

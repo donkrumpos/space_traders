@@ -16,6 +16,7 @@
                 <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
                 <div>Hull: <span id="hull">100</span>/<span id="hullMax">100</span></div>
                 <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
+                <div>Missiles: <span id="missiles">5</span>/<span id="missilesMax">5</span></div>
             </div>
 
             <div class="panel">
@@ -39,6 +40,7 @@
                 <div>Cargo: Level <span id="cargoLevel">1</span></div>
                 <div>Fuel Tank: Level <span id="fuelTankLevel">1</span></div>
                 <div>Hull: Level <span id="hullLevel">1</span></div>
+                <div>Weapons: Level <span id="weaponLevel">1</span></div>
             </div>
 
             <div class="panel" id="tradingPanel" style="display: none;">
@@ -68,6 +70,11 @@
                         <span>Refuel Ship</span>
                         <span id="fuelCost">0</span>
                         <button onclick="buyFuel()">Refuel</button>
+                    </div>
+                    <div class="trade-item">
+                        <span>Rearm Missiles</span>
+                        <span id="missileCost">0</span>
+                        <button onclick="buyMissiles()">Rearm</button>
                     </div>
                 </div>
 
@@ -117,7 +124,7 @@
 
     <div id="controls">
         Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | M for map | ESC to undock<br>
-        🌟 Random events occur during travel - make choices to earn rewards or avoid risks!
+        Combat: X to fire lasers | C to fire missiles | 🌟 Random events occur during travel - make choices to earn rewards or avoid risks!
     </div>
 
     <!-- Game Scripts -->
@@ -128,6 +135,7 @@
     <script src="js/ui.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/events.js"></script>
+    <script src="js/combat.js"></script>
     <script>
         // Start the game after all scripts are loaded
         startGame();

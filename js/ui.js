@@ -9,6 +9,9 @@ function updateUI() {
     document.getElementById('cargoUsed').textContent = cargoUsed;
     document.getElementById('cargoMax').textContent = game.ship.cargoMax;
 
+    document.getElementById('missiles').textContent = game.ship.weapons.missiles.ammo;
+    document.getElementById('missilesMax').textContent = game.ship.weapons.missiles.maxAmmo;
+
     document.getElementById('posX').textContent = Math.floor(game.ship.x);
     document.getElementById('posY').textContent = Math.floor(game.ship.y);
 
@@ -18,6 +21,7 @@ function updateUI() {
     document.getElementById('cargoLevel').textContent = game.ship.upgrades.cargo;
     document.getElementById('fuelTankLevel').textContent = game.ship.upgrades.fuel_tank;
     document.getElementById('hullLevel').textContent = game.ship.upgrades.hull;
+    document.getElementById('weaponLevel').textContent = game.ship.upgrades.weapons;
 
     // Update cargo list
     const cargoList = document.getElementById('cargoList');

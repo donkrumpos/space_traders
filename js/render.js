@@ -131,6 +131,12 @@ function render() {
         }
     });
 
+    // Draw enemies
+    renderEnemies(ctx, game.camera);
+
+    // Draw projectiles
+    renderProjectiles(ctx, game.camera);
+
     // Draw ship (always in center)
     const shipX = game.canvas.width / 2;
     const shipY = game.canvas.height / 2;

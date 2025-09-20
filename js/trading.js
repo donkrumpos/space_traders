@@ -74,6 +74,9 @@ function updateTradingInterface(planet) {
 
     // Update fuel cost
     updateFuelCost();
+
+    // Update missile cost
+    updateMissileCost();
 }
 
 function updateSellingSectionUI() {
@@ -126,6 +129,12 @@ function updateFuelCost() {
     document.getElementById('fuelCost').textContent = '$' + fuelCost;
 }
 
+function updateMissileCost() {
+    const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
+    const missileCost = missilesNeeded * 50; // $50 per missile
+    document.getElementById('missileCost').textContent = '$' + missileCost;
+}
+
 function buyUpgrade(upgradeType, cost) {
     if (game.ship.credits < cost) {
         alert(`Insufficient credits! Need $${cost} for this upgrade.`);
@@ -161,6 +170,12 @@ function applyUpgradeEffects(upgradeType) {
         case 'shields':
             // Shield upgrades (placeholder for future combat system)
             break;
+        case 'weapons':
+            // Weapon upgrades improve damage and missile capacity
+            const level = game.ship.upgrades.weapons;
+            game.ship.weapons.missiles.maxAmmo = 5 + (level - 1) * 3; // +3 missiles per level
+            game.ship.weapons.missiles.ammo = Math.min(game.ship.weapons.missiles.ammo + 3, game.ship.weapons.missiles.maxAmmo);
+            break;
     }
 }
 
@@ -182,6 +197,26 @@ function buyFuel() {
 
     updateUI();
     updateFuelCost(); // Refresh fuel cost display
+}
+
+function buyMissiles() {
+    const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
+    if (missilesNeeded === 0) {
+        alert('Missile bay is already full!');
+        return;
+    }
+
+    const missileCost = missilesNeeded * 50;
+    if (game.ship.credits < missileCost) {
+        alert(`Insufficient credits! Need $${missileCost} to rearm missiles.`);
+        return;
+    }
+
+    game.ship.credits -= missileCost;
+    game.ship.weapons.missiles.ammo = game.ship.weapons.missiles.maxAmmo;
+
+    updateUI();
+    updateMissileCost(); // Refresh missile cost display
 }
 
 function buyGood(goodType, price) {

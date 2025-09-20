@@ -73,6 +73,12 @@ function update() {
     game.camera.x = game.ship.x - game.canvas.width / 2;
     game.camera.y = game.ship.y - game.canvas.height / 2;
 
+    // Update combat systems
+    const deltaTime = 1/60; // Assuming 60 FPS
+    updateProjectiles(deltaTime);
+    updateWeaponCooldowns(deltaTime);
+    updateEnemies(deltaTime);
+
     updateUI();
     updateMaps();
     updateEventSystem();
