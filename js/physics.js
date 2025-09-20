@@ -15,13 +15,8 @@ function update() {
         }
     });
 
-    // Ship controls (Asteroids style)
-    if (game.keys['ArrowLeft']) {
-        game.ship.angle -= 0.1;
-    }
-    if (game.keys['ArrowRight']) {
-        game.ship.angle += 0.1;
-    }
+    // Variable rotation system for combat precision
+    updateRotationSystem();
 
     // Enhanced thrust system with engine upgrade acceleration curves
     updateThrustSystem();
@@ -150,4 +145,71 @@ function updateThrustSystem() {
 
     // Ensure thrust stays in bounds
     thrust.current = Math.max(0, Math.min(1, thrust.current));
+}
+
+function updateRotationSystem() {
+    const rotation = game.ship.rotation;
+    const deltaTime = 1/60; // Assuming 60 FPS for consistent timing
+
+    // Check rotation input states
+    const wantsRotateLeft = game.keys['ArrowLeft'];
+    const wantsRotateRight = game.keys['ArrowRight'];
+
+    // Update rotation state flags
+    rotation.isRotatingLeft = wantsRotateLeft;
+    rotation.isRotatingRight = wantsRotateRight;
+
+    // Track hold times for acceleration
+    if (wantsRotateLeft) {
+        rotation.leftHoldTime += deltaTime;
+        rotation.rightHoldTime = 0; // Reset opposite direction
+    } else {
+        rotation.leftHoldTime = 0;
+    }
+
+    if (wantsRotateRight) {
+        rotation.rightHoldTime += deltaTime;
+        rotation.leftHoldTime = 0; // Reset opposite direction
+    } else {
+        rotation.rightHoldTime = 0;
+    }
+
+    // Calculate rotation speed based on hold time
+    let targetRotationSpeed = 0;
+
+    if (wantsRotateLeft || wantsRotateRight) {
+        const holdTime = Math.max(rotation.leftHoldTime, rotation.rightHoldTime);
+
+        // Acceleration curve: start with base speed, ramp up to max over 1 second
+        const rampTime = 1.0; // 1 second to reach max speed
+        const progress = Math.min(holdTime / rampTime, 1.0);
+
+        // Smooth acceleration curve (ease-out)
+        const easedProgress = 1 - Math.pow(1 - progress, 2);
+
+        // Calculate speed between base and max
+        targetRotationSpeed = rotation.baseSpeed + (rotation.maxSpeed - rotation.baseSpeed) * easedProgress;
+
+        // Apply direction
+        if (wantsRotateLeft) {
+            targetRotationSpeed = -targetRotationSpeed;
+        }
+    }
+
+    // Smooth rotation changes for precise control
+    const rotationAcceleration = 0.3; // How quickly rotation speed changes
+
+    if (Math.abs(targetRotationSpeed) > Math.abs(rotation.current)) {
+        // Accelerating
+        rotation.current = rotation.current + Math.sign(targetRotationSpeed - rotation.current) * rotationAcceleration * deltaTime;
+    } else {
+        // Decelerating or changing direction
+        rotation.current = rotation.current + (targetRotationSpeed - rotation.current) * 0.8; // Quick deceleration
+    }
+
+    // Apply rotation to ship
+    game.ship.angle += rotation.current;
+
+    // Normalize angle to prevent floating point issues
+    game.ship.angle = game.ship.angle % (Math.PI * 2);
 }

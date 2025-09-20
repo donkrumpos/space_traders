@@ -33,6 +33,16 @@ const game = {
             rampDownTime: 0,   // Time spent ramping down
             isThrusting: false,
             isReversing: false
+        },
+        rotation: {
+            current: 0,        // Current rotation speed (radians per frame)
+            target: 0,         // Target rotation speed
+            leftHoldTime: 0,   // Time spent holding left
+            rightHoldTime: 0,  // Time spent holding right
+            isRotatingLeft: false,
+            isRotatingRight: false,
+            baseSpeed: 0.02,   // Minimum rotation speed for taps
+            maxSpeed: 0.12     // Maximum rotation speed when held
         }
     },
     camera: { x: 0, y: 0 },
