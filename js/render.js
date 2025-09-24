@@ -3,6 +3,13 @@ function render() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
 
+    // Damage flash effect
+    if (game.damage && game.damage.flashTime > 0) {
+        const flashIntensity = game.damage.flashTime / 300; // Normalize to 0-1
+        ctx.fillStyle = `rgba(255, 0, 0, ${flashIntensity * 0.3})`; // Red overlay
+        ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+    }
+
     // Draw stars with parallax effect (back to front)
     game.stars.forEach(star => {
         // Apply parallax - closer stars move faster with camera
@@ -145,8 +152,27 @@ function render() {
     ctx.translate(shipX, shipY);
     ctx.rotate(game.ship.angle);
 
+    // Invulnerability flashing effect
+    let shipAlpha = 1;
+    if (game.damage && game.damage.invulnerabilityTime > 0) {
+        // Flash the ship during invulnerability
+        shipAlpha = 0.3 + 0.7 * Math.sin(Date.now() * 0.02); // Fast flashing
+    }
+    ctx.globalAlpha = shipAlpha;
+
+    // Ship body color based on hull status
+    let shipColor = '#00ff00'; // Green when healthy
+    const hullPercent = game.ship.hull / game.ship.hullMax;
+    if (hullPercent < 0.25) {
+        shipColor = '#ff0000'; // Red when critically damaged
+    } else if (hullPercent < 0.5) {
+        shipColor = '#ff8800'; // Orange when moderately damaged
+    } else if (hullPercent < 0.75) {
+        shipColor = '#ffff00'; // Yellow when lightly damaged
+    }
+
     // Ship body
-    ctx.strokeStyle = '#00ff00';
+    ctx.strokeStyle = shipColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(10, 0);
@@ -157,13 +183,19 @@ function render() {
     ctx.stroke();
 
     // Forward thrust indicator - intensity based on current thrust
-    if (game.ship.thrust.isThrusting && game.ship.fuel > 0) {
+    const hasMainFuel = game.ship.fuel > 0;
+    const hasEmergencyFuel = game.ship.emergencyFuel > 0;
+    const canThrust = hasMainFuel || hasEmergencyFuel;
+
+    if (game.ship.thrust.isThrusting && canThrust) {
         const intensity = game.ship.thrust.current;
         const alpha = 0.3 + (intensity * 0.7); // 30% to 100% opacity
         const flameLength = 5 + (intensity * 10); // 5 to 15 pixel flame
+        const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = '#ff8800';
+        // Different flame color for emergency mode
+        ctx.strokeStyle = isEmergencyMode ? '#ff4444' : '#ff8800'; // Red flame in emergency mode
         ctx.lineWidth = 1 + intensity; // Thicker line at full thrust
         ctx.beginPath();
         ctx.moveTo(-10, -2 * intensity);
@@ -175,13 +207,15 @@ function render() {
     }
 
     // Reverse thrust indicator (smaller, blue) - intensity based on current thrust
-    if (game.ship.thrust.isReversing && game.ship.fuel > 0) {
+    if (game.ship.thrust.isReversing && canThrust) {
         const intensity = game.ship.thrust.current;
         const alpha = 0.3 + (intensity * 0.7);
         const flameLength = 3 + (intensity * 5); // Smaller reverse flame
+        const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = '#4488ff';
+        // Different flame color for emergency mode
+        ctx.strokeStyle = isEmergencyMode ? '#ff6666' : '#4488ff'; // Light red in emergency mode
         ctx.lineWidth = 1 + (intensity * 0.5);
         ctx.beginPath();
         ctx.moveTo(10, -1 * intensity);

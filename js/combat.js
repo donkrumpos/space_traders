@@ -71,7 +71,30 @@ function spawnEnemyShip() {
         size: 8,
         color: '#ff4444',
         reward: 100 + Math.random() * 200, // 100-300 credits
-        lastSpawn: Date.now()
+        lastSpawn: Date.now(),
+        weapons: {
+            fireCooldown: 0,
+            maxCooldown: 1500 + Math.random() * 1000, // 1.5-2.5 second firing rate
+            range: 400, // Firing range
+            accuracy: 0.8 // 80% accuracy (some spread)
+        },
+        thrust: {
+            current: 0,
+            target: 0,
+            maxThrust: 0.15,
+            acceleration: 0.008
+        },
+        rotation: {
+            current: 0,
+            turnSpeed: 0.03
+        },
+        ai: {
+            state: 'patrol',
+            targetDistance: 300,
+            evasionCooldown: 0,
+            strafeDirection: 0,
+            lastDamageHull: 40
+        }
     };
 
     if (!game.enemies) {
@@ -92,20 +115,123 @@ function updateEnemies(deltaTime) {
         game.lastEnemySpawn = Date.now();
     }
 
-    // Update enemy AI (simple movement)
+    // Update enemy AI with realistic physics-based movement
     game.enemies.forEach(enemy => {
-        // Simple random movement
-        if (Math.random() < 0.01) { // 1% chance per frame to change direction
-            enemy.angle += (Math.random() - 0.5) * 0.5;
+        // Update weapon cooldown
+        if (enemy.weapons.fireCooldown > 0) {
+            enemy.weapons.fireCooldown -= deltaTime * 1000;
         }
 
-        // Move slowly
-        const speed = 1;
-        enemy.velocity.x = Math.cos(enemy.angle) * speed;
-        enemy.velocity.y = Math.sin(enemy.angle) * speed;
+        // Update evasion cooldown
+        if (enemy.ai.evasionCooldown > 0) {
+            enemy.ai.evasionCooldown -= deltaTime * 1000;
+        }
 
-        enemy.x += enemy.velocity.x * deltaTime;
-        enemy.y += enemy.velocity.y * deltaTime;
+        // Calculate distance to player
+        const distanceToPlayer = Math.sqrt(
+            Math.pow(enemy.x - game.ship.x, 2) +
+            Math.pow(enemy.y - game.ship.y, 2)
+        );
+
+        // Calculate angle to player
+        const angleToPlayer = Math.atan2(
+            game.ship.y - enemy.y,
+            game.ship.x - enemy.x
+        );
+
+        // Check if enemy took damage and trigger evasion
+        if (enemy.hull < enemy.ai.lastDamageHull && enemy.ai.evasionCooldown <= 0) {
+            enemy.ai.state = 'evading';
+            enemy.ai.evasionCooldown = 2000;
+            enemy.ai.strafeDirection = Math.random() < 0.5 ? -1 : 1;
+            enemy.ai.lastDamageHull = enemy.hull;
+        } else if (enemy.hull === enemy.ai.lastDamageHull && enemy.ai.state === 'evading' && enemy.ai.evasionCooldown <= 0) {
+            enemy.ai.state = distanceToPlayer < 800 ? 'engage' : 'patrol';
+        }
+
+        // AI behavior based on state
+        let targetAngle = enemy.angle;
+        let shouldThrust = false;
+
+        if (enemy.ai.state === 'evading') {
+            // Evasive maneuvers: turn perpendicular and thrust away
+            targetAngle = angleToPlayer + (Math.PI / 2 * enemy.ai.strafeDirection);
+            shouldThrust = true;
+        } else if (distanceToPlayer < 800) {
+            enemy.ai.state = 'engage';
+
+            if (distanceToPlayer > enemy.ai.targetDistance) {
+                // Approach player: turn toward player and thrust
+                targetAngle = angleToPlayer;
+                shouldThrust = true;
+            } else if (distanceToPlayer < enemy.ai.targetDistance - 50) {
+                // Too close: turn away and reverse thrust
+                targetAngle = angleToPlayer + Math.PI;
+                shouldThrust = true;
+            } else {
+                // At optimal range: orbit player for strafing shots
+                targetAngle = angleToPlayer + Math.PI / 2;
+                shouldThrust = distanceToPlayer > enemy.ai.targetDistance - 25;
+            }
+        } else {
+            // Patrol: drift with occasional course corrections
+            enemy.ai.state = 'patrol';
+            if (Math.random() < 0.02) {
+                targetAngle = angleToPlayer + (Math.random() - 0.5) * Math.PI;
+                shouldThrust = Math.random() < 0.3;
+            }
+        }
+
+        // Smooth rotation toward target angle
+        let angleDiff = targetAngle - enemy.angle;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+        const turnAmount = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), enemy.rotation.turnSpeed);
+        enemy.rotation.current = turnAmount;
+        enemy.angle += turnAmount;
+
+        // Update thrust with smooth acceleration
+        if (shouldThrust) {
+            enemy.thrust.target = 1.0;
+            if (enemy.thrust.current < enemy.thrust.target) {
+                enemy.thrust.current = Math.min(enemy.thrust.current + enemy.thrust.acceleration, enemy.thrust.target);
+            }
+        } else {
+            enemy.thrust.target = 0.0;
+            if (enemy.thrust.current > enemy.thrust.target) {
+                enemy.thrust.current = Math.max(enemy.thrust.current - enemy.thrust.acceleration * 2, enemy.thrust.target);
+            }
+        }
+
+        // Apply thrust to velocity (like player physics)
+        if (enemy.thrust.current > 0) {
+            const actualThrust = enemy.thrust.maxThrust * enemy.thrust.current;
+            enemy.velocity.x += Math.cos(enemy.angle) * actualThrust;
+            enemy.velocity.y += Math.sin(enemy.angle) * actualThrust;
+        }
+
+        // Apply drag
+        enemy.velocity.x *= 0.99;
+        enemy.velocity.y *= 0.99;
+
+        // Speed limit
+        const maxSpeed = 6;
+        const currentSpeed = Math.sqrt(enemy.velocity.x * enemy.velocity.x + enemy.velocity.y * enemy.velocity.y);
+        if (currentSpeed > maxSpeed) {
+            enemy.velocity.x = (enemy.velocity.x / currentSpeed) * maxSpeed;
+            enemy.velocity.y = (enemy.velocity.y / currentSpeed) * maxSpeed;
+        }
+
+        // Fire at player if weapon is ready and aimed
+        if (enemy.ai.state === 'engage' && enemy.weapons.fireCooldown <= 0 && Math.abs(angleDiff) < 0.2) {
+            fireEnemyWeapon(enemy);
+            enemy.weapons.fireCooldown = enemy.weapons.maxCooldown;
+        }
+
+        // Update position
+        enemy.x += enemy.velocity.x * deltaTime * 60;
+        enemy.y += enemy.velocity.y * deltaTime * 60;
     });
 
     // Remove enemies that are too far away
@@ -114,44 +240,171 @@ function updateEnemies(deltaTime) {
             Math.pow(enemy.x - game.ship.x, 2) +
             Math.pow(enemy.y - game.ship.y, 2)
         );
-        return distance < 3000; // Remove if more than 3000 units away
+        return distance < 3000;
     });
 }
 
-function checkProjectileCollisions() {
-    if (!game.enemies) return;
+function fireEnemyWeapon(enemy) {
+    // Calculate firing angle with some inaccuracy
+    const baseAngle = enemy.angle;
+    const spread = (1 - enemy.weapons.accuracy) * 0.5; // Convert accuracy to spread
+    const inaccuracy = (Math.random() - 0.5) * spread;
+    const firingAngle = baseAngle + inaccuracy;
 
+    // Create enemy projectile
+    const projectile = {
+        type: 'enemy_laser',
+        source: 'enemy',
+        x: enemy.x,
+        y: enemy.y,
+        velocity: {
+            x: Math.cos(firingAngle) * 600, // Slightly slower than player lasers
+            y: Math.sin(firingAngle) * 600
+        },
+        damage: 15, // Moderate damage
+        range: 350, // Shorter range than player weapons
+        distanceTraveled: 0,
+        color: '#ff4444',
+        size: 2,
+        age: 0,
+        maxAge: 583 // 583ms at 600 units/second = 350 unit range
+    };
+
+    game.projectiles.push(projectile);
+}
+
+function checkProjectileCollisions() {
     for (let i = game.projectiles.length - 1; i >= 0; i--) {
         const projectile = game.projectiles[i];
+        let hitSomething = false;
 
-        for (let j = game.enemies.length - 1; j >= 0; j--) {
-            const enemy = game.enemies[j];
+        // Check player projectiles vs enemies
+        if (projectile.source !== 'enemy' && game.enemies) {
+            for (let j = game.enemies.length - 1; j >= 0; j--) {
+                const enemy = game.enemies[j];
 
+                const distance = Math.sqrt(
+                    Math.pow(projectile.x - enemy.x, 2) +
+                    Math.pow(projectile.y - enemy.y, 2)
+                );
+
+                if (distance < enemy.size + projectile.size) {
+                    // Hit!
+                    enemy.hull -= projectile.damage;
+
+                    // Remove projectile
+                    game.projectiles.splice(i, 1);
+                    hitSomething = true;
+
+                    // Check if enemy is destroyed
+                    if (enemy.hull <= 0) {
+                        // Award credits
+                        game.ship.credits += Math.floor(enemy.reward);
+
+                        // Remove enemy
+                        game.enemies.splice(j, 1);
+
+                        // Auto-save on combat victory
+                        autoSave('combat_victory');
+
+                        // TODO: Add explosion effect or debris
+                    }
+
+                    break; // Projectile can only hit one target
+                }
+            }
+        }
+
+        // Check enemy projectiles vs player
+        if (!hitSomething && projectile.source === 'enemy') {
+            const playerSize = 10; // Player ship collision size
             const distance = Math.sqrt(
-                Math.pow(projectile.x - enemy.x, 2) +
-                Math.pow(projectile.y - enemy.y, 2)
+                Math.pow(projectile.x - game.ship.x, 2) +
+                Math.pow(projectile.y - game.ship.y, 2)
             );
 
-            if (distance < enemy.size + projectile.size) {
-                // Hit!
-                enemy.hull -= projectile.damage;
+            if (distance < playerSize + projectile.size) {
+                // Player hit!
+                damagePlayer(projectile.damage);
 
                 // Remove projectile
                 game.projectiles.splice(i, 1);
-
-                // Check if enemy is destroyed
-                if (enemy.hull <= 0) {
-                    // Award credits
-                    game.ship.credits += Math.floor(enemy.reward);
-
-                    // Remove enemy
-                    game.enemies.splice(j, 1);
-
-                    // TODO: Add explosion effect or debris
-                }
-
-                break; // Projectile can only hit one target
+                hitSomething = true;
             }
+        }
+    }
+}
+
+function damagePlayer(damage) {
+    // Check if player is invulnerable (brief period after last hit)
+    if (game.damage.invulnerabilityTime > 0) {
+        return;
+    }
+
+    // Apply shield absorption first (if shields are upgraded)
+    const shieldLevel = game.ship.upgrades.shields;
+    const shieldAbsorption = (shieldLevel - 1) * 0.2; // 20% absorption per shield level above 1
+    const actualDamage = damage * (1 - shieldAbsorption);
+
+    // Apply damage to hull
+    game.ship.hull -= actualDamage;
+
+    // Ensure hull doesn't go below 0
+    game.ship.hull = Math.max(0, game.ship.hull);
+
+    // Set damage feedback effects
+    game.damage.flashTime = 300; // 300ms red flash
+    game.damage.lastHitTime = Date.now();
+    game.damage.invulnerabilityTime = 200; // 200ms invulnerability
+
+    // Check if player is destroyed
+    if (game.ship.hull <= 0) {
+        handlePlayerDestruction();
+    }
+
+    console.log(`Player hit for ${Math.round(actualDamage)} damage! Hull: ${Math.round(game.ship.hull)}/${game.ship.hullMax}`);
+}
+
+function handlePlayerDestruction() {
+    // For now, respawn player with some penalties
+    console.log("Player ship destroyed! Respawning...");
+
+    // Reset hull to 25%
+    game.ship.hull = game.ship.hullMax * 0.25;
+
+    // Lose some credits (25%)
+    const creditsLost = Math.floor(game.ship.credits * 0.25);
+    game.ship.credits -= creditsLost;
+
+    // Move player to a safe location (near starting area)
+    game.ship.x = 1050;
+    game.ship.y = 850;
+    game.ship.velocity.x = 0;
+    game.ship.velocity.y = 0;
+
+    // Clear all enemies to give player a break
+    game.enemies = [];
+
+    // Auto-save the respawn state
+    autoSave('respawn');
+
+    console.log(`Lost ${creditsLost} credits. Respawned at starting location.`);
+}
+
+function updateDamageEffects(deltaTime) {
+    // Update damage flash effect
+    if (game.damage.flashTime > 0) {
+        game.damage.flashTime -= deltaTime * 1000;
+        if (game.damage.flashTime < 0) {
+            game.damage.flashTime = 0;
+        }
+    }
+
+    // Update invulnerability
+    if (game.damage.invulnerabilityTime > 0) {
+        game.damage.invulnerabilityTime -= deltaTime * 1000;
+        if (game.damage.invulnerabilityTime < 0) {
+            game.damage.invulnerabilityTime = 0;
         }
     }
 }
@@ -207,6 +460,22 @@ function renderEnemies(ctx, camera) {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.strokeRect(screenX - barWidth/2, screenY - enemy.size - 15, barWidth, barHeight);
+
+        // Show combat range indicator when enemy is targeting player
+        const distanceToPlayer = Math.sqrt(
+            Math.pow(enemy.x - game.ship.x, 2) +
+            Math.pow(enemy.y - game.ship.y, 2)
+        );
+
+        if (distanceToPlayer < enemy.weapons.range * 1.2) { // Show range when close
+            ctx.strokeStyle = '#ff4444';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, enemy.weapons.range, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
     });
 }
 
@@ -273,7 +542,7 @@ function renderProjectiles(ctx, camera) {
             return;
         }
 
-        if (projectile.type === 'laser') {
+        if (projectile.type === 'laser' || projectile.type === 'enemy_laser') {
             // Render laser as a bright line
             ctx.save();
             ctx.globalAlpha = 1 - (projectile.age / projectile.maxAge) * 0.5; // Fade with age

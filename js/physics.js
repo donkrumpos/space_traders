@@ -23,7 +23,11 @@ function update() {
 
     // Apply current thrust to ship velocity
     if (game.ship.thrust.current > 0) {
-        const maxThrust = 0.2; // Base maximum thrust
+        const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
+        const baseMaxThrust = 0.2; // Base maximum thrust
+        const emergencyThrustReduction = 0.15; // Emergency mode is much weaker (75% reduction)
+
+        const maxThrust = isEmergencyMode ? baseMaxThrust * emergencyThrustReduction : baseMaxThrust;
         const actualThrust = maxThrust * game.ship.thrust.current;
 
         if (game.ship.thrust.isThrusting) {
@@ -40,12 +44,42 @@ function update() {
         // Fuel consumption (improved efficiency with engine upgrades)
         const fuelEfficiency = 1 - (game.ship.upgrades.engine - 1) * 0.1; // 10% better per level
         const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
-        game.ship.fuel -= baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency);
+        const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency);
+
+        if (game.ship.fuel > 0) {
+            // Consume main fuel first
+            game.ship.fuel -= fuelConsumption;
+            // Prevent fuel from going negative
+            if (game.ship.fuel < 0) {
+                game.ship.fuel = 0;
+            }
+        } else if (game.ship.emergencyFuel > 0) {
+            // Emergency mode: consume emergency fuel at higher rate (2x consumption)
+            const emergencyConsumption = fuelConsumption * 2;
+            game.ship.emergencyFuel -= emergencyConsumption;
+            // Prevent emergency fuel from going negative
+            if (game.ship.emergencyFuel < 0) {
+                game.ship.emergencyFuel = 0;
+            }
+        }
     }
+
+    // Track distance traveled for statistics
+    const oldX = game.ship.x;
+    const oldY = game.ship.y;
 
     // Apply velocity
     game.ship.x += game.ship.velocity.x;
     game.ship.y += game.ship.velocity.y;
+
+    // Update distance traveled (for character statistics)
+    if (typeof characterManager !== 'undefined' && characterManager.character) {
+        const distance = Math.sqrt(
+            Math.pow(game.ship.x - oldX, 2) +
+            Math.pow(game.ship.y - oldY, 2)
+        );
+        characterManager.character.progress.distanceTraveled += distance;
+    }
 
     // Apply drag - stronger when near planets for easier docking
     let dragFactor = inDockingRange ? 0.95 : 0.99;
@@ -73,6 +107,7 @@ function update() {
     updateProjectiles(deltaTime);
     updateWeaponCooldowns(deltaTime);
     updateEnemies(deltaTime);
+    updateDamageEffects(deltaTime);
 
     updateUI();
     updateMaps();
@@ -83,9 +118,13 @@ function updateThrustSystem() {
     const thrust = game.ship.thrust;
     const deltaTime = 1/60; // Assuming 60 FPS for consistent timing
 
-    // Check thrust input states
-    const wantsForwardThrust = game.keys['ArrowUp'] && game.ship.fuel > 0;
-    const wantsReverseThrust = game.keys['ArrowDown'] && game.ship.fuel > 0;
+    // Check thrust input states (allow emergency thrust when main fuel is depleted)
+    const hasMainFuel = game.ship.fuel > 0;
+    const hasEmergencyFuel = game.ship.emergencyFuel > 0;
+    const canThrust = hasMainFuel || hasEmergencyFuel;
+
+    const wantsForwardThrust = game.keys['ArrowUp'] && canThrust;
+    const wantsReverseThrust = game.keys['ArrowDown'] && canThrust;
 
     // Update thrust state flags
     thrust.isThrusting = wantsForwardThrust;

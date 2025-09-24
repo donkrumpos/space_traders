@@ -1,13 +1,21 @@
 function tryDock() {
-    // Check for event interaction first (but not if already engaged or docked)
+    // Priority 1: Planet docking (highest priority - stable infrastructure)
+    if (game.inDockingRange && game.nearPlanet && !game.isDocked && !game.isEngaged) {
+        dock(game.nearPlanet);
+        return;
+    }
+
+    // Priority 2: Event interaction (lower priority - temporary encounters)
     if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked && !game.isEngaged) {
         interactWithEvent(eventSystem.nearEvent);
         return;
     }
+}
 
-    // Then check for planet docking (but not if already engaged)
-    if (game.inDockingRange && game.nearPlanet && !game.isDocked && !game.isEngaged) {
-        dock(game.nearPlanet);
+function trySecondaryInteraction() {
+    // Secondary interaction: try to interact with events when planet has priority
+    if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked && !game.isEngaged) {
+        interactWithEvent(eventSystem.nearEvent);
     }
 }
 
@@ -30,6 +38,9 @@ function dock(planet) {
 
     // Populate trading interface
     updateTradingInterface(planet);
+
+    // Auto-save on docking
+    autoSave('dock');
 }
 
 function undock() {
@@ -74,6 +85,7 @@ function updateTradingInterface(planet) {
 
     // Update fuel cost
     updateFuelCost();
+    updateFuelButton();
 
     // Update missile cost
     updateMissileCost();
@@ -125,14 +137,62 @@ function updateUpgradesUI(planet) {
 
 function updateFuelCost() {
     const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
-    const fuelCost = fuelNeeded * 2;
-    document.getElementById('fuelCost').textContent = '$' + fuelCost;
+    const fullTankCost = fuelNeeded * 2;
+
+    if (game.ship.credits >= fullTankCost) {
+        // Can afford full tank
+        document.getElementById('fuelCost').textContent = '$' + fullTankCost;
+    } else if (game.ship.credits >= 2) {
+        // Show partial refuel option
+        const maxAffordableFuel = Math.floor(game.ship.credits / 2);
+        const actualFuelToBuy = Math.min(maxAffordableFuel, fuelNeeded);
+        const actualCost = actualFuelToBuy * 2;
+        document.getElementById('fuelCost').textContent = `$${actualCost} (${actualFuelToBuy} units)`;
+    } else {
+        // Can't afford any fuel
+        document.getElementById('fuelCost').textContent = 'Need $2 min';
+    }
+}
+
+function updateFuelButton() {
+    const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
+    const fullTankCost = fuelNeeded * 2;
+    const button = document.querySelector('button[onclick="buyFuel()"]');
+
+    if (fuelNeeded === 0) {
+        button.textContent = 'Tank Full';
+        button.disabled = true;
+    } else if (game.ship.credits >= fullTankCost) {
+        button.textContent = 'Fill Tank';
+        button.disabled = false;
+    } else if (game.ship.credits >= 2) {
+        const maxAffordableFuel = Math.floor(game.ship.credits / 2);
+        const actualFuelToBuy = Math.min(maxAffordableFuel, fuelNeeded);
+        button.textContent = `Add ${actualFuelToBuy} Fuel`;
+        button.disabled = false;
+    } else {
+        button.textContent = 'No Credits';
+        button.disabled = true;
+    }
 }
 
 function updateMissileCost() {
     const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
-    const missileCost = missilesNeeded * 50; // $50 per missile
-    document.getElementById('missileCost').textContent = '$' + missileCost;
+    const fullCost = missilesNeeded * 50; // $50 per missile
+
+    if (game.ship.credits >= fullCost) {
+        // Can afford full rearm
+        document.getElementById('missileCost').textContent = '$' + fullCost;
+    } else if (game.ship.credits >= 50) {
+        // Show partial rearm option
+        const maxAffordableMissiles = Math.floor(game.ship.credits / 50);
+        const actualMissilesToBuy = Math.min(maxAffordableMissiles, missilesNeeded);
+        const actualCost = actualMissilesToBuy * 50;
+        document.getElementById('missileCost').textContent = `$${actualCost} (${actualMissilesToBuy} missiles)`;
+    } else {
+        // Can't afford any missiles
+        document.getElementById('missileCost').textContent = 'Need $50 min';
+    }
 }
 
 function buyUpgrade(upgradeType, cost) {
@@ -149,6 +209,9 @@ function buyUpgrade(upgradeType, cost) {
 
     updateUI();
     updateUpgradesUI(game.currentPlanet); // Refresh just the upgrades section
+
+    // Auto-save on upgrade purchase
+    autoSave('upgrade');
 }
 
 function applyUpgradeEffects(upgradeType) {
@@ -186,17 +249,40 @@ function buyFuel() {
         return;
     }
 
-    const fuelCost = fuelNeeded * 2;
-    if (game.ship.credits < fuelCost) {
-        alert(`Insufficient credits! Need ${fuelCost} to fill tank.`);
+    const fullTankCost = fuelNeeded * 2;
+
+    if (game.ship.credits >= fullTankCost) {
+        // Can afford full tank
+        game.ship.credits -= fullTankCost;
+        game.ship.fuel = game.ship.fuelMax;
+        // Also restore emergency fuel if depleted
+        game.ship.emergencyFuel = game.ship.emergencyFuelMax;
+        console.log(`Refueled to full tank for $${fullTankCost}`);
+    } else if (game.ship.credits >= 2) {
+        // Can afford partial refuel
+        const maxAffordableFuel = Math.floor(game.ship.credits / 2);
+        const actualFuelToBuy = Math.min(maxAffordableFuel, fuelNeeded);
+        const actualCost = actualFuelToBuy * 2;
+
+        game.ship.credits -= actualCost;
+        game.ship.fuel += actualFuelToBuy;
+
+        // If main tank is now full, restore emergency fuel
+        if (game.ship.fuel >= game.ship.fuelMax) {
+            game.ship.emergencyFuel = game.ship.emergencyFuelMax;
+        }
+
+        console.log(`Partial refuel: +${actualFuelToBuy} fuel for $${actualCost}`);
+        alert(`Partial refuel: Added ${actualFuelToBuy} fuel units for $${actualCost}`);
+    } else {
+        // Can't afford any fuel
+        alert('Insufficient credits! Need at least $2 for 1 fuel unit.');
         return;
     }
 
-    game.ship.credits -= fuelCost;
-    game.ship.fuel = game.ship.fuelMax;
-
     updateUI();
     updateFuelCost(); // Refresh fuel cost display
+    updateFuelButton(); // Refresh button text
 }
 
 function buyMissiles() {
@@ -206,14 +292,28 @@ function buyMissiles() {
         return;
     }
 
-    const missileCost = missilesNeeded * 50;
-    if (game.ship.credits < missileCost) {
-        alert(`Insufficient credits! Need $${missileCost} to rearm missiles.`);
+    const fullCost = missilesNeeded * 50;
+
+    if (game.ship.credits >= fullCost) {
+        // Can afford full rearm
+        game.ship.credits -= fullCost;
+        game.ship.weapons.missiles.ammo = game.ship.weapons.missiles.maxAmmo;
+        console.log(`Rearmed all missiles for $${fullCost}`);
+    } else if (game.ship.credits >= 50) {
+        // Can afford partial rearm
+        const maxAffordableMissiles = Math.floor(game.ship.credits / 50);
+        const actualMissilesToBuy = Math.min(maxAffordableMissiles, missilesNeeded);
+        const actualCost = actualMissilesToBuy * 50;
+
+        game.ship.credits -= actualCost;
+        game.ship.weapons.missiles.ammo += actualMissilesToBuy;
+
+        console.log(`Partial rearm: +${actualMissilesToBuy} missiles for $${actualCost}`);
+        alert(`Partial rearm: Added ${actualMissilesToBuy} missiles for $${actualCost}`);
+    } else {
+        alert('Insufficient credits! Need at least $50 for 1 missile.');
         return;
     }
-
-    game.ship.credits -= missileCost;
-    game.ship.weapons.missiles.ammo = game.ship.weapons.missiles.maxAmmo;
 
     updateUI();
     updateMissileCost(); // Refresh missile cost display
@@ -237,6 +337,11 @@ function buyGood(goodType, price) {
 
     updateUI();
     updateSellingSectionUI(); // Refresh the selling section with new cargo
+    updateFuelCost(); // Refresh fuel options
+    updateFuelButton();
+
+    // Auto-save on trade
+    autoSave('trade');
 }
 
 function sellGood(goodType, price) {
@@ -253,4 +358,9 @@ function sellGood(goodType, price) {
 
     updateUI();
     updateSellingSectionUI(); // Refresh the selling section
+    updateFuelCost(); // Refresh fuel options
+    updateFuelButton();
+
+    // Auto-save on trade
+    autoSave('trade');
 }

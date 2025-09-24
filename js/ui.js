@@ -1,6 +1,14 @@
 function updateUI() {
     document.getElementById('credits').textContent = game.ship.credits;
-    document.getElementById('fuel').textContent = Math.floor(game.ship.fuel);
+    const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
+
+    if (isEmergencyMode) {
+        document.getElementById('fuel').textContent = `0 (E:${Math.floor(game.ship.emergencyFuel)})`;
+        document.getElementById('fuel').style.color = '#ff8800'; // Orange for emergency
+    } else {
+        document.getElementById('fuel').textContent = Math.floor(game.ship.fuel);
+        document.getElementById('fuel').style.color = game.ship.fuel < 50 ? '#ffaa00' : '#ffffff'; // Yellow warning when low
+    }
     document.getElementById('fuelMax').textContent = game.ship.fuelMax;
     document.getElementById('hull').textContent = Math.floor(game.ship.hull);
     document.getElementById('hullMax').textContent = game.ship.hullMax;
@@ -42,11 +50,32 @@ function updateUI() {
     const nearby = document.getElementById('nearbyObjects');
     nearby.innerHTML = '';
 
-    // Check for event engagement first
+    // Emergency mode warning (highest priority)
+    if (isEmergencyMode) {
+        nearby.innerHTML += `<div style="color: #ff4444; font-weight: bold; text-align: center; margin-bottom: 10px;">⚠️ EMERGENCY POWER ⚠️</div>`;
+        nearby.innerHTML += `<div style="color: #ff8800; text-align: center; margin-bottom: 10px;">Weak thrust only - find fuel immediately!</div>`;
+    }
+
+    // Check for active engagement first
     if (game.isEngaged) {
         nearby.innerHTML += `<div style="color: #ffaa00; font-weight: bold;">ENGAGED with ${game.currentEvent.name}</div>`;
         nearby.innerHTML += `<div style="color: #ffff00;">Use side panel for choices | ESC or movement keys to disengage</div>`;
-    } else if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked) {
+    } else if (game.isDocked) {
+        nearby.innerHTML += `<div style="color: #00ffff; font-weight: bold;">DOCKED at ${game.currentPlanet.name}</div>`;
+        nearby.innerHTML += `<div style="color: #ffff00;">Press ESC or movement keys for emergency undock</div>`;
+    } else if (game.inDockingRange && game.nearPlanet) {
+        // Priority 1: Planet docking (highest priority)
+        nearby.innerHTML += `<div style="color: #00ff00; font-weight: bold;">DOCKING RANGE</div>`;
+        nearby.innerHTML += `<div style="color: #ffff00;">Press SPACE to dock with ${game.nearPlanet.name}</div>`;
+
+        // Show event as secondary option if present
+        if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) {
+            const event = eventSystem.nearEvent;
+            nearby.innerHTML += `<div style="color: #888888; font-size: 10px; margin-top: 5px;">Also nearby: ${event.name}</div>`;
+            nearby.innerHTML += `<div style="color: #ffaa88; font-size: 10px;">Press E to ${event.interactionText}</div>`;
+        }
+    } else if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) {
+        // Priority 2: Event interaction (only when no planet docking available)
         const event = eventSystem.nearEvent;
         nearby.innerHTML += `<div style="color: #ffaa00; font-weight: bold;">EVENT DETECTED</div>`;
         nearby.innerHTML += `<div style="color: #ffff00;">Press SPACE to ${event.interactionText}</div>`;
@@ -56,12 +85,6 @@ function updateUI() {
             const color = canAfford ? '#88ff88' : '#ff8888';
             nearby.innerHTML += `<div style="color: ${color};">Fuel cost: ${event.fuelCost}</div>`;
         }
-    } else if (game.inDockingRange && game.nearPlanet && !game.isDocked) {
-        nearby.innerHTML += `<div style="color: #00ff00; font-weight: bold;">DOCKING RANGE</div>`;
-        nearby.innerHTML += `<div style="color: #ffff00;">Press SPACE to dock with ${game.nearPlanet.name}</div>`;
-    } else if (game.isDocked) {
-        nearby.innerHTML += `<div style="color: #00ffff; font-weight: bold;">DOCKED at ${game.currentPlanet.name}</div>`;
-        nearby.innerHTML += `<div style="color: #ffff00;">Press ESC or movement keys for emergency undock</div>`;
     } else {
         // Show nearest planet information
         const nearest = getDistanceToNearest();

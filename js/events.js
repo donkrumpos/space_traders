@@ -163,16 +163,48 @@ function spawnRandomEvent() {
 }
 
 function createSpatialEvent(eventType, eventData) {
-    // Spawn event object in space ahead of the ship
+    // Find a valid spawn location that doesn't conflict with planets
+    let attempts = 0;
+    let validLocation = false;
+    let eventX, eventY;
+
+    const minDistanceFromPlanets = 150; // Minimum distance from any planet
     const spawnDistance = 300 + Math.random() * 200; // 300-500 units ahead
-    const angle = game.ship.angle + (Math.random() - 0.5) * 0.8; // Slight angle variation
+
+    while (!validLocation && attempts < 10) {
+        attempts++;
+        const angle = game.ship.angle + (Math.random() - 0.5) * 0.8; // Slight angle variation
+
+        eventX = game.ship.x + Math.cos(angle) * spawnDistance;
+        eventY = game.ship.y + Math.sin(angle) * spawnDistance;
+
+        // Check distance to all planets
+        validLocation = true;
+        for (let planet of game.planets) {
+            const distanceToPlanet = Math.sqrt(
+                Math.pow(eventX - planet.x, 2) +
+                Math.pow(eventY - planet.y, 2)
+            );
+
+            if (distanceToPlanet < minDistanceFromPlanets) {
+                validLocation = false;
+                break;
+            }
+        }
+    }
+
+    // If we couldn't find a valid location, don't spawn this event
+    if (!validLocation) {
+        console.log(`Event ${eventType} not spawned - too close to planets`);
+        return;
+    }
 
     const eventObject = {
         id: Date.now() + Math.random(), // Unique ID
         type: eventType,
         data: eventData,
-        x: game.ship.x + Math.cos(angle) * spawnDistance,
-        y: game.ship.y + Math.sin(angle) * spawnDistance,
+        x: eventX,
+        y: eventY,
         name: eventData.name,
         size: eventData.size,
         color: eventData.color,

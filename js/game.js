@@ -9,6 +9,8 @@ const game = {
         velocity: { x: 0, y: 0 },
         fuel: 500,
         fuelMax: 500,
+        emergencyFuel: 25, // Reserve fuel that can't be consumed normally
+        emergencyFuelMax: 25, // 5% of starting fuel as emergency reserve
         hull: 100,
         hullMax: 100,
         credits: 1000,
@@ -59,6 +61,11 @@ const game = {
         showFullMap: false,
         miniMapSize: 150,
         miniMapRange: 1500  // 5x wider than typical main screen view (~300 units)
+    },
+    damage: {
+        flashTime: 0,        // Screen flash duration
+        lastHitTime: 0,      // When player was last hit
+        invulnerabilityTime: 0  // Brief invulnerability after hit
     }
 };
 
@@ -242,6 +249,11 @@ function init() {
                 e.preventDefault();
                 fireMissile();
             }
+            // Secondary interaction key for events when planet has priority
+            if (e.code === 'KeyE') {
+                e.preventDefault();
+                trySecondaryInteraction();
+            }
         }
         // Emergency undock/disengage on any movement key while docked or engaged
         if ((game.isDocked || game.isEngaged) && (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
@@ -291,6 +303,9 @@ function gameLoop() {
 function startGame() {
     // This function will be called after all scripts are loaded
     init();
+
+    // Initialize character system after game is set up
+    characterManager.initialize();
 }
 
 // Don't start immediately - wait for all scripts to load
