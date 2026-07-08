@@ -282,7 +282,9 @@ function applyUpgradeEffects(upgradeType) {
             // Engine upgrades improve fuel efficiency (handled in update function)
             break;
         case 'shields':
-            // Shield upgrades (placeholder for future combat system)
+            // +20 regenerating shield points per level, refilled on purchase
+            game.ship.shieldMax = 20 * game.ship.upgrades.shields;
+            game.ship.shield = game.ship.shieldMax;
             break;
         case 'weapons':
             // Weapon upgrades improve damage and missile capacity

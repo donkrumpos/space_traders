@@ -550,14 +550,14 @@ function damagePlayer(damage) {
         return;
     }
 
-    // Apply shield absorption first — 15% per level, capped at 60%,
-    // so even level 1 shields do something
-    const shieldLevel = game.ship.upgrades.shields;
-    const shieldAbsorption = Math.min(0.15 * shieldLevel, 0.6);
-    const actualDamage = damage * (1 - shieldAbsorption);
-
-    // Apply damage to hull
-    game.ship.hull -= actualDamage;
+    // Shields soak damage first; only the overflow reaches the hull
+    let remaining = damage;
+    if (game.ship.shield > 0) {
+        const absorbed = Math.min(game.ship.shield, remaining);
+        game.ship.shield -= absorbed;
+        remaining -= absorbed;
+    }
+    game.ship.hull -= remaining;
 
     // Ensure hull doesn't go below 0
     game.ship.hull = Math.max(0, game.ship.hull);
@@ -566,6 +566,7 @@ function damagePlayer(damage) {
     game.damage.flashTime = 300; // 300ms red flash
     game.damage.lastHitTime = Date.now();
     game.damage.invulnerabilityTime = 200; // 200ms invulnerability
+    game.damage.shieldRegenDelay = 4; // Shields need 4s without damage to regenerate
     addShake(0.3);
     playHitSound();
 
@@ -574,7 +575,7 @@ function damagePlayer(damage) {
         handlePlayerDestruction();
     }
 
-    console.log(`Player hit for ${Math.round(actualDamage)} damage! Hull: ${Math.round(game.ship.hull)}/${game.ship.hullMax}`);
+    console.log(`Player hit for ${damage}! Shield: ${Math.round(game.ship.shield)}/${game.ship.shieldMax}, Hull: ${Math.round(game.ship.hull)}/${game.ship.hullMax}`);
 }
 
 function handlePlayerDestruction() {
@@ -586,8 +587,9 @@ function handlePlayerDestruction() {
     playExplosionSound();
     addShake(0.8);
 
-    // Reset hull to 25%
+    // Reset hull to 25%, shields to full
     game.ship.hull = game.ship.hullMax * 0.25;
+    game.ship.shield = game.ship.shieldMax;
 
     // Lose some credits (25%)
     const creditsLost = Math.floor(game.ship.credits * 0.25);
@@ -624,6 +626,13 @@ function updateDamageEffects(deltaTime) {
         if (game.damage.invulnerabilityTime < 0) {
             game.damage.invulnerabilityTime = 0;
         }
+    }
+
+    // Shield regeneration: 3 points/second after 4 seconds without damage
+    if (game.damage.shieldRegenDelay > 0) {
+        game.damage.shieldRegenDelay -= deltaTime;
+    } else if (game.ship.shield < game.ship.shieldMax) {
+        game.ship.shield = Math.min(game.ship.shieldMax, game.ship.shield + 3 * deltaTime);
     }
 }
 

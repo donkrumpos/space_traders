@@ -197,6 +197,17 @@ function render() {
     ctx.closePath();
     ctx.stroke();
 
+    // Shield aura — brighter when the pool is fuller, gone when depleted
+    if (game.ship.shield > 0) {
+        ctx.globalAlpha = 0.12 + 0.3 * (game.ship.shield / game.ship.shieldMax);
+        ctx.strokeStyle = '#44aaff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 16, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = shipAlpha;
+    }
+
     // Forward thrust indicator - intensity based on current thrust
     const hasMainFuel = game.ship.fuel > 0;
     const hasEmergencyFuel = game.ship.emergencyFuel > 0;

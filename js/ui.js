@@ -57,6 +57,12 @@ function updateUI() {
     document.getElementById('hull').textContent = Math.floor(game.ship.hull);
     document.getElementById('hullMax').textContent = game.ship.hullMax;
 
+    const shieldEl = document.getElementById('shieldVal');
+    shieldEl.textContent = Math.floor(game.ship.shield);
+    shieldEl.style.color = game.ship.shield <= 0 ? '#666666'
+        : game.ship.shield < game.ship.shieldMax ? '#88ccff' : '#44aaff';
+    document.getElementById('shieldMax').textContent = game.ship.shieldMax;
+
     const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
     document.getElementById('cargoUsed').textContent = cargoUsed;
     document.getElementById('cargoMax').textContent = game.ship.cargoMax;

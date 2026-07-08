@@ -23,6 +23,8 @@ function createDefaultCharacter() {
             emergencyFuelMax: 25,
             hull: 100,
             hullMax: 100,
+            shield: 20,
+            shieldMax: 20,
             credits: 1000,
             cargo: {},
             cargoMax: 10,
@@ -121,6 +123,12 @@ class CharacterManager {
 
         // Apply ship state
         Object.assign(game.ship, this.character.ship);
+
+        // Legacy saves predate the shield pool
+        if (typeof game.ship.shield === 'undefined' || typeof game.ship.shieldMax === 'undefined') {
+            game.ship.shieldMax = 20 * (game.ship.upgrades.shields || 1);
+            game.ship.shield = game.ship.shieldMax;
+        }
 
         // Apply game state
         game.isDocked = this.character.gameState.isDocked;
@@ -226,6 +234,8 @@ class CharacterManager {
             emergencyFuelMax: game.ship.emergencyFuelMax,
             hull: game.ship.hull,
             hullMax: game.ship.hullMax,
+            shield: game.ship.shield,
+            shieldMax: game.ship.shieldMax,
             credits: game.ship.credits,
             cargo: { ...game.ship.cargo },
             cargoMax: game.ship.cargoMax,

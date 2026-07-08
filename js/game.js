@@ -13,6 +13,8 @@ const game = {
         emergencyFuelMax: 25, // 5% of starting fuel as emergency reserve
         hull: 100,
         hullMax: 100,
+        shield: 20,
+        shieldMax: 20, // 20 points per shield upgrade level, regenerates out of combat
         credits: 1000,
         cargo: {},
         cargoMax: 10,
@@ -65,7 +67,8 @@ const game = {
     damage: {
         flashTime: 0,        // Screen flash duration
         lastHitTime: 0,      // When player was last hit
-        invulnerabilityTime: 0  // Brief invulnerability after hit
+        invulnerabilityTime: 0,  // Brief invulnerability after hit
+        shieldRegenDelay: 0  // Seconds until shields start regenerating
     }
 };
 
