@@ -263,6 +263,7 @@ VERIFY_SUITES.ships = (assert) => {
         HULLS.skiff.baseCargo === 10 && HULLS.skiff.baseFuel === 500 &&
         HULLS.skiff.baseHull === 100 && HULLS.skiff.maxSpeed === 8 && HULLS.skiff.agility === 1.0);
     assert('every hull is sold somewhere', HULL_ORDER.every(id => stockedAt(id).length > 0));
+    assert('every hull has a silhouette', HULL_ORDER.every(id => HULL_SHAPES[id] && HULL_SHAPES[id].draw));
 
     // Legacy commissioning: smallest hull that fits levels AND crew
     assert('level-1 loner commissions a skiff', assignLegacyHull(lv1, 0) === 'skiff');

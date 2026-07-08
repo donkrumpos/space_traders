@@ -1,3 +1,50 @@
+// Per-hull silhouettes — the ladder is visible at a glance. Every path
+// points +x (nose right); nose/tail anchor the thrust flames, shield sets
+// the aura radius. Wireframe polygons, same stroke idiom as everything else.
+const HULL_SHAPES = {
+    skiff: {
+        nose: 10, tail: -10, shield: 16,
+        draw: (ctx) => {
+            ctx.moveTo(10, 0); ctx.lineTo(-10, -5); ctx.lineTo(-5, 0);
+            ctx.lineTo(-10, 5); ctx.closePath();
+        }
+    },
+    courier: {
+        nose: 13, tail: -12, shield: 17,
+        draw: (ctx) => {
+            ctx.moveTo(13, 0); ctx.lineTo(3, -4); ctx.lineTo(-8, -6); ctx.lineTo(-12, -3);
+            ctx.lineTo(-7, 0); ctx.lineTo(-12, 3); ctx.lineTo(-8, 6); ctx.lineTo(3, 4);
+            ctx.closePath();
+        }
+    },
+    freighter: {
+        nose: 14, tail: -14, shield: 20,
+        draw: (ctx) => {
+            ctx.moveTo(14, 0); ctx.lineTo(8, -7); ctx.lineTo(-10, -8); ctx.lineTo(-14, -4);
+            ctx.lineTo(-14, 4); ctx.lineTo(-10, 8); ctx.lineTo(8, 7); ctx.closePath();
+            // Hold seam — a warehouse, not a dart
+            ctx.moveTo(4, -7); ctx.lineTo(4, 7);
+        }
+    },
+    gunship: {
+        nose: 14, tail: -12, shield: 18,
+        draw: (ctx) => {
+            ctx.moveTo(14, 0); ctx.lineTo(4, -3); ctx.lineTo(-2, -10); ctx.lineTo(-9, -10);
+            ctx.lineTo(-5, -3); ctx.lineTo(-12, -2); ctx.lineTo(-8, 0); ctx.lineTo(-12, 2);
+            ctx.lineTo(-5, 3); ctx.lineTo(-9, 10); ctx.lineTo(-2, 10); ctx.lineTo(4, 3);
+            ctx.closePath();
+        }
+    },
+    clipper: {
+        nose: 18, tail: -16, shield: 21,
+        draw: (ctx) => {
+            ctx.moveTo(18, 0); ctx.lineTo(8, -3); ctx.lineTo(-6, -4); ctx.lineTo(-16, -8);
+            ctx.lineTo(-11, -2); ctx.lineTo(-11, 2); ctx.lineTo(-16, 8); ctx.lineTo(-6, 4);
+            ctx.lineTo(8, 3); ctx.closePath();
+        }
+    }
+};
+
 function render() {
     const ctx = game.ctx;
     ctx.fillStyle = '#000000';
@@ -192,15 +239,12 @@ function render() {
         shipColor = '#ffff00'; // Yellow when lightly damaged
     }
 
-    // Ship body
+    // Ship body — the hull's own silhouette
+    const shape = HULL_SHAPES[game.ship.hullId] || HULL_SHAPES.skiff;
     ctx.strokeStyle = shipColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(-10, -5);
-    ctx.lineTo(-5, 0);
-    ctx.lineTo(-10, 5);
-    ctx.closePath();
+    shape.draw(ctx);
     ctx.stroke();
 
     // Shield aura — brighter when the pool is fuller, gone when depleted
@@ -209,7 +253,7 @@ function render() {
         ctx.strokeStyle = '#44aaff';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(0, 0, 16, 0, Math.PI * 2);
+        ctx.arc(0, 0, shape.shield, 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = shipAlpha;
     }
@@ -230,10 +274,10 @@ function render() {
         ctx.strokeStyle = isEmergencyMode ? '#ff4444' : '#ff8800'; // Red flame in emergency mode
         ctx.lineWidth = 1 + intensity; // Thicker line at full thrust
         ctx.beginPath();
-        ctx.moveTo(-10, -2 * intensity);
-        ctx.lineTo(-10 - flameLength, 0);
-        ctx.moveTo(-10, 2 * intensity);
-        ctx.lineTo(-10 - flameLength, 0);
+        ctx.moveTo(shape.tail, -2 * intensity);
+        ctx.lineTo(shape.tail - flameLength, 0);
+        ctx.moveTo(shape.tail, 2 * intensity);
+        ctx.lineTo(shape.tail - flameLength, 0);
         ctx.stroke();
         ctx.globalAlpha = 1;
     }
@@ -250,10 +294,10 @@ function render() {
         ctx.strokeStyle = isEmergencyMode ? '#ff6666' : '#4488ff'; // Light red in emergency mode
         ctx.lineWidth = 1 + (intensity * 0.5);
         ctx.beginPath();
-        ctx.moveTo(10, -1 * intensity);
-        ctx.lineTo(10 + flameLength, 0);
-        ctx.moveTo(10, 1 * intensity);
-        ctx.lineTo(10 + flameLength, 0);
+        ctx.moveTo(shape.nose, -1 * intensity);
+        ctx.lineTo(shape.nose + flameLength, 0);
+        ctx.moveTo(shape.nose, 1 * intensity);
+        ctx.lineTo(shape.nose + flameLength, 0);
         ctx.stroke();
         ctx.globalAlpha = 1;
     }
