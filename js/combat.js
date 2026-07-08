@@ -162,19 +162,12 @@ function pickEnemyTier() {
     return roll < 0.2 ? 'scout' : (roll < 0.65 ? 'raider' : 'warlord');
 }
 
-function spawnEnemyShip() {
-    // Spawn enemy ships at random locations away from the player
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 800 + Math.random() * 1200; // 800-2000 units away
-
-    const tierKey = pickEnemyTier();
+function makeEnemyFromTier(tierKey, x, y) {
     const tier = ENEMY_TIERS[tierKey];
-
-    const enemy = {
+    return {
         type: 'enemy_ship',
         tierName: tier.name,
-        x: game.ship.x + Math.cos(angle) * distance,
-        y: game.ship.y + Math.sin(angle) * distance,
+        x, y,
         angle: Math.random() * Math.PI * 2,
         velocity: { x: 0, y: 0 },
         hull: tier.hull,
@@ -210,6 +203,18 @@ function spawnEnemyShip() {
             lastDamageHull: tier.hull
         }
     };
+}
+
+function spawnEnemyShip() {
+    // Spawn enemy ships at random locations away from the player
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 800 + Math.random() * 1200; // 800-2000 units away
+
+    const enemy = makeEnemyFromTier(
+        pickEnemyTier(),
+        game.ship.x + Math.cos(angle) * distance,
+        game.ship.y + Math.sin(angle) * distance
+    );
 
     if (!game.enemies) {
         game.enemies = [];
@@ -265,6 +270,88 @@ function spawnNamedWarlord(bounty) {
     game.enemies.push(boss);
 }
 
+// --- Pirate faction raid bands ---
+// An authored encounter: 3-4 faction minions escorting a warlord boss.
+// The boss shields up and shadows the fight from long range; only once its
+// escort is dead does it drop shields and engage.
+const PIRATE_FACTIONS = [
+    {
+        name: 'Rustfang Cartel', color: '#ff7744', minionTier: 'scout',
+        bossTitle: 'Fang-Boss', bossNames: ['Gnash', 'Korrode', 'Scrapjaw', 'Old Tetanus']
+    },
+    {
+        name: 'Void Choir', color: '#bb66ff', minionTier: 'raider',
+        bossTitle: 'Choirmaster', bossNames: ['Dirge', 'Hymnal', 'Echo-of-Nine', 'Vesper']
+    },
+    {
+        name: 'Iron Shoal', color: '#88ccff', minionTier: 'raider',
+        bossTitle: 'Shoal-Tyrant', bossNames: ['Undertow', 'Riptide', 'Brack', 'Deepmaw']
+    }
+];
+
+let raidBandTimer = 150; // seconds until the first band can muster
+
+function updateRaidBands(deltaTime) {
+    // Bands only muster once you're worth robbing, and only one at a time
+    if (game.ship.credits < 2500) return;
+    if ((game.enemies || []).some(e => e.bandId)) return;
+    raidBandTimer -= deltaTime;
+    if (raidBandTimer <= 0) {
+        spawnRaidBand();
+        raidBandTimer = 240 + Math.random() * 180;
+    }
+}
+
+function spawnRaidBand() {
+    const faction = PIRATE_FACTIONS[Math.floor(Math.random() * PIRATE_FACTIONS.length)];
+    const bandId = `band-${Date.now()}`;
+    const bandAngle = Math.random() * Math.PI * 2;
+    const bandDist = 1100 + Math.random() * 500;
+    const cx = game.ship.x + Math.cos(bandAngle) * bandDist;
+    const cy = game.ship.y + Math.sin(bandAngle) * bandDist;
+
+    if (!game.enemies) game.enemies = [];
+
+    // Escort: minions in a loose ring, keyed to the faction's colors and name
+    const factionTag = faction.name.split(' ')[0];
+    const minionCount = 3 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < minionCount; i++) {
+        const a = (i / minionCount) * Math.PI * 2;
+        const minion = makeEnemyFromTier(faction.minionTier,
+            cx + Math.cos(a) * 90, cy + Math.sin(a) * 90);
+        minion.bandId = bandId;
+        minion.color = faction.color;
+        minion.tierName = `${factionTag} ${minion.tierName}`;
+        minion.detectRange = 1400; // the band came for YOU — no wandering off
+        game.enemies.push(minion);
+    }
+
+    // The boss trails behind its escort, shields up
+    const bossName = faction.bossNames[Math.floor(Math.random() * faction.bossNames.length)];
+    const boss = makeEnemyFromTier('warlord',
+        cx + Math.cos(bandAngle) * 260, cy + Math.sin(bandAngle) * 260);
+    Object.assign(boss, {
+        bandId,
+        isBandBoss: true,
+        holdingBack: true,
+        shielded: true,
+        factionName: faction.name,
+        tierName: `${faction.bossTitle} ${bossName}`,
+        color: faction.color,
+        hull: 170,
+        maxHull: 170,
+        size: 13,
+        reward: 700 + Math.random() * 300,
+        detectRange: 1600
+    });
+    boss.weapons.volley = 3;
+    boss.weapons.maxCooldown = 1000;
+    game.enemies.push(boss);
+
+    showHudFeedback(`⚠ ${faction.name} raid band inbound — ${boss.tierName} won't fight until its escort falls`, 'warning', 6000);
+    playBountySound();
+}
+
 function updateEnemies(deltaTime) {
     if (!game.enemies) {
         game.enemies = [];
@@ -279,6 +366,9 @@ function updateEnemies(deltaTime) {
         spawnEnemyShip();
         game.lastEnemySpawn = Date.now();
     }
+
+    // Faction raid bands muster on their own clock
+    updateRaidBands(deltaTime);
 
     // Update enemy AI with realistic physics-based movement
     game.enemies.forEach(enemy => {
@@ -317,6 +407,17 @@ function updateEnemies(deltaTime) {
         // Cargo haulers are worth chasing — pirates smell the goods from further out
         const effectiveDetectRange = enemy.detectRange + (cargoUnitsCarried() > 0 ? 300 : 0);
 
+        // Band boss: drop shields and engage the moment the last escort dies
+        if (enemy.isBandBoss && enemy.holdingBack) {
+            const escortAlive = game.enemies.some(e => e.bandId === enemy.bandId && !e.isBandBoss);
+            if (!escortAlive) {
+                enemy.holdingBack = false;
+                enemy.shielded = false;
+                spawnFloater(enemy.x, enemy.y - 30, 'SHIELDS DOWN', '#ffff66', 16);
+                showHudFeedback(`⚠ ${enemy.tierName} drops shields and engages!`, 'warning', 4000);
+            }
+        }
+
         // AI behavior based on state
         let targetAngle = enemy.angle;
         let shouldThrust = false;
@@ -325,6 +426,18 @@ function updateEnemies(deltaTime) {
             // Evasive maneuvers: turn perpendicular and thrust away
             targetAngle = angleToPlayer + (Math.PI / 2 * enemy.ai.strafeDirection);
             shouldThrust = true;
+        } else if (enemy.holdingBack) {
+            // Shielded boss shadows the fight from long range and never fires
+            if (distanceToPlayer > 950) {
+                targetAngle = angleToPlayer;
+                shouldThrust = true;
+            } else if (distanceToPlayer < 650) {
+                targetAngle = angleToPlayer + Math.PI;
+                shouldThrust = true;
+            } else {
+                targetAngle = angleToPlayer + Math.PI / 2; // drift sideways, looming
+                shouldThrust = false;
+            }
         } else if (distanceToPlayer < effectiveDetectRange) {
             enemy.ai.state = 'engage';
 
@@ -391,8 +504,8 @@ function updateEnemies(deltaTime) {
             enemy.velocity.y = (enemy.velocity.y / currentSpeed) * maxSpeed;
         }
 
-        // Fire at player if weapon is ready and aimed
-        if (enemy.ai.state === 'engage' && enemy.weapons.fireCooldown <= 0 && Math.abs(angleDiff) < 0.2) {
+        // Fire at player if weapon is ready and aimed (shielded bosses hold fire)
+        if (enemy.ai.state === 'engage' && !enemy.holdingBack && enemy.weapons.fireCooldown <= 0 && Math.abs(angleDiff) < 0.2) {
             fireEnemyWeapon(enemy);
             enemy.weapons.fireCooldown = enemy.weapons.maxCooldown;
         }
@@ -487,6 +600,18 @@ function checkProjectileCollisions() {
                 );
 
                 if (distance < hitRadius) {
+                    // Escort shield: shots splash off until the minions are dead
+                    if (enemy.shielded) {
+                        spawnHitSparks(projectile.x, projectile.y, '#66ffff');
+                        if (Math.random() < 0.35) {
+                            spawnFloater(enemy.x, enemy.y - 25, 'SHIELDED — KILL THE ESCORT', '#66ffff', 11);
+                        }
+                        playHitSound();
+                        game.projectiles.splice(i, 1);
+                        hitSomething = true;
+                        break;
+                    }
+
                     // Hit!
                     enemy.hull -= projectile.damage;
 
@@ -521,12 +646,16 @@ function checkProjectileCollisions() {
                             updateMissionsUI();
                             spawnFloater(enemy.x, enemy.y - 45, `${enemy.tierName} DOWN`, '#ff6666', 16);
                             showHudFeedback(`☠ BOUNTY CLAIMED: ${enemy.tierName} — $${reward}${streakTag}`, 'success', 5000);
+                        } else if (enemy.isBandBoss) {
+                            spawnFloater(enemy.x, enemy.y - 45, 'RAID BROKEN', '#ffcc44', 18);
+                            showHudFeedback(`☠ RAID BROKEN — ${enemy.tierName} of the ${enemy.factionName} destroyed! $${reward}${streakTag}`, 'success', 5000);
                         } else {
                             showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
                         }
 
                         // Pirates sometimes jettison cargo — fly through to scoop it
-                        if (Math.random() < 0.6) {
+                        // (a band boss always drops its plunder)
+                        if (enemy.isBandBoss || Math.random() < 0.6) {
                             const goodTypes = Object.keys(goods);
                             spawnCargoDrop(
                                 enemy.x, enemy.y,
@@ -537,6 +666,14 @@ function checkProjectileCollisions() {
 
                         // Remove enemy
                         game.enemies.splice(j, 1);
+
+                        // Escort down: count off what stands between you and the boss
+                        if (enemy.bandId && !enemy.isBandBoss) {
+                            const left = game.enemies.filter(e => e.bandId === enemy.bandId && !e.isBandBoss).length;
+                            if (left > 0) {
+                                spawnFloater(enemy.x, enemy.y - 45, `${left} ESCORT${left > 1 ? 'S' : ''} LEFT`, '#ffcc66', 14);
+                            }
+                        }
 
                         // Auto-save on combat victory
                         autoSave('combat_victory');
@@ -730,6 +867,19 @@ function renderEnemies(ctx, camera) {
 
         ctx.restore();
 
+        // Escort shield: pulsing ring around a holding-back band boss
+        if (enemy.shielded) {
+            const pulse = 0.35 + 0.25 * Math.sin(Date.now() * 0.006);
+            ctx.save();
+            ctx.strokeStyle = '#66ffff';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = pulse;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, enemy.size + 9, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
         // Health bar above enemy
         const barWidth = 20;
         const barHeight = 4;
@@ -777,11 +927,13 @@ function updateProjectiles(deltaTime) {
         projectile.prevX = projectile.x;
         projectile.prevY = projectile.y;
 
-        // Seeker shots curve toward the nearest pirate, preserving their speed
+        // Seeker shots curve toward the nearest pirate, preserving their speed.
+        // Shielded band bosses are skipped — no point homing into a wall.
         if (projectile.homing && game.enemies && game.enemies.length > 0) {
             let nearest = null;
             let nearestDistSq = Infinity;
             game.enemies.forEach(e => {
+                if (e.shielded) return;
                 const dSq = Math.pow(e.x - projectile.x, 2) + Math.pow(e.y - projectile.y, 2);
                 if (dSq < nearestDistSq) {
                     nearestDistSq = dSq;
