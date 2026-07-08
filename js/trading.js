@@ -52,6 +52,7 @@ function dock(planet) {
     completeMissionsAt(planet);
     recordLedger(planet);
     generateMissionOffers(planet);
+    generateBountyOffer(planet);
     game.combatStreak = 0;
 
     // Populate trading interface

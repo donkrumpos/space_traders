@@ -161,6 +161,53 @@ function spawnEnemyShip() {
     game.enemies.push(enemy);
 }
 
+// Named Warlord for a wanted-poster hunt: tougher than a regular Warlord,
+// fires 3-shot volleys, waits near its "last seen" planet, never despawns.
+function spawnNamedWarlord(bounty) {
+    const planet = game.planets.find(p => p.name === bounty.nearPlanet) || game.planets[0];
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 350 + Math.random() * 250;
+
+    const boss = {
+        type: 'enemy_ship',
+        isBoss: true,
+        bountyId: bounty.id,
+        tierName: bounty.name,
+        x: planet.x + Math.cos(angle) * dist,
+        y: planet.y + Math.sin(angle) * dist,
+        angle: Math.random() * Math.PI * 2,
+        velocity: { x: 0, y: 0 },
+        hull: 200,
+        maxHull: 200,
+        size: 14,
+        color: '#ff2266',
+        maxSpeed: 6,
+        damage: 24,
+        detectRange: 1100,
+        reward: bounty.reward,
+        lastSpawn: Date.now(),
+        weapons: {
+            fireCooldown: 0,
+            maxCooldown: 1100,
+            range: 450,
+            accuracy: 0.9,
+            volley: 3 // fires a 3-shot spread
+        },
+        thrust: { current: 0, target: 0, maxThrust: 0.15, acceleration: 0.008 },
+        rotation: { current: 0, turnSpeed: 0.028 },
+        ai: {
+            state: 'patrol',
+            targetDistance: 320,
+            evasionCooldown: 0,
+            strafeDirection: 0,
+            lastDamageHull: 200
+        }
+    };
+
+    if (!game.enemies) game.enemies = [];
+    game.enemies.push(boss);
+}
+
 function updateEnemies(deltaTime) {
     if (!game.enemies) {
         game.enemies = [];
@@ -298,8 +345,9 @@ function updateEnemies(deltaTime) {
         enemy.y += enemy.velocity.y * deltaTime * 60;
     });
 
-    // Remove enemies that are too far away
+    // Remove enemies that are too far away (bounty bosses never despawn)
     game.enemies = game.enemies.filter(enemy => {
+        if (enemy.isBoss) return true;
         const distance = Math.sqrt(
             Math.pow(enemy.x - game.ship.x, 2) +
             Math.pow(enemy.y - game.ship.y, 2)
@@ -309,32 +357,38 @@ function updateEnemies(deltaTime) {
 }
 
 function fireEnemyWeapon(enemy) {
-    // Calculate firing angle with some inaccuracy
-    const baseAngle = enemy.angle;
-    const spread = (1 - enemy.weapons.accuracy) * 0.5; // Convert accuracy to spread
-    const inaccuracy = (Math.random() - 0.5) * spread;
-    const firingAngle = baseAngle + inaccuracy;
+    // Bosses fire a fanned volley; regular pirates fire a single shot
+    const shots = enemy.weapons.volley || 1;
 
-    // Create enemy projectile
-    const projectile = {
-        type: 'enemy_laser',
-        source: 'enemy',
-        x: enemy.x,
-        y: enemy.y,
-        velocity: {
-            x: Math.cos(firingAngle) * 600 + enemy.velocity.x * 60, // Inherits enemy velocity too
-            y: Math.sin(firingAngle) * 600 + enemy.velocity.y * 60
-        },
-        damage: enemy.damage, // Per tier
-        range: 350, // Shorter range than player weapons
-        distanceTraveled: 0,
-        color: enemy.color,
-        size: 2,
-        age: 0,
-        maxAge: 583 // 583ms at 600 units/second = 350 unit range
-    };
+    for (let s = 0; s < shots; s++) {
+        // Calculate firing angle with some inaccuracy, plus volley fan spread
+        const baseAngle = enemy.angle;
+        const spread = (1 - enemy.weapons.accuracy) * 0.5; // Convert accuracy to spread
+        const inaccuracy = (Math.random() - 0.5) * spread;
+        const fanOffset = shots > 1 ? (s - (shots - 1) / 2) * 0.12 : 0;
+        const firingAngle = baseAngle + inaccuracy + fanOffset;
 
-    game.projectiles.push(projectile);
+        // Create enemy projectile
+        const projectile = {
+            type: 'enemy_laser',
+            source: 'enemy',
+            x: enemy.x,
+            y: enemy.y,
+            velocity: {
+                x: Math.cos(firingAngle) * 600 + enemy.velocity.x * 60, // Inherits enemy velocity too
+                y: Math.sin(firingAngle) * 600 + enemy.velocity.y * 60
+            },
+            damage: enemy.damage, // Per tier
+            range: 350, // Shorter range than player weapons
+            distanceTraveled: 0,
+            color: enemy.color,
+            size: 2,
+            age: 0,
+            maxAge: 583 // 583ms at 600 units/second = 350 unit range
+        };
+
+        game.projectiles.push(projectile);
+    }
 }
 
 // Distance from point (px, py) to the segment (x1,y1)-(x2,y2).
@@ -403,7 +457,16 @@ function checkProjectileCollisions() {
                         playBountySound();
                         addShake(0.35);
                         flashCredits();
-                        showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
+                        if (enemy.bountyId) {
+                            // Wanted-poster target down: close out the hunt
+                            const bountyIdx = game.missions.findIndex(m => m.id === enemy.bountyId);
+                            if (bountyIdx !== -1) game.missions.splice(bountyIdx, 1);
+                            updateMissionsUI();
+                            spawnFloater(enemy.x, enemy.y - 45, `${enemy.tierName} DOWN`, '#ff6666', 16);
+                            showHudFeedback(`☠ BOUNTY CLAIMED: ${enemy.tierName} — $${reward}${streakTag}`, 'success', 5000);
+                        } else {
+                            showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
+                        }
 
                         // Pirates sometimes jettison cargo — fly through to scoop it
                         if (Math.random() < 0.6) {

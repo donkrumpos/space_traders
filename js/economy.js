@@ -223,6 +223,10 @@ function updateMissionsUI() {
         return;
     }
     el.innerHTML = game.missions.map(m => {
+        if (m.type === 'bounty') {
+            return `<div class="ledger-row"><span>☠ ${m.name} — near ${m.nearPlanet}</span>
+                <span style="color:#ff6666;">$${m.reward}</span></div>`;
+        }
         const have = game.ship.cargo[m.goodType] || 0;
         const ready = have >= m.qty;
         return `<div class="ledger-row"><span>${m.qty} ${goods[m.goodType].name} → ${m.dest}</span>
@@ -233,14 +237,70 @@ function updateMissionsUI() {
 function updateMissionBoardUI(planet) {
     const el = document.getElementById('missionBoard');
     if (!el) return;
-    if (!planet.missionOffers || planet.missionOffers.length === 0) {
-        el.innerHTML = '<div style="color:#666;">No contracts available</div>';
+    const logFull = game.missions.length >= 3;
+
+    let html = '';
+    if (planet.bountyOffer) {
+        const b = planet.bountyOffer;
+        html += `<div class="trade-item" style="border-color:#883344;">
+            <span style="color:#ff6666;">☠ WANTED: ${b.name}<br>
+                <small style="color:#888;">Last seen near ${b.nearPlanet} — pays $${b.reward}</small></span>
+            <button onclick="acceptBounty()" ${logFull ? 'disabled' : ''}>Hunt</button>
+        </div>`;
+    }
+    if (planet.missionOffers && planet.missionOffers.length > 0) {
+        html += planet.missionOffers.map(o => `<div class="trade-item">
+            <span>${o.qty} ${goods[o.goodType].name} → ${o.dest}<br>
+                <small style="color:#888;">Pays $${o.reward} on delivery</small></span>
+            <button onclick="acceptMission('${o.id}')" ${logFull ? 'disabled' : ''}>Accept</button>
+        </div>`).join('');
+    }
+    el.innerHTML = html || '<div style="color:#666;">No contracts available</div>';
+}
+
+// --- Wanted posters (named Warlord hunts) ---
+
+const BOUNTY_FIRST_NAMES = ['Crimson', 'Void', 'Iron', 'Silent', 'Black', 'Rust', 'Grim', 'Howling'];
+const BOUNTY_LAST_NAMES = ['Vex', 'Harrow', 'Kane', 'Sable', 'Talon', 'Mordant', 'Grin', 'Locke'];
+
+function generateBountyOffer(planet) {
+    planet.bountyOffer = null;
+    // One hunt at a time, and posters only show up sometimes
+    const alreadyHunting = game.missions.some(m => m.type === 'bounty');
+    if (alreadyHunting || Math.random() > 0.4) return;
+
+    const target = game.planets[Math.floor(Math.random() * game.planets.length)];
+    const name = BOUNTY_FIRST_NAMES[Math.floor(Math.random() * BOUNTY_FIRST_NAMES.length)] + ' ' +
+                 BOUNTY_LAST_NAMES[Math.floor(Math.random() * BOUNTY_LAST_NAMES.length)];
+    planet.bountyOffer = {
+        id: `bounty-${Date.now()}`,
+        type: 'bounty',
+        name,
+        nearPlanet: target.name,
+        reward: 1500 + Math.round(Math.random() * 150) * 10
+    };
+}
+
+function acceptBounty() {
+    const planet = game.currentPlanet;
+    if (!planet || !planet.bountyOffer) return;
+    if (game.missions.length >= 3) {
+        showHudFeedback('Mission log full (3 contracts max)', 'error');
         return;
     }
-    const logFull = game.missions.length >= 3;
-    el.innerHTML = planet.missionOffers.map(o => `<div class="trade-item">
-        <span>${o.qty} ${goods[o.goodType].name} → ${o.dest}<br>
-            <small style="color:#888;">Pays $${o.reward} on delivery</small></span>
-        <button onclick="acceptMission('${o.id}')" ${logFull ? 'disabled' : ''}>Accept</button>
-    </div>`).join('');
+    const bounty = planet.bountyOffer;
+    planet.bountyOffer = null;
+    game.missions.push(bounty);
+    spawnNamedWarlord(bounty);
+    showHudFeedback(`Hunt accepted: ${bounty.name}, last seen near ${bounty.nearPlanet}`, 'success', 4500);
+    updateMissionBoardUI(planet);
+    updateMissionsUI();
+}
+
+// After a reload, any accepted hunt whose target isn't alive gets its boss respawned
+function restoreActiveBounties() {
+    (game.missions || []).filter(m => m.type === 'bounty').forEach(bounty => {
+        const alive = (game.enemies || []).some(e => e.bountyId === bounty.id);
+        if (!alive) spawnNamedWarlord(bounty);
+    });
 }
