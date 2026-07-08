@@ -18,6 +18,12 @@ const game = {
         credits: 1000,
         cargo: {},
         cargoMax: 10,
+        // The hull ladder: which body this ship is, what Foggy/Arthur named
+        // her, and the log where her story accumulates (see js/ships.js)
+        hullId: 'skiff',
+        name: null,
+        mods: [],
+        log: [],
         upgrades: {
             cargo: 1,
             engine: 1,
@@ -101,6 +107,7 @@ const planetData = [
         blurb: 'Terraced glowgrain paddies light the nightside like a second aurora.',
         produces: { food: 50 },
         demands: { technology: 200, luxury: 150, medicine: 160 },
+        shipyard: ['skiff'],
         upgrades: {
             cargo: { name: 'Cargo Bay Extension', baseCost: 500, description: 'Increases cargo capacity by 5 units' },
             fuel_tank: { name: 'Extended Fuel Tank', baseCost: 800, description: 'Increases fuel capacity by 200 units' }
@@ -129,6 +136,7 @@ const planetData = [
         produces: { technology: 80, luxury: 120, parts: 100 },
         demands: { materials: 160, food: 100, relics: 320 },
         weaponSystems: ['spread'],
+        shipyard: ['courier', 'gunship'],
         upgrades: {
             shields: { name: 'Shield Generator', baseCost: 1500, description: 'Advanced shield system for protection' },
             engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency' },
@@ -144,6 +152,7 @@ const planetData = [
         blurb: 'Last dock before the dark. No customs, no questions, no refunds.',
         produces: { contraband: 40 },
         demands: { food: 300, technology: 280, materials: 250, luxury: 200, medicine: 280, parts: 150 },
+        shipyard: ['gunship', 'freighter'],
         upgrades: {
             shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
             hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' },
@@ -159,6 +168,7 @@ const planetData = [
         blurb: 'Old money, high towers, and an appetite for everything the rim digs up.',
         produces: { luxury: 90 },
         demands: { materials: 130, technology: 110, contraband: 350, relics: 380 },
+        shipyard: ['courier', 'freighter', 'clipper'],
         upgrades: {
             cargo: { name: 'Luxury Cargo Bay', baseCost: 2000, description: 'Premium cargo expansion with climate control' },
             fuel_tank: { name: 'Premium Fuel System', baseCost: 2500, description: 'High-capacity fuel system with purification' }

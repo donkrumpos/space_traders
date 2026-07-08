@@ -117,6 +117,9 @@ function updateTradingInterface(planet) {
     // Update weapon systems shop
     updateWeaponSystemsUI(planet);
 
+    // Update the shipyard (hull ladder)
+    updateShipyardUI(planet);
+
     // Update fuel cost
     updateFuelCost();
     updateFuelButton();
@@ -195,6 +198,19 @@ function updateUpgradesUI(planet) {
     Object.keys(planet.upgrades).forEach(upgradeType => {
         const upgrade = planet.upgrades[upgradeType];
         const currentLevel = game.ship.upgrades[upgradeType];
+
+        // The hull sets how far each track can grow — bigger ships take more
+        if (currentLevel >= hullCap(upgradeType)) {
+            upgradesSection.innerHTML += `<div class="trade-item">
+                <span>
+                    ${upgrade.name} (Lv.${currentLevel})<br>
+                    <small style="color: #888;">At this hull's limit — a bigger ship takes more</small>
+                </span>
+                <span style="color:#66ffcc;">HULL CAP</span>
+            </div>`;
+            return;
+        }
+
         const cost = upgrade.baseCost * Math.pow(1.5, currentLevel - 1); // Exponential pricing
         const canAfford = game.ship.credits >= cost;
 
@@ -272,6 +288,10 @@ function updateMissileCost() {
 }
 
 function buyUpgrade(upgradeType, cost) {
+    if (game.ship.upgrades[upgradeType] >= hullCap(upgradeType)) {
+        showHudFeedback(`Your ${currentHull().name} can't take more — bigger hulls at the shipyard`, 'error');
+        return;
+    }
     if (game.ship.credits < cost) {
         showHudFeedback(`Insufficient credits! Need $${cost} for this upgrade.`, 'error');
         return;
@@ -291,31 +311,20 @@ function buyUpgrade(upgradeType, cost) {
 }
 
 function applyUpgradeEffects(upgradeType) {
+    // Every ceiling derives from hull base + levels + perks + mods (ships.js);
+    // buying the module also tops up the pool it grows
+    recomputeShipStats();
     switch(upgradeType) {
-        case 'cargo':
-            game.ship.cargoMax += 5;
-            break;
         case 'fuel_tank':
-            game.ship.fuelMax += 200;
-            game.ship.fuel = Math.min(game.ship.fuel + 200, game.ship.fuelMax); // Add fuel too
+            game.ship.fuel = Math.min(game.ship.fuel + 200, game.ship.fuelMax);
             break;
         case 'hull':
-            game.ship.hullMax += 50;
             game.ship.hull = Math.min(game.ship.hull + 50, game.ship.hullMax); // Repair too
             break;
-        case 'engine':
-            // Engine upgrades improve fuel efficiency (handled in update function)
-            break;
         case 'shields':
-            // +20 regenerating shield points per level, refilled on purchase
-            // (recomputed from scratch, so perk bonuses must be re-added)
-            game.ship.shieldMax = 20 * game.ship.upgrades.shields + (hasPerk('deflector_tuning') ? 10 : 0);
-            game.ship.shield = game.ship.shieldMax;
+            game.ship.shield = game.ship.shieldMax; // Refilled on purchase
             break;
         case 'weapons':
-            // Weapon upgrades improve damage and missile capacity
-            const level = game.ship.upgrades.weapons;
-            game.ship.weapons.missiles.maxAmmo = 5 + (level - 1) * 3 + (hasPerk('missile_racks') ? 3 : 0);
             game.ship.weapons.missiles.ammo = Math.min(game.ship.weapons.missiles.ammo + 3, game.ship.weapons.missiles.maxAmmo);
             break;
     }

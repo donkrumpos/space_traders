@@ -28,6 +28,10 @@ function createDefaultCharacter() {
             credits: 1000,
             cargo: {},
             cargoMax: 10,
+            hullId: 'skiff',
+            name: null,
+            mods: [],
+            log: [],
             upgrades: {
                 cargo: 1,
                 engine: 1,
@@ -163,6 +167,23 @@ class CharacterManager {
         if (!game.pilot.crew) game.pilot.crew = [];
         reapplyPerkEffects();
         updateFactionUI();
+
+        // Legacy saves predate the hull ladder: commission the ship they've
+        // been flying all along — smallest hull that fits their upgrade
+        // levels and houses their crew. (After pilot assignment, so the
+        // recompute sees perks like Packrat. Detected on the SAVED ship —
+        // Object.assign left game.ship's default 'skiff' in place.)
+        if (!this.character.ship.hullId) {
+            game.ship.hullId = assignLegacyHull(game.ship.upgrades, game.pilot.crew.length);
+            recomputeShipStats();
+        }
+        if (!game.ship.mods) game.ship.mods = [];
+        if (!game.ship.log) game.ship.log = [];
+        // An unnamed ship (legacy or brand-new) gets her christening on load
+        if (!game.ship.name) {
+            setTimeout(() => showShipNaming(false), 600);
+        }
+        updateShipPanelUI();
         updateCrewPanelUI();
         if (retroXP > 0) {
             setTimeout(() => addXP(retroXP, 'service record'), 1200);
@@ -289,6 +310,10 @@ class CharacterManager {
             credits: game.ship.credits,
             cargo: { ...game.ship.cargo },
             cargoMax: game.ship.cargoMax,
+            hullId: game.ship.hullId,
+            name: game.ship.name,
+            mods: [...(game.ship.mods || [])],
+            log: [...(game.ship.log || [])],
             upgrades: { ...game.ship.upgrades },
             weapons: {
                 lasers: { ...game.ship.weapons.lasers },

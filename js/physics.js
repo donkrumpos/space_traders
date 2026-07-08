@@ -95,8 +95,8 @@ function update() {
     game.ship.velocity.x *= dragFactor;
     game.ship.velocity.y *= dragFactor;
 
-    // Speed limit
-    const maxSpeed = 8;
+    // Speed limit — the hull's top end, not a universal constant
+    const maxSpeed = shipMaxSpeed();
     const currentSpeed = Math.sqrt(game.ship.velocity.x * game.ship.velocity.x + game.ship.velocity.y * game.ship.velocity.y);
     if (currentSpeed > maxSpeed) {
         game.ship.velocity.x = (game.ship.velocity.x / currentSpeed) * maxSpeed;
@@ -242,8 +242,10 @@ function updateRotationSystem() {
         // Smooth acceleration curve (ease-out)
         const easedProgress = 1 - Math.pow(1 - progress, 2);
 
-        // Calculate speed between base and max
-        targetRotationSpeed = rotation.baseSpeed + (rotation.maxSpeed - rotation.baseSpeed) * easedProgress;
+        // Calculate speed between base and max, scaled by how nimble the
+        // hull is — a freighter turns like a freighter
+        targetRotationSpeed = (rotation.baseSpeed + (rotation.maxSpeed - rotation.baseSpeed) * easedProgress)
+            * currentHull().agility;
 
         // Apply direction
         if (wantsRotateLeft) {

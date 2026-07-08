@@ -133,6 +133,11 @@ function maybeShowPerkChoice() {
     if (location.search.includes('verify')) return; // harness drives perk flow explicitly
     if (!game.pilot || game.pilot.pendingPerkChoices <= 0) return;
     if (document.getElementById('perkChoiceOverlay')) return;
+    // The christening modal goes first; training waits its turn
+    if (document.getElementById('shipNamingOverlay')) {
+        setTimeout(maybeShowPerkChoice, 1500);
+        return;
+    }
     // Let the promotion banner have its moment first
     setTimeout(showPerkChoice, 1200);
 }
@@ -183,19 +188,17 @@ function choosePerk(id) {
     pilot.perks.push(id);
     pilot.pendingPerkChoices = Math.max(0, pilot.pendingPerkChoices - 1);
 
-    // Perks that grant flat stats apply once, right here; the save carries them.
+    // Flat-stat perks flow through the recompute (ships.js) so hull swaps
+    // keep them; buying the perk also tops up the pool it grows.
     // Rate perks (cooldown, prices, fuel) are read live via hasPerk().
+    recomputeShipStats();
     switch (id) {
         case 'missile_racks':
-            game.ship.weapons.missiles.maxAmmo += 3;
-            game.ship.weapons.missiles.ammo += 3;
-            break;
-        case 'packrat':
-            game.ship.cargoMax += 3;
+            game.ship.weapons.missiles.ammo = Math.min(
+                game.ship.weapons.missiles.ammo + 3, game.ship.weapons.missiles.maxAmmo);
             break;
         case 'deflector_tuning':
-            game.ship.shieldMax += 10;
-            game.ship.shield += 10;
+            game.ship.shield = Math.min(game.ship.shield + 10, game.ship.shieldMax);
             break;
         case 'long_range_scanner':
             game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE * 1.4);

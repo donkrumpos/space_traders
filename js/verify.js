@@ -134,13 +134,20 @@ VERIFY_SUITES.crew = (assert) => {
     const pilot = game.pilot;
     pilot.crew = [];
 
-    // Berths gate on rank
+    // Berths gate on BOTH rank (who signs on) and hull (where they sleep)
+    game.ship.hullId = 'skiff';
+    pilot.rank = 5;
+    assert('a one-seater has no bunks at any rank', crewSlots() === 0);
+    game.ship.hullId = 'clipper';
     pilot.rank = 0;
     assert('no berths below Pilot rank', crewSlots() === 0);
     pilot.rank = 2;
     assert('one berth at Pilot', crewSlots() === 1);
     pilot.rank = 5;
     assert('two berths at Captain', crewSlots() === 2);
+    pilot.rank = 7;
+    assert('three berths at Star Marshal aboard a clipper', crewSlots() === 3);
+    pilot.rank = 5;
 
     // Hiring through a station offer
     const planet = game.planets[0];
@@ -183,6 +190,8 @@ VERIFY_SUITES.crew = (assert) => {
     assert('dismiss frees the role', !crewHasRole('engineer'));
     pilot.crew = [];
     game.currentPlanet = null;
+    game.ship.hullId = 'skiff'; // restore the fresh-save hull
+    recomputeShipStats();
 };
 
 VERIFY_SUITES.escort = (assert) => {
@@ -245,6 +254,80 @@ VERIFY_SUITES.escort = (assert) => {
     game.enemies = [];
     game.currentPlanet = null;
     updateMissionsUI();
+};
+
+VERIFY_SUITES.ships = (assert) => {
+    const lv1 = { cargo: 1, engine: 1, shields: 1, fuel_tank: 1, hull: 1, weapons: 1 };
+    assert('five hulls in the ladder', HULL_ORDER.length === 5 && HULL_ORDER.every(id => HULLS[id]));
+    assert('skiff matches the legacy baseline',
+        HULLS.skiff.baseCargo === 10 && HULLS.skiff.baseFuel === 500 &&
+        HULLS.skiff.baseHull === 100 && HULLS.skiff.maxSpeed === 8 && HULLS.skiff.agility === 1.0);
+    assert('every hull is sold somewhere', HULL_ORDER.every(id => stockedAt(id).length > 0));
+
+    // Legacy commissioning: smallest hull that fits levels AND crew
+    assert('level-1 loner commissions a skiff', assignLegacyHull(lv1, 0) === 'skiff');
+    assert('cargo levels outgrow the skiff', assignLegacyHull({ ...lv1, cargo: 4 }, 0) === 'courier');
+    assert('crew aboard needs a bunk', assignLegacyHull(lv1, 1) === 'courier');
+    assert('gun-heavy save commissions the gunship', assignLegacyHull({ ...lv1, weapons: 5 }, 0) === 'gunship');
+    assert('outgrown saves grandfather into the clipper', assignLegacyHull({ ...lv1, cargo: 12 }, 0) === 'clipper');
+
+    // Recompute reproduces the legacy formulas on a skiff
+    const saved = {
+        hullId: game.ship.hullId, upgrades: { ...game.ship.upgrades },
+        credits: game.ship.credits, cargo: { ...game.ship.cargo }, name: game.ship.name
+    };
+    const perksSaved = [...game.pilot.perks];
+    game.pilot.perks = game.pilot.perks.filter(p => p !== 'packrat' && p !== 'deflector_tuning' && p !== 'missile_racks');
+    game.ship.hullId = 'skiff';
+    game.ship.upgrades = { cargo: 2, engine: 1, shields: 2, fuel_tank: 2, hull: 2, weapons: 2 };
+    recomputeShipStats();
+    assert('recompute matches legacy math',
+        game.ship.cargoMax === 15 && game.ship.fuelMax === 700 && game.ship.hullMax === 150 &&
+        game.ship.shieldMax === 40 && game.ship.weapons.missiles.maxAmmo === 8);
+
+    // Buying a hull: charges net of trade-in, keeps upgrades, leaves ready
+    const yard = game.planets.find(p => (p.shipyard || []).includes('courier'));
+    game.currentPlanet = yard;
+    game.ship.cargo = {};
+    game.ship.credits = 50000;
+    const before = game.ship.credits;
+    buyHull('courier');
+    assert('purchase swaps hull and charges net of trade-in',
+        game.ship.hullId === 'courier' &&
+        game.ship.credits === before - (HULLS.courier.price - tradeInValue('skiff')));
+    assert('new hull raises the ceilings', game.ship.cargoMax === 21 && game.ship.hullMax === 190);
+    assert('new ship leaves the yard ready',
+        game.ship.hull === game.ship.hullMax && game.ship.fuel === game.ship.fuelMax);
+    assert('the trade lands in the ship\'s log', game.ship.log.some(e => e.text.includes('Magpie Courier')));
+
+    // An overflowing hold blocks the downgrade
+    game.ship.cargo = { food: 999 };
+    buyHull('skiff');
+    assert('overflowing hold blocks the trade', game.ship.hullId === 'courier');
+    game.ship.cargo = {};
+
+    // Hull caps gate upgrade purchases
+    game.ship.upgrades.cargo = HULLS.courier.caps.cargo;
+    game.ship.credits = 99999;
+    buyUpgrade('cargo', 100);
+    assert('hull cap blocks over-leveling', game.ship.upgrades.cargo === HULLS.courier.caps.cargo);
+
+    // Christening persists
+    nameShip('Verify Wren');
+    const exported = JSON.parse(characterManager.exportCharacter());
+    assert('christening sticks and persists',
+        game.ship.name === 'Verify Wren' && exported.ship.name === 'Verify Wren' &&
+        exported.ship.hullId === 'courier' && Array.isArray(exported.ship.log));
+
+    // Restore the pre-suite ship
+    game.ship.hullId = saved.hullId;
+    game.ship.upgrades = saved.upgrades;
+    game.ship.credits = saved.credits;
+    game.ship.cargo = saved.cargo;
+    game.ship.name = saved.name;
+    game.pilot.perks = perksSaved;
+    recomputeShipStats();
+    game.currentPlanet = null;
 };
 
 function runVerify() {

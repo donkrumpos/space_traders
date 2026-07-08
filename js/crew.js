@@ -32,12 +32,19 @@ const CREW_POOL = [
     { name: 'Sil', quirk: 'Bets on everything. Usually wins.' }
 ];
 
-// Rank 2 = Pilot opens the first berth; rank 5 = Captain opens the second
-function crewSlots() {
+// Rank decides how many hands will sign on under you...
+function crewRankSlots() {
     const rank = (game.pilot && game.pilot.rank) || 0;
+    if (rank >= 7) return 3;
     if (rank >= 5) return 2;
     if (rank >= 2) return 1;
     return 0;
+}
+
+// ...but berths are physical: the hull decides how many bunks exist.
+// A one-seater skiff carries nobody, whatever your rank says.
+function crewSlots() {
+    return Math.min(crewRankSlots(), currentHull().berths);
 }
 
 function crewHasRole(role) {
@@ -132,7 +139,11 @@ function updateCrewPanelUI() {
             <div style="color:#777; font-size:10px;">${c.quirk}</div>
         </div>`;
     }).join('');
-    const berths = `<div style="color:#666; font-size:10px;">Berths: ${crew.length}/${slots}${slots < 2 ? ' — next berth at Captain' : ''}</div>`;
+    const hullLimited = currentHull().berths <= slots && currentHull().berths < crewRankSlots();
+    const hint = hullLimited ? ' — a bigger hull adds bunks'
+        : slots < 1 ? '' : slots < 2 ? ' — next berth at Captain'
+        : slots < 3 ? ' — third berth at Star Marshal' : '';
+    const berths = `<div style="color:#666; font-size:10px;">Berths: ${crew.length}/${slots}${hint}</div>`;
     list.innerHTML = (rows || '<div style="color:#666;">Empty bunks — check station bars</div>') + berths;
 }
 
@@ -142,7 +153,9 @@ function updateCrewSectionUI(planet) {
     if (!el || !planet) return;
     const slots = crewSlots();
     if (slots === 0) {
-        el.innerHTML = '<div style="color:#666;">Crews sign on with ranked pilots — make Pilot rank first</div>';
+        el.innerHTML = currentHull().berths === 0
+            ? '<div style="color:#666;">No bunks on a one-seater — shipyards sell bigger hulls</div>'
+            : '<div style="color:#666;">Crews sign on with ranked pilots — make Pilot rank first</div>';
         return;
     }
     const offers = planet.crewOffers || [];
