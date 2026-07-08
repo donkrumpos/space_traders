@@ -1,5 +1,12 @@
 # Next Session Roadmap
 
+> **SUPERSEDED FOR NEXT SESSION (Foggy, 2026-07-08 late):** the next
+> session is the **multiplayer Tier 3 build** — see `docs/MULTIPLAYER.md`
+> for locked architecture, milestones M1–M5, and the kickoff prompt.
+> Foggy consciously jumped the playtest gate for this arc. The ship-layer
+> playtest checklist below is still owed and should happen on the
+> multiplayer build (two birds: christening + ghost ships in one sitting).
+
 State as of 2026-07-08 (late): the RPG layer (ranks/perks/grudges/crew/
 escorts) passed its human playtest, and the ship progression arc queued
 behind it is now BUILT and committed (one commit each):
