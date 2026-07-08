@@ -71,15 +71,19 @@ The existing `?verify` 92-assertion suite must also stay green (solo mode).
 M1→M4 each end with verify-net + solo verify green and a commit. If the
 session dies mid-arc, the last green milestone is a playable game.
 
-## Open questions Foggy answers at kickoff
+## Open questions — ANSWERED at kickoff 2026-07-08 (see docs/PROTOCOL.md)
 
-1. VPS details: provider/OS, is Node installed, what else runs there, and
-   which subdomain? (e.g. traders.yonderartland.com — needs a DNS A record)
-2. Friendly fire between the two of you? (Recommend: off.)
-3. When only Arthur is online, does the shared world still spawn raids at
-   full strength? (Recommend: scale to pilots online.)
-4. Both existing saves (Dad's + Arthur's) migrate to the server as the two
-   canonical pilots — confirm whose machines/browsers those live on.
+1. VPS: **themisto** (cal.yonderartland.com box; Apache not Caddy — deploy
+   uses an Apache vhost + mod_proxy_wstunnel). Domain:
+   **siegeperilousstudio.com** (root; needs a DNS A record to themisto).
+   Ssh details still owed before M5.
+2. Friendly fire: **off**.
+3. Raids **scale to pilots online**.
+4. No manual save migration: each machine's first connect uploads its local
+   save as that pilot's server doc; newest lastPlayed wins thereafter.
+
+docs/PROTOCOL.md is the build contract (message schemas, DB schema, file
+layout, verify-net spec). Agents build against it.
 
 ## Kickoff prompt for the new session (paste as-is, fill blanks)
 

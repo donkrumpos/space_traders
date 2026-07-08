@@ -44,3 +44,5 @@ pids
 # Temporary files
 tmp/
 temp/
+# Multiplayer server (M1+)
+server/world.db*
