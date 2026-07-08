@@ -1,85 +1,51 @@
 # Next Session Roadmap
 
-> **SUPERSEDED FOR NEXT SESSION (Foggy, 2026-07-08 late):** the next
-> session is the **multiplayer Tier 3 build** — see `docs/MULTIPLAYER.md`
-> for locked architecture, milestones M1–M5, and the kickoff prompt.
-> Foggy consciously jumped the playtest gate for this arc. The ship-layer
-> playtest checklist below is still owed and should happen on the
-> multiplayer build (two birds: christening + ghost ships in one sitting).
+State as of 2026-07-08 (evening): **Tier 3 multiplayer is BUILT and DEPLOYED.**
+M1 (shared saves) → M2 (ghosts) → M3 (shared world) → M4 (shared combat) each
+committed gate-green; M5 deployed to **https://siegeperilousstudio.com**
+(themisto VPS, Apache + wss + systemd; see docs/RUNBOOK.md). verify-net:
+93/93 across M1–M4 suites; solo ?verify: 92/92. Family secret + first-visit
+setup: RUNBOOK.md (secret itself lives only in the systemd unit on themisto).
 
-State as of 2026-07-08 (late): the RPG layer (ranks/perks/grudges/crew/
-escorts) passed its human playtest, and the ship progression arc queued
-behind it is now BUILT and committed (one commit each):
+## THE acceptance test (do this first): two-machine playtest with Arthur
 
-1. **Hull ladder** — five buyable ships: Sparrow Skiff (one-seater, 0
-   berths) → Magpie Courier ($6k, 1 berth) → Pelican Freighter ($18k,
-   hauler) / Kestrel Gunship ($24k, warbird) → Albatross Clipper ($60k,
-   3 berths). Shipyards at Agricon, Tech Hub, Core World, Frontier show
-   the FULL catalog — including what you can't afford and what's sold
-   elsewhere. The dreaming is the point. Trade-in is 60% of the old hull.
-2. **Ship-as-character** — buying (or first-loading an unnamed save)
-   opens a christening modal with name suggestions; the ship gets a name,
-   a sidebar identity panel ("The Ship"), and a log where purchases and
-   installs accumulate. Hull gates berths (min with rank), upgrade caps
-   per track ("HULL CAP" in the shop), top speed, and turn agility.
-3. **Named mods** — 8 one-of-a-kind used parts at a rotating Mechanic's
-   Bench, most with a quirk beside the gift (Vex compressor runs lasers
-   hot; Whisperdrive coil scrambles the minimap; Barnacle plating sheds
-   speed; Smuggler's False Deck blinds customs; Old Grinner's bore,
-   Back-Alley Injectors, Saint Elmo's Capacitor, Songbird Array).
-4. **Per-hull silhouettes** — each hull draws its own wireframe body;
-   shield ring and flames follow.
+This is both the M5 acceptance test AND the ship-progression playtest that
+was consciously jump-gated for the multiplayer build. Two birds, one sitting:
 
-Legacy saves are commissioned retroactively into the smallest hull that
-fits their upgrade levels and crew — Arthur's save may load into a
-Courier or better, then get asked to name her. All headless-verified:
-`?verify` runs 92 assertions (js/verify.js). **None of the ship layer is
-human-playtested yet.** Same rule as always: feel pass with Arthur
-before building anything new.
+- Each machine: open the URL, pilot names Dad / Arthur, secret from the unit
+  file. Arthur's existing save should upload and retro-commission into its hull.
+- **Christening moment:** does the naming modal land as a moment for Arthur?
+  (It queues before perk modals.)
+- **The ghost moment:** does Arthur SEE "Dad — <ship>" flying next to him?
+  Does he chase you? Does the minimap blip read?
+- **Shared fight:** spawn trouble (fly rich, or console spawnRaidBand()),
+  fight the same band. Does "we're fighting them together" land? Does the
+  family vendetta (shared grudge) get retold afterward?
+- **One ledger:** sell at the same station — does Arthur notice Dad's selling
+  moved his price?
+- Ship-layer checklist (carried from the jump-gated arc): shipyard catalog
+  dreaming, trade-in math readability, skiff berth-lock feel, mechanic's
+  bench quirks at Arthur's reading level, freighter-vs-gunship feel, "The
+  Ship" panel glances.
 
-## Playtest checklist (do this first)
+## Known v1 gaps (documented in PROTOCOL.md; post-playtest candidates)
 
-- Load Arthur's save: what hull does the retroactive commission give him?
-  Does the christening modal land as a moment? (It queues BEFORE any
-  pending perk modals — watch the ordering feel.)
-- Can Arthur read the shipyard catalog and does the "can't afford it yet"
-  row make him want something? Which ship does he say he wants?
-- Buy a hull with him: does the trade-in math read? Does the new
-  silhouette + banner land? Does he want to rename or keep the name?
-- Skiff berth-lock: does "no bunks on a one-seater" read as a reason to
-  save up, or as a punishment? (New players can't hire crew until the
-  Courier — watch whether that feels like progression or a wall.)
-- Mechanic's Bench: do the quirks read at his reading level? Does a
-  drawback mod (Grinner's bore heat) feel like character or like a trap?
-- Freighter feel: is 6.5 top speed + 0.8 agility "big and heavy" or just
-  "worse"? Gunship at 9/1.25 — noticeably mean?
-- Does "The Ship" panel (name/hull/mods/log) get glanced at? Does Arthur
-  retell the log entries?
+- Online NPC freighters are indestructible (no server projectile sim).
+- Named bounty warlords stay client-local online.
+- No `www.` DNS record / cert (bare domain only).
+- backups table in world.db grows unpruned (fine for years at n=2).
 
-## Tuning flags (carried + new)
+## Tuning flags (carried)
 
-- Hull prices ($6k/$18k/$24k/$60k) vs. income rate are first-pass —
-  watch how many sessions to the first Courier
-- Upgrade caps may strand credits early (skiff caps everything at 2-3);
-  if the skiff phase drags, either cheapen the Courier or raise a cap
-- Mod stock rate (45%/dock) untested for drought/flood
-- Trade-in at 60% means downgrade round-trips lose 40% — intended
-  friction, verify it doesn't read as a bug
-- XP sell-loop exploit + escort freighter speed (3.2) still carried
-- Grudge has no forgiveness mechanic — VENDETTA is forever (carried)
-
-## Future feature seeds
-
-- Mods visible on the silhouette (greebles per installed mod)
-- Ship log auto-entries for milestones: first vendetta boss kill,
-  100th landing, surviving under 10% hull
-- Grudge amnesty at Frontier Outpost (credits sink, carried)
-- Crew loyalty; persistent rivals; boss taunts by rank title (carried)
-- Second-hand hulls: a cheaper, quirky used version of the next hull up
+- Hull prices vs. income rate; skiff upgrade caps; mod stock rate (45%/dock);
+  trade-in 60%; XP sell-loop exploit; escort freighter speed 3.2; VENDETTA
+  has no forgiveness mechanic (grudge amnesty seed carried).
 
 ## Workflow that works
 
-One-sentence playtest note → diagnose → build → playtest again. Small
-scope, verify in browser before next feature. Serve: python3 -m
-http.server 8377. Console: grantXP(n), nameShip('...'), spawnRaidBand(),
-exportCharacter(), resetCharacter(). Headless: see js/verify.js header.
+Same as always, now with a net gate: one-sentence playtest note → diagnose →
+build → verify (`?verify` 92/92 solo AND `node verify-net.mjs` 93/93) →
+commit → `ssh themisto '...'` update line from RUNBOOK.md. Serve local:
+python3 -m http.server 8377. Console: grantXP(n), nameShip('...'),
+spawnRaidBand(), exportCharacter(), netStatus(), netGhosts(), netWorld(),
+netCombat().
