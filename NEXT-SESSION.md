@@ -1,72 +1,71 @@
 # Next Session Roadmap
 
-State as of 2026-07-08: all five queued features from the 2026-07-07 roadmap are
-BUILT and committed (one commit each). On top of the existing base (swept-collision
-combat, pirate tiers + bounty hunts, living economy, smuggling, asteroid mining,
-kill streaks, shields, Gradius weapons + heat, 7 planets, full persistence), the
-game now has:
+State as of 2026-07-08 (evening): the morning's five features passed their
+human playtest ("playtest works"), and the RPG progression layer queued from
+that session is now BUILT and committed (one commit each):
 
-1. **Pirate faction raid bands** — Rustfang Cartel / Void Choir / Iron Shoal.
-   3-4 tinted minions escort a shielded warlord boss who holds back and holds
-   fire until the escort dies, then engages with 3-shot volleys. Bands muster
-   at 2500+ credits, one at a time, every 4-7 min. RAID BROKEN payoff +
-   guaranteed boss drops.
-2. **Laser progression tree** — every owned system levels up at any station:
-   +30% damage / fatter bolt / +30 range per level. Single (trunk, Lv5),
-   Twin LvN needs Single LvN+1, Spread chases Twin, Seeker needs ship Weapons
-   Lv3 to buy and rides that upgrade to level. `weapons.lasers.levels` in save.
-3. **Zanac powerups** — spinning star drops from pirates (15%, boss 100%) and
-   asteroids (8%): Wave Beam (pierce), Rear Guard (tail shot), Twin Options
-   (orbiting auto-guns), Nova Bomb (instant 28-bolt radial). One timed powerup
-   at a time; HUD countdown.
-4. **Subsystem damage + field repair** — hull hits (shields down) 30% knock out
-   LASERS / ENGINES (40% thrust) / LIFE SUPPORT (hull bleeds to a floor of 5,
-   never kills). R + a Repair Kit ('parts' good, stocked at Mining Station 7 /
-   Tech Hub Alpha) field-repairs in triage order; docking fixes all free.
-5. **NPC living traffic** (js/traffic.js) — 3 named freighters haul between
-   planets and their dockings apply real applyTradeImpact, so prices move
-   without the player. Common pirates hunt whichever prey is closer; freighters
-   flee, die, scatter cargo, respawn. Bands/bounty bosses always target YOU.
+1. **Pilot XP + ranks** — XP from kills (~hull/3), sells ($50/XP),
+   deliveries (30), first landfall (25), escorts (40). Nine ranks
+   Cadet→Living Legend, full-screen promotion banner. Old saves get a
+   retroactive commission on first load — expect a promotion parade.
+2. **Perk choice per promotion** — pick-one modal (game pauses), three
+   lanes × four perks: FIGHTER (cooldown/missiles/heat/warheads), TRADER
+   (sell+5%/cargo/buy-5%/contracts+20%), EXPLORER (fuel/minimap/limp/shields).
+3. **Faction grudges** — broken raids escalate Marked→Hunted→VENDETTA per
+   faction; grudged factions muster likelier, +minions, +boss hull (cap
+   +60%), +pay (+20%/level). Reputation panel appears once grudged.
+4. **Named crew** — 12 characters with quirks in station bars; Engineer
+   (auto-repair 10s), Tail Gunner (rear bolt every other volley), Navigator
+   (fuel −15%). Berths: 1 at Pilot rank, 2 at Captain.
+5. **Escort missions + distress pings** — ⛡ contracts to shepherd a named
+   freighter; departure spawns a 2-raider ambush; failure voids pay. All
+   chased freighters blink orange on the minimap; escort clamps to map edge.
 
-All five were verified headless (game-boot + per-feature assertion harness);
-**none have been playtested by human hands yet.** Next session should START with
-a feel pass before building anything new.
+All five verified headless — `?verify` runs a 57-assertion suite
+(js/verify.js, committed this session; see chrome-headless-shell one-liner
+in that file's header). **None of the RPG layer is human-playtested yet.**
+Same rule as last time: feel pass with Arthur before building anything new.
 
 ## Playtest checklist (do this first)
 
-- Fight a raid band at ~3000 credits: is kill-the-escort-first legible to
-  Arthur? Is the boss reveal a good moment? Is 4-7 min between bands right?
-- Laser tree pricing: does Single Lv3 (~$1k cumulative) feel earned? Is the
-  prereq chain readable in the station UI?
-- Powerup drop rate: 15% off pirates may be too generous — does it cheapen the
-  owned-weapons progression? Nova at the right rarity?
-- Get subsystems shot out on purpose: is limping home on 40% thrust a story or
-  a chore? Is the 30% knockout chance per hull hit too spicy early?
-- Watch a freighter get chased: does intervening feel heroic? Do market moves
-  from NPC trades read at the ledger?
+- Load Arthur's existing save: does the retroactive promotion parade land as
+  a great moment or as noise? (Several banners + perk choices may stack.)
+- Rank pacing: is the Cadet→Ensign 60 XP gap quick enough that Arthur hits a
+  promotion in his first session, and is Captain (1000) a real horizon?
+- Perk modal: can Arthur read/choose the three cards himself? Does pausing
+  mid-flight feel safe or jarring?
+- Break 2-3 raids from one faction: does VENDETTA escalation read? Is a
+  +60%-hull vendetta boss a wall or a boss fight?
+- Hire someone at a bar (needs Pilot rank): do the names/quirks land? Is the
+  Engineer's 10s auto-fix noticeable next to field-repair kits?
+- Fly one escort start to finish: is staying with a slow freighter fun or a
+  chore? Is the ambush survivable at Arthur's ship level? Does the cyan
+  edge-clamped blip make the charge findable?
 
 ## Tuning flags (carried + new)
 
-- Economy numbers still first-pass; watch for exploits
-- Spread lasers + levels may now REALLY trivialize Scout packs
-- Warlord/band boss fights still untested against a human
-- Seeker + bounty hunts untested (homing may trivialize)
-- Life-support floor (5 hull) — confirm it reads as tension, not cheapness
-- Raid band frequency/credit gate (2500) — tune to Arthur's progress speed
-- Trader flee speed vs pirate speed: fleeing at 1.3× may make pirate-vs-trader
-  chases never resolve; if traders never die on their own, drop flee to 1.15×
+- XP curve numbers are first-pass; sell-XP ($50/XP) is exploitable at a
+  credit loss by buy-sell loops — watch whether it matters in practice
+- Retroactive XP may vault a veteran save 3-4 ranks instantly — stacked
+  perk choices on load could overwhelm; consider spacing them
+- Gunner rear bolt + Rear Guard powerup stack — probably fine, may be loud
+- Escort freighter speed (3.2) vs player max 8 — player waits a lot;
+  consider a "match speed" nudge if it drags
+- Grudge has no forgiveness mechanic — VENDETTA is forever (bribe/amnesty
+  at a lawless port could be a future release valve)
+- Economy numbers still first-pass; spread lasers vs Scout packs still
+  untested against a human (carried from last session)
 
-## Future feature seeds (from the 2026-07-07 conversation)
+## Future feature seeds
 
-- Faction grudges/reputation (bands remember who broke their raids)
-- Persistent rival characters growing out of the traffic system
-- Escort missions (protect a named freighter for pay) — natural next step now
-  that traffic + factions both exist
+- Grudge amnesty: pay off a faction at Frontier Outpost (credits sink)
+- Crew levels or loyalty — crew that survives raids gets better
+- Persistent rival characters growing out of traffic + grudges
+- Boss taunts using the pilot's rank title ("run home, *Captain*")
 
 ## Workflow that works
 
-One-sentence playtest note ("can't hit the pirate", "needs challenge") →
-diagnose → build → playtest again. Small scope, verify in browser before next
-feature. Serve with: python3 -m http.server 8377. Console helpers:
-spawnEnemyShip(), spawnRaidBand(), spawnPowerupDrop(x, y), exportCharacter(),
-resetCharacter().
+One-sentence playtest note → diagnose → build → playtest again. Small scope,
+verify in browser before next feature. Serve: python3 -m http.server 8377.
+Console: spawnEnemyShip(), spawnRaidBand(), spawnPowerupDrop(x, y),
+grantXP(n), exportCharacter(), resetCharacter(). Headless: see js/verify.js.
