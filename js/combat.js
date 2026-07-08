@@ -56,6 +56,10 @@ function laserUpgradeCost(mode, target) {
 
 function fireLaser() {
     const lasers = game.ship.weapons.lasers;
+    if (game.ship.systems && game.ship.systems.lasers === 'damaged') {
+        showHudFeedback('LASERS OFFLINE — field-repair (R) or dock', 'error', 2000);
+        return;
+    }
     if (lasers.cooldown > 0 || lasers.overheated) {
         return; // Cooling down or locked out
     }
@@ -832,6 +836,26 @@ function checkProjectileCollisions() {
     }
 }
 
+// Subsystems that hull hits can knock out once shields are down
+const SUBSYSTEMS = {
+    lifeSupport: { label: 'LIFE SUPPORT', hitMsg: 'LIFE SUPPORT HIT — hull bleeding!' },
+    engines: { label: 'ENGINES', hitMsg: 'ENGINES HIT — thrust crippled!' },
+    lasers: { label: 'LASERS', hitMsg: 'LASERS HIT — cannons offline!' }
+};
+
+function maybeDamageSubsystem() {
+    if (Math.random() > 0.3) return;
+    const systems = game.ship.systems;
+    if (!systems) return;
+    const intact = Object.keys(SUBSYSTEMS).filter(s => systems[s] === 'ok');
+    if (intact.length === 0) return;
+    const hit = intact[Math.floor(Math.random() * intact.length)];
+    systems[hit] = 'damaged';
+    spawnFloater(game.ship.x, game.ship.y - 30, SUBSYSTEMS[hit].label + ' HIT', '#ff4444', 16);
+    showHudFeedback(`⚠ ${SUBSYSTEMS[hit].hitMsg} Field-repair (R) or limp to a station`, 'error', 5000);
+    addShake(0.4);
+}
+
 function damagePlayer(damage) {
     // Check if player is invulnerable (brief period after last hit)
     if (game.damage.invulnerabilityTime > 0) {
@@ -849,6 +873,11 @@ function damagePlayer(damage) {
 
     // Ensure hull doesn't go below 0
     game.ship.hull = Math.max(0, game.ship.hull);
+
+    // Hull hits (not shield hits) can knock out a subsystem
+    if (remaining > 0 && game.ship.hull > 0) {
+        maybeDamageSubsystem();
+    }
 
     // Set damage feedback effects
     game.damage.flashTime = 300; // 300ms red flash
@@ -921,6 +950,12 @@ function updateDamageEffects(deltaTime) {
         game.damage.shieldRegenDelay -= deltaTime;
     } else if (game.ship.shield < game.ship.shieldMax) {
         game.ship.shield = Math.min(game.ship.shieldMax, game.ship.shield + 3 * deltaTime);
+    }
+
+    // Damaged life support bleeds hull — pressure, not a death sentence:
+    // the drain stops at 5 hull so it can't kill you. Repair or dock to stop it.
+    if (game.ship.systems && game.ship.systems.lifeSupport === 'damaged' && game.ship.hull > 5) {
+        game.ship.hull = Math.max(5, game.ship.hull - 1.2 * deltaTime);
     }
 }
 

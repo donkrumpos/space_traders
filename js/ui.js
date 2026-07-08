@@ -100,6 +100,21 @@ function updateUI() {
         }
     }
 
+    // Knocked-out subsystem warning
+    const sysEl = document.getElementById('systemsLine');
+    if (sysEl) {
+        const systems = game.ship.systems || {};
+        const down = Object.keys(systems).filter(s => systems[s] === 'damaged');
+        if (down.length > 0) {
+            const labels = { lifeSupport: 'LIFE SUPPORT', engines: 'ENGINES', lasers: 'LASERS' };
+            const kits = game.ship.cargo.parts || 0;
+            sysEl.style.display = 'block';
+            sysEl.textContent = `✖ ${down.map(s => labels[s]).join(' · ')} — R to repair (kits: ${kits})`;
+        } else {
+            sysEl.style.display = 'none';
+        }
+    }
+
     // Active powerup countdown
     const pwEl = document.getElementById('powerupLine');
     if (pwEl) {

@@ -46,6 +46,14 @@ function dock(planet) {
         showHudFeedback(`CUSTOMS SCAN — ${seized} contraband seized, fined $${fine}!`, 'error', 6000);
     }
 
+    // Station crews bring knocked-out subsystems back online while you're berthed
+    const systems = game.ship.systems || {};
+    const knocked = Object.keys(systems).filter(s => systems[s] === 'damaged');
+    if (knocked.length > 0) {
+        knocked.forEach(s => { systems[s] = 'ok'; });
+        showHudFeedback('Station crews bring your systems back online', 'success', 3500);
+    }
+
     // Economy: markets drift while you fly, this station's prices get recorded,
     // deliveries pay out, fresh contracts are posted, and your bounty streak ends
     driftMarkets();
@@ -555,6 +563,31 @@ function buyLaserUpgrade(mode) {
     updateUI();
     updateWeaponSystemsUI(game.currentPlanet);
     autoSave('upgrade');
+}
+
+// Field repair: burn one Repair Kit (cargo good 'parts') to fix the most
+// urgent knocked-out subsystem. Triage order: life support, engines, lasers.
+function fieldRepair() {
+    const systems = game.ship.systems || {};
+    const damaged = ['lifeSupport', 'engines', 'lasers'].filter(s => systems[s] === 'damaged');
+    if (damaged.length === 0) {
+        showHudFeedback('All systems nominal', 'info', 1500);
+        return;
+    }
+    const kits = game.ship.cargo.parts || 0;
+    if (kits <= 0) {
+        showHudFeedback('No Repair Kits aboard — stock up at industrial stations', 'error', 3500);
+        return;
+    }
+    game.ship.cargo.parts--;
+    if (game.ship.cargo.parts === 0) delete game.ship.cargo.parts;
+    const fixed = damaged[0];
+    systems[fixed] = 'ok';
+    spawnFloater(game.ship.x, game.ship.y - 30, SUBSYSTEMS[fixed].label + ' RESTORED', '#66ff88', 15);
+    showHudFeedback(`${SUBSYSTEMS[fixed].label} back online (${kits - 1} kit${kits - 1 === 1 ? '' : 's'} left)`, 'success', 3000);
+    playPickupSound();
+    updateUI();
+    autoSave('repair');
 }
 
 function updateRepairCost() {

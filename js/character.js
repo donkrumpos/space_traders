@@ -39,7 +39,8 @@ function createDefaultCharacter() {
             weapons: {
                 lasers: { cooldown: 0, maxCooldown: 500 },
                 missiles: { cooldown: 0, maxCooldown: 2000, ammo: 5, maxAmmo: 5 }
-            }
+            },
+            systems: { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' }
         },
 
         // Game progress and statistics
@@ -140,6 +141,11 @@ class CharacterManager {
         // Legacy saves predate the per-system laser progression tree
         if (!lasers.levels) lasers.levels = {};
         lasers.owned.forEach(m => { if (!lasers.levels[m]) lasers.levels[m] = 1; });
+
+        // Legacy saves predate subsystem damage
+        if (!game.ship.systems) {
+            game.ship.systems = { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' };
+        }
 
         // Apply game state
         game.isDocked = this.character.gameState.isDocked;
@@ -258,7 +264,8 @@ class CharacterManager {
             weapons: {
                 lasers: { ...game.ship.weapons.lasers },
                 missiles: { ...game.ship.weapons.missiles }
-            }
+            },
+            systems: { ...game.ship.systems }
         });
 
         // Update game state

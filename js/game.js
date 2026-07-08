@@ -34,6 +34,9 @@ const game = {
             },
             missiles: { cooldown: 0, maxCooldown: 2000, ammo: 5, maxAmmo: 5 }
         },
+        // Subsystems get knocked out by hull hits once shields are down.
+        // Field-repair with Repair Kits (R) or dock — station crews fix free.
+        systems: { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' },
         thrust: {
             current: 0,        // Current thrust power (0-1)
             target: 0,         // Target thrust power (0-1)
@@ -84,7 +87,8 @@ const goods = {
     luxury: { name: 'Nebula Silk', color: '#ff00ff' },         // woven from gas-harvested polymer strands
     medicine: { name: 'Panacea Vials', color: '#66ff99' },     // reef-lab cultured cure-alls
     relics: { name: 'Precursor Relics', color: '#cc99ff' },    // artifacts of the vanished builders
-    contraband: { name: 'Voidbloom', color: '#ff44cc' }        // psychoactive flower — illegal at lawful ports
+    contraband: { name: 'Voidbloom', color: '#ff44cc' },       // psychoactive flower — illegal at lawful ports
+    parts: { name: 'Repair Kits', color: '#88ffee' }           // sealed spares — field-fix knocked-out subsystems (R)
 };
 
 // Planet definitions
@@ -108,7 +112,7 @@ const planetData = [
         type: 'industrial',
         color: '#888888',
         blurb: 'A drum of scaffold and dust. The ferrovolt seams sing when the drills bite.',
-        produces: { materials: 60 },
+        produces: { materials: 60, parts: 80 },
         demands: { food: 180, luxury: 140, contraband: 220 },
         weaponSystems: ['double'],
         upgrades: {
@@ -122,7 +126,7 @@ const planetData = [
         type: 'technology',
         color: '#00ffff',
         blurb: 'Orbital foundries where cognition cores dream themselves into being.',
-        produces: { technology: 80, luxury: 120 },
+        produces: { technology: 80, luxury: 120, parts: 100 },
         demands: { materials: 160, food: 100, relics: 320 },
         weaponSystems: ['spread'],
         upgrades: {
@@ -139,7 +143,7 @@ const planetData = [
         lawless: true, // no customs — the only place to buy contraband openly
         blurb: 'Last dock before the dark. No customs, no questions, no refunds.',
         produces: { contraband: 40 },
-        demands: { food: 300, technology: 280, materials: 250, luxury: 200, medicine: 280 },
+        demands: { food: 300, technology: 280, materials: 250, luxury: 200, medicine: 280, parts: 150 },
         upgrades: {
             shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
             hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' },
@@ -305,6 +309,11 @@ function init() {
             if (e.code === 'KeyE') {
                 e.preventDefault();
                 trySecondaryInteraction();
+            }
+            // Field-repair a knocked-out subsystem with a Repair Kit
+            if (e.code === 'KeyR') {
+                e.preventDefault();
+                fieldRepair();
             }
         }
         // Emergency undock/disengage on any movement key while docked or engaged

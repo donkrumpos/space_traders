@@ -27,7 +27,10 @@ function update() {
         const baseMaxThrust = 0.2; // Base maximum thrust
         const emergencyThrustReduction = 0.15; // Emergency mode is much weaker (75% reduction)
 
-        const maxThrust = isEmergencyMode ? baseMaxThrust * emergencyThrustReduction : baseMaxThrust;
+        // Knocked-out engines limp at 40% thrust
+        const enginesDamaged = game.ship.systems && game.ship.systems.engines === 'damaged';
+        const maxThrust = (isEmergencyMode ? baseMaxThrust * emergencyThrustReduction : baseMaxThrust)
+            * (enginesDamaged ? 0.4 : 1);
         const actualThrust = maxThrust * game.ship.thrust.current;
 
         if (game.ship.thrust.isThrusting) {
