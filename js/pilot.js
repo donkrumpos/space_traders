@@ -224,6 +224,48 @@ function reapplyPerkEffects() {
     }
 }
 
+// --- Faction grudges: bands remember who broke their raids ---
+// Every broken raid deepens that faction's grudge. Grudge-heavy factions
+// muster more often, bring bigger escorts and tougher bosses — and pay more.
+
+function factionGrudge(name) {
+    return (game.pilot && game.pilot.grudges[name]) || 0;
+}
+
+function grudgeTierLabel(grudge) {
+    if (grudge >= 4) return { label: 'VENDETTA', color: '#ff4444' };
+    if (grudge >= 2) return { label: 'Hunted', color: '#ff8844' };
+    return { label: 'Marked', color: '#ffcc44' };
+}
+
+function recordRaidBroken(factionName) {
+    if (!game.pilot || !factionName) return;
+    const g = game.pilot.grudges;
+    g[factionName] = (g[factionName] || 0) + 1;
+    const tier = grudgeTierLabel(g[factionName]);
+    showHudFeedback(`The ${factionName} will remember this — you are ${tier.label} (grudge ×${g[factionName]})`, 'warning', 5000);
+    updateFactionUI();
+    characterManager.saveCharacter(true);
+}
+
+function updateFactionUI() {
+    const panel = document.getElementById('factionPanel');
+    const list = document.getElementById('factionList');
+    if (!panel || !list) return;
+    const grudges = (game.pilot && game.pilot.grudges) || {};
+    const held = Object.keys(grudges).filter(name => grudges[name] > 0);
+    if (held.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    list.innerHTML = held.map(name => {
+        const tier = grudgeTierLabel(grudges[name]);
+        return `<div class="ledger-row"><span>${name}</span>
+            <span style="color:${tier.color};">${tier.label} ×${grudges[name]}</span></div>`;
+    }).join('');
+}
+
 window.grantXP = function(amount) {
     addXP(amount || 50, 'console');
     return game.pilot.xp;

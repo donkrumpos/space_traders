@@ -89,6 +89,47 @@ VERIFY_SUITES.perks = (assert) => {
         game.ship.weapons.missiles.maxAmmo === 5 + (game.ship.upgrades.weapons - 1) * 3 + 3);
 };
 
+VERIFY_SUITES.factions = (assert) => {
+    const pilot = game.pilot;
+    pilot.grudges = {};
+    assert('grudge starts clean', factionGrudge('Rustfang Cartel') === 0);
+    assert('faction panel hidden when clean',
+        (updateFactionUI(), document.getElementById('factionPanel').style.display === 'none'));
+
+    recordRaidBroken('Rustfang Cartel');
+    recordRaidBroken('Rustfang Cartel');
+    assert('broken raids accrue grudge', factionGrudge('Rustfang Cartel') === 2);
+    assert('faction panel shows held grudges',
+        document.getElementById('factionPanel').style.display === 'block' &&
+        document.getElementById('factionList').textContent.includes('Rustfang Cartel'));
+    assert('grudge tiers escalate',
+        grudgeTierLabel(1).label === 'Marked' && grudgeTierLabel(2).label === 'Hunted' && grudgeTierLabel(4).label === 'VENDETTA');
+    assert('grudge persists in save',
+        JSON.parse(characterManager.exportCharacter()).pilot.grudges['Rustfang Cartel'] === 2);
+
+    // A vendetta-heavy faction should dominate the weighted pick
+    pilot.grudges['Rustfang Cartel'] = 50;
+    let rustfang = 0;
+    for (let i = 0; i < 60; i++) {
+        if (pickRaidFaction().name === 'Rustfang Cartel') rustfang++;
+    }
+    assert('grudge weights the muster', rustfang > 45);
+
+    // Grudge scales the band itself
+    pilot.grudges = { 'Rustfang Cartel': 4, 'Void Choir': 0, 'Iron Shoal': 0 };
+    game.enemies = [];
+    // Force the grudged faction via the weighted pick being near-certain
+    pilot.grudges['Rustfang Cartel'] = 500;
+    spawnRaidBand();
+    const boss = game.enemies.find(e => e.isBandBoss);
+    const minions = game.enemies.filter(e => e.bandId && !e.isBandBoss);
+    assert('vendetta boss is buffed to the +60% cap', boss && boss.maxHull === Math.round(170 * 1.6));
+    assert('vendetta brings +2 reinforcements', minions.length >= 5);
+    game.enemies = [];
+    pilot.grudges = {};
+    updateFactionUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

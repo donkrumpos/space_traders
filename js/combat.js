@@ -371,8 +371,21 @@ function updateRaidBands(deltaTime) {
     }
 }
 
+// Grudge-weighted faction pick: a broken raid makes that faction likelier
+// to come back for you (weight 1 + grudge each)
+function pickRaidFaction() {
+    const weights = PIRATE_FACTIONS.map(f => 1 + factionGrudge(f.name));
+    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < PIRATE_FACTIONS.length; i++) {
+        roll -= weights[i];
+        if (roll <= 0) return PIRATE_FACTIONS[i];
+    }
+    return PIRATE_FACTIONS[0];
+}
+
 function spawnRaidBand() {
-    const faction = PIRATE_FACTIONS[Math.floor(Math.random() * PIRATE_FACTIONS.length)];
+    const faction = pickRaidFaction();
+    const grudge = factionGrudge(faction.name);
     const bandId = `band-${Date.now()}`;
     const bandAngle = Math.random() * Math.PI * 2;
     const bandDist = 1100 + Math.random() * 500;
@@ -381,9 +394,10 @@ function spawnRaidBand() {
 
     if (!game.enemies) game.enemies = [];
 
-    // Escort: minions in a loose ring, keyed to the faction's colors and name
+    // Escort: minions in a loose ring, keyed to the faction's colors and name.
+    // Grudges bring reinforcements: +1 minion per 2 grudge, capped at +2.
     const factionTag = faction.name.split(' ')[0];
-    const minionCount = 3 + (Math.random() < 0.5 ? 1 : 0);
+    const minionCount = 3 + (Math.random() < 0.5 ? 1 : 0) + Math.min(2, Math.floor(grudge / 2));
     for (let i = 0; i < minionCount; i++) {
         const a = (i / minionCount) * Math.PI * 2;
         const minion = makeEnemyFromTier(faction.minionTier,
@@ -399,6 +413,9 @@ function spawnRaidBand() {
     const bossName = faction.bossNames[Math.floor(Math.random() * faction.bossNames.length)];
     const boss = makeEnemyFromTier('warlord',
         cx + Math.cos(bandAngle) * 260, cy + Math.sin(bandAngle) * 260);
+    // Vendetta bosses are tougher and worth more: +15% hull and +20% pay per
+    // grudge level (hull capped at +60%)
+    const bossHull = Math.round(170 * (1 + Math.min(0.6, grudge * 0.15)));
     Object.assign(boss, {
         bandId,
         isBandBoss: true,
@@ -407,17 +424,18 @@ function spawnRaidBand() {
         factionName: faction.name,
         tierName: `${faction.bossTitle} ${bossName}`,
         color: faction.color,
-        hull: 170,
-        maxHull: 170,
+        hull: bossHull,
+        maxHull: bossHull,
         size: 13,
-        reward: 700 + Math.random() * 300,
+        reward: (700 + Math.random() * 300) * (1 + grudge * 0.2),
         detectRange: 1600
     });
     boss.weapons.volley = 3;
     boss.weapons.maxCooldown = 1000;
     game.enemies.push(boss);
 
-    showHudFeedback(`⚠ ${faction.name} raid band inbound — ${boss.tierName} won't fight until its escort falls`, 'warning', 6000);
+    const vendetta = grudge > 0 ? ` They remember you (grudge ×${grudge}).` : '';
+    showHudFeedback(`⚠ ${faction.name} raid band inbound — ${boss.tierName} won't fight until its escort falls.${vendetta}`, 'warning', 6000);
     playBountySound();
 }
 
@@ -737,6 +755,7 @@ function checkProjectileCollisions() {
                         } else if (enemy.isBandBoss) {
                             spawnFloater(enemy.x, enemy.y - 45, 'RAID BROKEN', '#ffcc44', 18);
                             showHudFeedback(`☠ RAID BROKEN — ${enemy.tierName} of the ${enemy.factionName} destroyed! $${reward}${streakTag}`, 'success', 5000);
+                            recordRaidBroken(enemy.factionName);
                         } else {
                             showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
                         }

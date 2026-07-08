@@ -159,7 +159,10 @@ class CharacterManager {
         }
         // Same object by reference: pilot state saves without an explicit sync
         game.pilot = this.character.pilot;
+        if (!game.pilot.grudges) game.pilot.grudges = {};
+        if (!game.pilot.crew) game.pilot.crew = [];
         reapplyPerkEffects();
+        updateFactionUI();
         if (retroXP > 0) {
             setTimeout(() => addXP(retroXP, 'service record'), 1200);
         } else if (game.pilot.pendingPerkChoices > 0) {
