@@ -49,9 +49,129 @@ const HULLS = {
 
 const HULL_ORDER = ['skiff', 'courier', 'freighter', 'gunship', 'clipper'];
 
-// --- Named mods arrive in the next feature; stubs keep recompute honest ---
-function hasMod() { return false; }
-function modFlat() { return 0; }
+// --- Named mods: used parts with a past. Each is one-of-a-kind, bought at a
+// station mechanic's bench, and most carry a quirk alongside the gift — the
+// Falcon layer. Two ships with the same hull diverge here. Flat stats flow
+// through recomputeShipStats(); rate effects are read live at their call
+// sites via hasMod(), same pattern as perks.
+
+const MODS = {
+    vex_compressor: {
+        name: 'Vex-Pattern Compressor', cost: 1800, flat: { cargo: 6 },
+        blurb: '+6 cargo. Salvaged Vexworks lattice — runs the lasers 10% hotter.'
+    },
+    smugglers_deck: {
+        name: "Smuggler's False Deck", cost: 2600, flat: { cargo: 4 },
+        blurb: '+4 cargo in a hold customs scanners somehow never find.'
+    },
+    barnacle_plating: {
+        name: 'Barnacle-Hide Plating', cost: 2200, flat: { hull: 40 },
+        blurb: '+40 hull. Grown, not forged. Sheds half a point of top speed.'
+    },
+    saint_capacitor: {
+        name: "Saint Elmo's Capacitor", cost: 2400, flat: { shield: 15 },
+        blurb: '+15 shields. Hums a hymn when it charges.'
+    },
+    whisper_coil: {
+        name: 'Whisperdrive Coil', cost: 2000,
+        blurb: 'Burns 10% less fuel. Its hum scrambles the minimap a touch.'
+    },
+    grinner_bore: {
+        name: "Old Grinner's Cannon Bore", cost: 3200,
+        blurb: "Lasers hit 15% harder and run 15% hotter. Grinner doesn't need it anymore."
+    },
+    tuned_injectors: {
+        name: 'Back-Alley Injectors', cost: 1500,
+        blurb: 'Throttle answers 25% faster. Definitely not factory settings.'
+    },
+    songbird_antenna: {
+        name: 'Songbird Array', cost: 2600,
+        blurb: 'Contracts pay 10% more — dispatchers like a clear channel.'
+    }
+};
+
+function hasMod(id) {
+    return !!(game.ship.mods && game.ship.mods.includes(id));
+}
+
+function modFlat(stat) {
+    return (game.ship.mods || []).reduce((sum, id) => {
+        const mod = MODS[id];
+        return sum + ((mod && mod.flat && mod.flat[stat]) || 0);
+    }, 0);
+}
+
+function modHeatFactor() {
+    return (hasMod('vex_compressor') ? 1.1 : 1) * (hasMod('grinner_bore') ? 1.15 : 1);
+}
+
+function modDamageFactor() {
+    return hasMod('grinner_bore') ? 1.15 : 1;
+}
+
+function modFuelFactor() {
+    return hasMod('whisper_coil') ? 0.9 : 1;
+}
+
+// Customs at lawful ports can only fine what they can see
+function customsRisk(planet) {
+    return !planet.lawless && !hasMod('smugglers_deck') && (game.ship.cargo.contraband || 0) > 0;
+}
+
+// What's on the mechanic's bench this docking (0-2 unowned parts)
+function generateModOffers(planet) {
+    planet.modOffers = [];
+    const pool = Object.keys(MODS).filter(id => !hasMod(id));
+    if (pool.length === 0 || Math.random() > 0.45) return;
+    const count = 1 + (Math.random() < 0.25 ? 1 : 0);
+    for (let i = 0; i < count && pool.length > 0; i++) {
+        planet.modOffers.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    }
+}
+
+function updateModsUI(planet) {
+    const el = document.getElementById('modsSection');
+    if (!el || !planet) return;
+    const offers = (planet.modOffers || []).filter(id => !hasMod(id));
+    if (offers.length === 0) {
+        el.innerHTML = '<div style="color:#666;">The bench is bare — parts drift in with the freighters</div>';
+        return;
+    }
+    el.innerHTML = offers.map(id => {
+        const mod = MODS[id];
+        return `<div class="trade-item">
+            <span><span style="color:#88ffee;">⬡ ${mod.name}</span><br>
+                <small style="color:#888;">${mod.blurb}</small></span>
+            <span>$${mod.cost}</span>
+            <button onclick="installMod('${id}')" ${game.ship.credits < mod.cost ? 'disabled' : ''}>Install</button>
+        </div>`;
+    }).join('');
+}
+
+function installMod(id) {
+    const mod = MODS[id];
+    if (!mod || hasMod(id)) return;
+    if (game.ship.credits < mod.cost) {
+        showHudFeedback(`Insufficient credits! The ${mod.name} runs $${mod.cost}.`, 'error');
+        return;
+    }
+    game.ship.credits -= mod.cost;
+    if (!game.ship.mods) game.ship.mods = [];
+    game.ship.mods.push(id);
+    recomputeShipStats();
+    applyMapRange(); // the whisperdrive coil scrambles the minimap
+
+    const where = game.currentPlanet ? ` at ${game.currentPlanet.name}` : '';
+    addShipLog(`Bolted on the ${mod.name}${where}.`);
+    showHudFeedback(`${mod.name} installed — ${mod.blurb}`, 'success', 4500);
+    playPickupSound();
+
+    updateUI();
+    updateShipPanelUI();
+    if (game.currentPlanet) updateModsUI(game.currentPlanet);
+    autoSave('upgrade');
+}
+window.installMod = installMod;
 
 function currentHull() {
     return HULLS[game.ship.hullId] || HULLS.skiff;

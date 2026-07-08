@@ -330,6 +330,83 @@ VERIFY_SUITES.ships = (assert) => {
     game.currentPlanet = null;
 };
 
+VERIFY_SUITES.mods = (assert) => {
+    assert('catalog holds 8 one-off parts', Object.keys(MODS).length === 8);
+    game.ship.mods = [];
+    game.ship.hullId = 'skiff';
+    recomputeShipStats();
+
+    // Installing at the bench: charges, bolts on, logs, persists
+    const planet = game.planets[0];
+    game.currentPlanet = planet;
+    planet.modOffers = ['vex_compressor'];
+    game.ship.credits = 20000;
+    const credits = game.ship.credits;
+    const cargoBefore = game.ship.cargoMax;
+    installMod('vex_compressor');
+    assert('install charges and bolts on', game.ship.credits === credits - 1800 && hasMod('vex_compressor'));
+    assert('compressor adds +6 cargo through recompute', game.ship.cargoMax === cargoBefore + 6);
+    assert('the install lands in the ship\'s log', game.ship.log.some(e => e.text.includes('Vex-Pattern')));
+    const exported = JSON.parse(characterManager.exportCharacter());
+    assert('mods persist in the save', exported.ship.mods.includes('vex_compressor'));
+
+    // One-of-a-kind: a second install refuses quietly
+    const creditsAfter = game.ship.credits;
+    installMod('vex_compressor');
+    assert('duplicate install refuses', game.ship.credits === creditsAfter && game.ship.mods.length === 1);
+
+    // The bench never re-offers what's already bolted on
+    let stocked = 0;
+    for (let i = 0; i < 200; i++) {
+        generateModOffers(planet);
+        if (planet.modOffers.length > 0) stocked++;
+        if (planet.modOffers.includes('vex_compressor')) stocked = -999;
+    }
+    assert('bench stocks rotating unowned parts only', stocked > 0);
+
+    // Quirks: rate effects compose at their call sites
+    game.ship.mods.push('grinner_bore');
+    assert('heat quirks stack compressor × bore', Math.abs(modHeatFactor() - 1.1 * 1.15) < 1e-9);
+    assert('grinner bore hits 15% harder', modDamageFactor() === 1.15);
+    game.ship.mods.push('whisper_coil');
+    assert('whisperdrive trims fuel burn', modFuelFactor() === 0.9);
+    applyMapRange();
+    assert('coil interference scrambles the minimap', game.map.miniMapRange === Math.round(MINIMAP_BASE_RANGE
+        * (hasPerk('long_range_scanner') ? 1.4 : 1) * 0.9));
+
+    // Flats: plating adds hull, sheds top speed
+    game.ship.mods.push('barnacle_plating');
+    recomputeShipStats();
+    assert('plating adds +40 hull', game.ship.hullMax === HULLS.skiff.baseHull + (game.ship.upgrades.hull - 1) * 50 + 40);
+    assert('plating sheds half a point of speed', shipMaxSpeed() === HULLS.skiff.maxSpeed - 0.5);
+
+    // The false deck blinds customs; lawless ports never scanned anyway
+    game.ship.cargo.contraband = 5;
+    const lawful = game.planets.find(p => !p.lawless);
+    const lawless = game.planets.find(p => p.lawless);
+    assert('customs sees a bare hold', customsRisk(lawful) === true && customsRisk(lawless) === false);
+    game.ship.mods.push('smugglers_deck');
+    assert('the false deck blinds customs', customsRisk(lawful) === false);
+    delete game.ship.cargo.contraband;
+
+    // Contract pay reads the songbird array live
+    game.ship.mods.push('songbird_antenna');
+    game.missions = [{ id: 'mod-pay-test', type: 'delivery', dest: lawful.name, goodType: 'food', qty: 1, reward: 1000 }];
+    game.ship.cargo.food = 1;
+    const payBefore = game.ship.credits;
+    completeMissionsAt(lawful);
+    const expected = Math.round(1000 * (hasPerk('contract_broker') ? 1.2 : 1) * 1.1);
+    assert('songbird array lifts contract pay 10%', game.ship.credits === payBefore + expected);
+
+    // Clean up
+    game.ship.mods = [];
+    recomputeShipStats();
+    applyMapRange();
+    game.currentPlanet = null;
+    game.missions = [];
+    updateMissionsUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

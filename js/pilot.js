@@ -201,7 +201,7 @@ function choosePerk(id) {
             game.ship.shield = Math.min(game.ship.shield + 10, game.ship.shieldMax);
             break;
         case 'long_range_scanner':
-            game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE * 1.4);
+            applyMapRange();
             break;
     }
 
@@ -221,11 +221,17 @@ function choosePerk(id) {
 }
 window.choosePerk = choosePerk;
 
+// Minimap range composes the scanner perk with the whisperdrive coil's
+// interference — one place computes it so nothing stomps anything
+function applyMapRange() {
+    game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE
+        * (hasPerk('long_range_scanner') ? 1.4 : 1)
+        * (hasMod('whisper_coil') ? 0.9 : 1));
+}
+
 // Effects that live outside the save (map range) re-apply on every load
 function reapplyPerkEffects() {
-    if (hasPerk('long_range_scanner')) {
-        game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE * 1.4);
-    }
+    applyMapRange();
 }
 
 // --- Faction grudges: bands remember who broke their raids ---

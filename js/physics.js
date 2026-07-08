@@ -53,7 +53,8 @@ function update() {
         const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
         const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency)
             * (hasPerk('fuel_sipper') ? 0.8 : 1)
-            * (crewHasRole('navigator') ? 0.85 : 1);
+            * (crewHasRole('navigator') ? 0.85 : 1)
+            * modFuelFactor();
 
         if (game.ship.fuel > 0) {
             // Consume main fuel first
@@ -172,6 +173,9 @@ function updateThrustSystem() {
             rampDownTime = 0.3;
             break;
     }
+
+    // Back-alley injectors: the throttle answers faster than the factory says
+    if (hasMod('tuned_injectors')) rampUpTime *= 0.75;
 
     // Determine target thrust
     if (wantsForwardThrust || wantsReverseThrust) {

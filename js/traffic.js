@@ -84,7 +84,8 @@ function escortArrived(t) {
     const idx = game.missions.findIndex(m => m.id === t.escortId);
     if (idx !== -1) {
         const m = game.missions[idx];
-        const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1));
+        const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1)
+            * (hasMod('songbird_antenna') ? 1.1 : 1));
         game.ship.credits += pay;
         game.missions.splice(idx, 1);
         flashCredits();

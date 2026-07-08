@@ -68,7 +68,7 @@ function fireLaser() {
     const level = getLaserLevel(lasers.mode);
 
     // Heat: sustained fire builds heat; hitting 100 locks the lasers until cooled
-    const heatPerShot = spec.heat * (hasPerk('cold_barrels') ? 0.75 : 1);
+    const heatPerShot = spec.heat * (hasPerk('cold_barrels') ? 0.75 : 1) * modHeatFactor();
     lasers.heat = Math.min(100, (lasers.heat || 0) + heatPerShot);
     if (lasers.heat >= 100) {
         lasers.overheated = true;
@@ -83,7 +83,7 @@ function fireLaser() {
     // Active powerup can reshape the volley
     const pw = game.powerup;
     const waveActive = pw && pw.type === 'wave';
-    const shotDamage = Math.round(baseDamage * spec.damageMult * (1 + 0.3 * (level - 1)));
+    const shotDamage = Math.round(baseDamage * spec.damageMult * (1 + 0.3 * (level - 1)) * modDamageFactor());
     const shotSize = 3 + (level - 1) * 0.7 + (waveActive ? 2 : 0);
     const shotRange = spec.range + (level - 1) * 30;
 

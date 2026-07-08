@@ -44,8 +44,9 @@ function dock(planet) {
     }, 300); // Wait for CSS transition
 
     // Customs scan at lawful ports: 35% chance contraband is found,
-    // seized, and fined at $100/unit. Frontier Outpost doesn't ask questions.
-    if (!planet.lawless && (game.ship.cargo.contraband || 0) > 0 && Math.random() < 0.35) {
+    // seized, and fined at $100/unit. Frontier Outpost doesn't ask questions,
+    // and a smuggler's false deck never shows them anything.
+    if (customsRisk(planet) && Math.random() < 0.35) {
         const seized = game.ship.cargo.contraband;
         delete game.ship.cargo.contraband;
         const fine = Math.min(game.ship.credits, seized * 100);
@@ -70,6 +71,7 @@ function dock(planet) {
     generateBountyOffer(planet);
     generateEscortOffer(planet);
     generateCrewOffers(planet);
+    generateModOffers(planet);
     game.combatStreak = 0;
 
     // Populate trading interface
@@ -117,8 +119,9 @@ function updateTradingInterface(planet) {
     // Update weapon systems shop
     updateWeaponSystemsUI(planet);
 
-    // Update the shipyard (hull ladder)
+    // Update the shipyard (hull ladder) and mechanic's bench (named mods)
     updateShipyardUI(planet);
+    updateModsUI(planet);
 
     // Update fuel cost
     updateFuelCost();

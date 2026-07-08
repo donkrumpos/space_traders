@@ -205,7 +205,8 @@ function completeMissionsAt(planet) {
         if (have >= m.qty) {
             game.ship.cargo[m.goodType] -= m.qty;
             if (game.ship.cargo[m.goodType] === 0) delete game.ship.cargo[m.goodType];
-            const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1));
+            const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1)
+                * (hasMod('songbird_antenna') ? 1.1 : 1));
             game.ship.credits += pay;
             game.missions.splice(i, 1);
             flashCredits();
