@@ -116,23 +116,24 @@ const net = {
     },
     // --- M4: server-owned combat entities ---------------------------------
     // Persistent, game-shaped objects (same fields the local sim produces, so
-    // render/collision/homing code needs no branches). Positions extrapolate
-    // ghost-style between 10Hz ticks: pos + tick-derived vel * elapsed,
-    // capped at 500ms. The getters mutate x/y in place and return the live
-    // objects — combat.js/traffic.js merge them into game.enemies/game.traders
-    // each frame, so hull predictions and hit feedback land on the same
-    // objects the next tick corrects.
+    // render/collision/homing code needs no branches). Positions interpolate
+    // between buffered 10Hz tick snapshots, rendered NET_INTERP_DELAY_MS in
+    // the past — always between two real server positions, so AI turns never
+    // mispredict and nothing snaps. The getters mutate x/y/angle in place and
+    // return the live objects — combat.js/traffic.js merge them into
+    // game.enemies/game.traders each frame, so hull predictions and hit
+    // feedback land on the same objects the next tick corrects.
     serverEnemies: [],
     serverTraders: [],
     serverDrops: [],
     getServerEnemies() {
         if (!net.online) return [];
-        netExtrapolate(netEnemyMap);
+        netInterpolate(netEnemyMap);
         return net.serverEnemies;
     },
     getServerTraders() {
         if (!net.online) return [];
-        netExtrapolate(netTraderMap);
+        netInterpolate(netTraderMap);
         return net.serverTraders;
     },
     getServerDrops() {
@@ -171,7 +172,9 @@ const netBoards = new Map();           // planetName -> { offers, bountyOffer }
 let netReqSeq = 0;
 
 // M4 shared combat
-const NET_TICK_EXTRAP_CAP_MS = 500;    // cap dead-reckoning past the last tick
+const NET_INTERP_DELAY_MS = 150;       // render behind newest tick (1.5 ticks of jitter room)
+const NET_SNAP_MAX = 6;                // per-entity snapshot ring (~600ms of history)
+const NET_TELEPORT_SPEED = 2000;       // units/s; faster = server respawn, not flight
 const NET_DROP_CLAIM_RETRY_MS = 1500;  // re-claim window if drop.taken never lands
 const netEnemyMap = new Map();         // id -> persistent game-shaped enemy
 const netTraderMap = new Map();        // id -> persistent game-shaped trader
@@ -259,6 +262,17 @@ function netHandleMessage(msg) {
             netRejected = true;
             net.status = 'rejected';
             console.warn(`Server rejected handshake: ${msg.reason}`);
+            // A mistyped family secret persists in localStorage and would
+            // fail silently on every future visit (the 2026-07-08 "can't see
+            // arthur" playtest). Drop it so the next load re-prompts, and say
+            // so on screen — console.warn is invisible to a 6-year-old.
+            if (msg.reason === 'bad secret') {
+                try { localStorage.removeItem('space_trader_secret'); } catch (e) {}
+            }
+            if (typeof showHudFeedback === 'function') {
+                const why = msg.reason === 'bad secret' ? 'Wrong family secret' : 'Server said no';
+                showHudFeedback(`${why} — playing offline. Reload to try again.`, 'error', 10000);
+            }
             break;
         }
         case 'char.saved':
@@ -647,35 +661,70 @@ acceptBounty = function() {
 // shots-in-tick; the client spawns the visual projectile and resolves damage
 // against its own ship locally. Kill celebration waits for enemy.killed.
 
-// One extrapolation pass over a stash map: pos + tick-derived vel * elapsed
-// (capped), mutating the persistent objects in place. Velocity is derived
-// from consecutive tick positions because the M4 wire carries no vx/vy.
-function netExtrapolate(map) {
-    const now = Date.now();
+// Stash a fresh tick position into an entity's snapshot ring. A jump too
+// fast to be flight (server-side respawn/teleport) resets the ring so the
+// entity snaps to the new spot instead of sliding across the sector.
+function netPushSnap(e, wx, wy, angle, now) {
+    const s = e._snaps;
+    const last = s[s.length - 1];
+    if (last && now > last.t) {
+        const dtS = (now - last.t) / 1000;
+        const vx = (wx - last.x) / dtS;
+        const vy = (wy - last.y) / dtS;
+        if (vx * vx + vy * vy > NET_TELEPORT_SPEED * NET_TELEPORT_SPEED) s.length = 0;
+    }
+    s.push({ x: wx, y: wy, angle: angle, t: now });
+    if (s.length > NET_SNAP_MAX) s.shift();
+}
+
+// One interpolation pass over a stash map, mutating the persistent objects
+// in place. Renders NET_INTERP_DELAY_MS behind the newest arrival, lerping
+// pos + shortest-arc angle between the two bracketing snapshots — dead
+// reckoning is gone; every drawn position sits between two real server
+// positions. A stalled feed holds the newest snapshot (a brief freeze reads
+// better than a mispredicted sling). Velocity comes from the bracketing
+// pair because the M4 wire carries no vx/vy.
+function netInterpolate(map) {
+    const rt = Date.now() - NET_INTERP_DELAY_MS;
     for (const e of map.values()) {
-        const dt = Math.min(now - e._at, NET_TICK_EXTRAP_CAP_MS) / 1000;
-        e.x = e._bx + e._vx * dt;
-        e.y = e._by + e._vy * dt;
+        const s = e._snaps;
+        const n = s.length;
+        if (!n) continue;
+        if (rt >= s[n - 1].t) {
+            // feed stalled (or just spawned): hold the newest known position
+            e.x = s[n - 1].x; e.y = s[n - 1].y; e.angle = s[n - 1].angle;
+            netPairVelocity(e, s[n - 2], s[n - 1]);
+        } else if (rt <= s[0].t) {
+            // just spawned/teleported: hold the oldest until rt catches up
+            e.x = s[0].x; e.y = s[0].y; e.angle = s[0].angle;
+            netPairVelocity(e, null, s[0]);
+        } else {
+            let i = n - 1;
+            while (s[i - 1].t > rt) i--;
+            const a = s[i - 1], b = s[i];
+            const f = (rt - a.t) / (b.t - a.t);
+            e.x = a.x + (b.x - a.x) * f;
+            e.y = a.y + (b.y - a.y) * f;
+            e.angle = netAngleLerp(a.angle, b.angle, f);
+            netPairVelocity(e, a, b);
+        }
     }
 }
 
-// Update an entry's dead-reckoning base from a fresh tick position. A jump
-// too fast to be flight (server-side respawn/teleport) zeroes the velocity
-// instead of slinging the entity across the sector.
-function netTrackMotion(e, wx, wy, now) {
-    const dtS = (now - e._at) / 1000;
-    if (dtS > 0.01) {
-        const vx = (wx - e._bx) / dtS;
-        const vy = (wy - e._by) / dtS;
-        const tooFast = (vx * vx + vy * vy) > 2000 * 2000;
-        e._vx = tooFast ? 0 : vx;
-        e._vy = tooFast ? 0 : vy;
-    }
-    e._bx = wx; e._by = wy; e._at = now;
-    // velocity in per-frame-at-60fps units, matching local sim objects
-    // (spawnExplosion / shot-inheritance read enemy.velocity * 60)
-    e.velocity.x = e._vx / 60;
-    e.velocity.y = e._vy / 60;
+function netAngleLerp(a, b, f) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * f;
+}
+
+// velocity in per-frame-at-60fps units, matching local sim objects
+// (spawnExplosion / shot-inheritance read enemy.velocity * 60)
+function netPairVelocity(e, a, b) {
+    if (!a || b.t <= a.t) { e.velocity.x = 0; e.velocity.y = 0; return; }
+    const dtS = (b.t - a.t) / 1000;
+    e.velocity.x = (b.x - a.x) / dtS / 60;
+    e.velocity.y = (b.y - a.y) / dtS / 60;
 }
 
 // The M4 enemy wire has no per-shot damage field; infer the tier's damage
@@ -709,17 +758,16 @@ function netUpsertEnemy(w, now) {
         e = {
             id: w.id,
             type: 'enemy_ship',
+            x: w.x, y: w.y, angle: w.angle || 0,
             velocity: { x: 0, y: 0 },
             // synthesized: render draws the red range ring from weapons.range
             weapons: { fireCooldown: 0, maxCooldown: 999999, range: 400, accuracy: 1 },
-            _bx: w.x, _by: w.y, _vx: 0, _vy: 0, _at: now
+            _snaps: []
         };
         netEnemyMap.set(w.id, e);
-    } else {
-        netTrackMotion(e, w.x, w.y, now);
     }
-    e.x = w.x; e.y = w.y;
-    e.angle = w.angle || 0;
+    // x/y/angle are owned by netInterpolate from here on
+    netPushSnap(e, w.x, w.y, w.angle || 0, now);
     e.hull = w.hull;            // authoritative — corrects client prediction
     e.maxHull = w.maxHull;
     e.tierName = w.tierName;
@@ -739,19 +787,18 @@ function netUpsertTrader(w, now) {
     if (!t) {
         t = {
             id: w.id,
+            x: w.x, y: w.y, angle: w.angle || 0,
             velocity: { x: 0, y: 0 },
             // synthesized fields the render path reads but the wire omits:
             // full hull hides the health bar; no goodType = no cargo glow
             hull: 60, maxHull: 60, size: 10,
             goodType: null, qty: 0, fleeing: false,
-            _bx: w.x, _by: w.y, _vx: 0, _vy: 0, _at: now
+            _snaps: []
         };
         netTraderMap.set(w.id, t);
-    } else {
-        netTrackMotion(t, w.x, w.y, now);
     }
-    t.x = w.x; t.y = w.y;
-    t.angle = w.angle || 0;
+    // x/y/angle are owned by netInterpolate from here on
+    netPushSnap(t, w.x, w.y, w.angle || 0, now);
     t.state = w.state;
     t.color = w.color;
     t.isEscort = !!w.isEscort;
