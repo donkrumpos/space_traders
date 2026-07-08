@@ -43,11 +43,13 @@ function marketEventMultiplier(planet, goodType, side) {
 }
 
 function getBuyPrice(planet, goodType) {
-    return Math.max(1, Math.round(planet.market.buy[goodType] * marketEventMultiplier(planet, goodType, 'buy')));
+    const haggle = hasPerk('market_savvy') ? 0.95 : 1;
+    return Math.max(1, Math.round(planet.market.buy[goodType] * marketEventMultiplier(planet, goodType, 'buy') * haggle));
 }
 
 function getSellPrice(planet, goodType) {
-    return Math.max(1, Math.round(planet.market.sell[goodType] * marketEventMultiplier(planet, goodType, 'sell')));
+    const haggle = hasPerk('silver_tongue') ? 1.05 : 1;
+    return Math.max(1, Math.round(planet.market.sell[goodType] * marketEventMultiplier(planet, goodType, 'sell') * haggle));
 }
 
 // Your own trades move the market: buying drives the price up, flooding drives it down
@@ -203,11 +205,12 @@ function completeMissionsAt(planet) {
         if (have >= m.qty) {
             game.ship.cargo[m.goodType] -= m.qty;
             if (game.ship.cargo[m.goodType] === 0) delete game.ship.cargo[m.goodType];
-            game.ship.credits += m.reward;
+            const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1));
+            game.ship.credits += pay;
             game.missions.splice(i, 1);
             flashCredits();
             playBountySound();
-            showHudFeedback(`Delivery complete: ${m.qty} ${goods[m.goodType].name} — paid $${m.reward}`, 'success', 5000);
+            showHudFeedback(`Delivery complete: ${m.qty} ${goods[m.goodType].name} — paid $${pay}`, 'success', 5000);
             addXP(30, 'delivery');
         } else {
             showHudFeedback(`Contract for ${planet.name} needs ${m.qty - have} more ${goods[m.goodType].name}`, 'warning', 4000);

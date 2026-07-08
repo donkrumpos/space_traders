@@ -68,7 +68,8 @@ function fireLaser() {
     const level = getLaserLevel(lasers.mode);
 
     // Heat: sustained fire builds heat; hitting 100 locks the lasers until cooled
-    lasers.heat = Math.min(100, (lasers.heat || 0) + spec.heat);
+    const heatPerShot = spec.heat * (hasPerk('cold_barrels') ? 0.75 : 1);
+    lasers.heat = Math.min(100, (lasers.heat || 0) + heatPerShot);
     if (lasers.heat >= 100) {
         lasers.overheated = true;
         showHudFeedback('LASERS OVERHEATED — cooling...', 'warning', 2000);
@@ -138,7 +139,7 @@ function fireLaser() {
         });
     }
 
-    lasers.cooldown = spec.cooldown;
+    lasers.cooldown = spec.cooldown * (hasPerk('gunners_instinct') ? 0.85 : 1);
 
     // Muzzle flash + pew
     spawnParticles(muzzleX, muzzleY, {
@@ -175,7 +176,8 @@ function fireMissile() {
             x: Math.cos(game.ship.angle) * 300 + game.ship.velocity.x * 60,
             y: Math.sin(game.ship.angle) * 300 + game.ship.velocity.y * 60
         },
-        damage: 50 + (game.ship.upgrades.weapons - 1) * 25, // High damage with upgrades
+        damage: Math.round((50 + (game.ship.upgrades.weapons - 1) * 25)
+            * (hasPerk('warhead_tuning') ? 1.3 : 1)),
         range: 800, // Longer range than laser
         distanceTraveled: 0,
         color: '#ffff00',

@@ -46,6 +46,49 @@ VERIFY_SUITES.xp = (assert) => {
     assert('save carries pilot', JSON.parse(characterManager.exportCharacter()).pilot.xp === pilot.xp);
 };
 
+VERIFY_SUITES.perks = (assert) => {
+    const pilot = game.pilot;
+    assert('three lanes with four perks each',
+        Object.keys(PERK_LANES).length === 3 &&
+        Object.values(PERK_LANES).every(l => l.perks.length === 4));
+    assert('choices offer one perk per lane', availablePerkChoices().length === 3);
+
+    // Modal renders and pauses; choosing applies, unpauses, and persists
+    pilot.pendingPerkChoices = 1;
+    showPerkChoice();
+    assert('modal shown + game paused', !!document.getElementById('perkChoiceOverlay') && game.paused === true);
+
+    const cargoBefore = game.ship.cargoMax;
+    choosePerk('packrat');
+    assert('packrat grants +3 cargo', game.ship.cargoMax === cargoBefore + 3);
+    assert('choice consumes pending + unpauses',
+        pilot.pendingPerkChoices === 0 && game.paused === false && !document.getElementById('perkChoiceOverlay'));
+    assert('perk persists in save', JSON.parse(characterManager.exportCharacter()).pilot.perks.includes('packrat'));
+    assert('taken perk leaves lane offering its successor',
+        availablePerkChoices().find(c => c.laneKey === 'trader').perk.id === 'silver_tongue');
+
+    // Rate perks read live at their call sites
+    const baseSell = getSellPrice(game.planets[0], Object.keys(game.planets[0].demands)[0]);
+    pilot.perks.push('silver_tongue');
+    const boostedSell = getSellPrice(game.planets[0], Object.keys(game.planets[0].demands)[0]);
+    assert('silver tongue lifts sell price', boostedSell === Math.max(1, Math.round(baseSell / 1 * 1.05)) || boostedSell > baseSell);
+
+    pilot.perks.push('gunners_instinct');
+    game.ship.weapons.lasers.cooldown = 0;
+    game.ship.weapons.lasers.heat = 0;
+    fireLaser();
+    assert('gunners instinct trims cooldown', game.ship.weapons.lasers.cooldown === LASER_MODES[game.ship.weapons.lasers.mode].cooldown * 0.85);
+
+    // Flat perks survive the shields/weapons upgrade recompute
+    pilot.perks.push('deflector_tuning', 'missile_racks');
+    game.ship.weapons.missiles.maxAmmo += 3;
+    applyUpgradeEffects('shields');
+    assert('deflector survives shield recompute', game.ship.shieldMax === 20 * game.ship.upgrades.shields + 10);
+    applyUpgradeEffects('weapons');
+    assert('missile racks survive weapons recompute',
+        game.ship.weapons.missiles.maxAmmo === 5 + (game.ship.upgrades.weapons - 1) * 3 + 3);
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

@@ -1,4 +1,7 @@
 function update() {
+    // Modal choices (perk training) freeze the world so nobody dies mid-menu
+    if (game.paused) return;
+
     // Check for nearby planets for docking effects
     let nearPlanet = null;
     let inDockingRange = false;
@@ -27,10 +30,11 @@ function update() {
         const baseMaxThrust = 0.2; // Base maximum thrust
         const emergencyThrustReduction = 0.15; // Emergency mode is much weaker (75% reduction)
 
-        // Knocked-out engines limp at 40% thrust
+        // Knocked-out engines limp at 40% thrust (60% with Emergency Thrusters)
         const enginesDamaged = game.ship.systems && game.ship.systems.engines === 'damaged';
+        const limpFactor = hasPerk('emergency_thrusters') ? 0.6 : 0.4;
         const maxThrust = (isEmergencyMode ? baseMaxThrust * emergencyThrustReduction : baseMaxThrust)
-            * (enginesDamaged ? 0.4 : 1);
+            * (enginesDamaged ? limpFactor : 1);
         const actualThrust = maxThrust * game.ship.thrust.current;
 
         if (game.ship.thrust.isThrusting) {
@@ -47,7 +51,8 @@ function update() {
         // Fuel consumption (improved efficiency with engine upgrades)
         const fuelEfficiency = 1 - (game.ship.upgrades.engine - 1) * 0.1; // 10% better per level
         const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
-        const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency);
+        const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency)
+            * (hasPerk('fuel_sipper') ? 0.8 : 1);
 
         if (game.ship.fuel > 0) {
             // Consume main fuel first

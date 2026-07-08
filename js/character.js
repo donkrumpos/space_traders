@@ -159,8 +159,12 @@ class CharacterManager {
         }
         // Same object by reference: pilot state saves without an explicit sync
         game.pilot = this.character.pilot;
+        reapplyPerkEffects();
         if (retroXP > 0) {
             setTimeout(() => addXP(retroXP, 'service record'), 1200);
+        } else if (game.pilot.pendingPerkChoices > 0) {
+            // A promotion earned last session still owes its training choice
+            setTimeout(maybeShowPerkChoice, 2000);
         }
 
         // Apply game state

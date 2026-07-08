@@ -303,13 +303,14 @@ function applyUpgradeEffects(upgradeType) {
             break;
         case 'shields':
             // +20 regenerating shield points per level, refilled on purchase
-            game.ship.shieldMax = 20 * game.ship.upgrades.shields;
+            // (recomputed from scratch, so perk bonuses must be re-added)
+            game.ship.shieldMax = 20 * game.ship.upgrades.shields + (hasPerk('deflector_tuning') ? 10 : 0);
             game.ship.shield = game.ship.shieldMax;
             break;
         case 'weapons':
             // Weapon upgrades improve damage and missile capacity
             const level = game.ship.upgrades.weapons;
-            game.ship.weapons.missiles.maxAmmo = 5 + (level - 1) * 3; // +3 missiles per level
+            game.ship.weapons.missiles.maxAmmo = 5 + (level - 1) * 3 + (hasPerk('missile_racks') ? 3 : 0);
             game.ship.weapons.missiles.ammo = Math.min(game.ship.weapons.missiles.ammo + 3, game.ship.weapons.missiles.maxAmmo);
             break;
     }

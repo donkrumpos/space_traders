@@ -44,6 +44,7 @@ function addXP(amount, label) {
 
     updateUI();
     characterManager.saveCharacter(); // throttled — cheap to call per award
+    maybeShowPerkChoice();
 }
 
 // Full-screen banner moment: a 6-year-old making Captain should FEEL it
@@ -79,6 +80,148 @@ function retroactivePilotXP(progress) {
         progress.planetsVisited.length * 25 +
         Math.min(300, (progress.distanceTraveled || 0) / 1000)
     );
+}
+
+// --- Perks: one choice per promotion, three lanes matching the game's verbs ---
+// Each rank-up offers the next untaken perk from each lane. Choosing is the
+// RPG moment — two pilots diverge after their second promotion.
+
+const PERK_LANES = {
+    fighter: {
+        label: 'FIGHTER', icon: '⚔', color: '#ff6666', perks: [
+            { id: 'gunners_instinct', name: "Gunner's Instinct", blurb: 'Lasers cycle 15% faster' },
+            { id: 'missile_racks', name: 'Missile Racks', blurb: '+3 missile capacity' },
+            { id: 'cold_barrels', name: 'Cold Barrels', blurb: 'Shots build 25% less heat' },
+            { id: 'warhead_tuning', name: 'Warhead Tuning', blurb: 'Missiles hit 30% harder' }
+        ]
+    },
+    trader: {
+        label: 'TRADER', icon: '⚖', color: '#ffcc44', perks: [
+            { id: 'silver_tongue', name: 'Silver Tongue', blurb: 'Sell everything for 5% more' },
+            { id: 'packrat', name: 'Packrat', blurb: '+3 cargo space' },
+            { id: 'market_savvy', name: 'Market Savvy', blurb: 'Buy everything 5% cheaper' },
+            { id: 'contract_broker', name: 'Contract Broker', blurb: 'Contracts pay 20% more' }
+        ]
+    },
+    explorer: {
+        label: 'EXPLORER', icon: '✧', color: '#66ffcc', perks: [
+            { id: 'fuel_sipper', name: 'Fuel Sipper', blurb: 'Burn 20% less fuel' },
+            { id: 'long_range_scanner', name: 'Long-Range Scanner', blurb: 'Minimap sees 40% further' },
+            { id: 'emergency_thrusters', name: 'Emergency Thrusters', blurb: 'Damaged engines limp at 60%, not 40%' },
+            { id: 'deflector_tuning', name: 'Deflector Tuning', blurb: '+10 shield capacity' }
+        ]
+    }
+};
+
+const MINIMAP_BASE_RANGE = 1500;
+
+function hasPerk(id) {
+    return !!(game.pilot && game.pilot.perks.includes(id));
+}
+
+// The next untaken perk in each lane — up to three cards per choice
+function availablePerkChoices() {
+    return Object.keys(PERK_LANES).map(laneKey => {
+        const lane = PERK_LANES[laneKey];
+        const perk = lane.perks.find(p => !game.pilot.perks.includes(p.id));
+        return perk ? { laneKey, lane, perk } : null;
+    }).filter(Boolean);
+}
+
+function maybeShowPerkChoice() {
+    if (location.search.includes('verify')) return; // harness drives perk flow explicitly
+    if (!game.pilot || game.pilot.pendingPerkChoices <= 0) return;
+    if (document.getElementById('perkChoiceOverlay')) return;
+    // Let the promotion banner have its moment first
+    setTimeout(showPerkChoice, 1200);
+}
+
+function showPerkChoice() {
+    if (document.getElementById('perkChoiceOverlay')) return;
+    const choices = availablePerkChoices();
+    if (choices.length === 0 || game.pilot.pendingPerkChoices <= 0) {
+        game.pilot.pendingPerkChoices = 0;
+        return;
+    }
+
+    game.paused = true;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'perkChoiceOverlay';
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.82); z-index: 2001;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        font-family: 'Courier New', monospace;
+    `;
+
+    const cards = choices.map(({ lane, perk }) => `
+        <div onclick="choosePerk('${perk.id}')" style="
+            border: 2px solid ${lane.color}; background: #050a08; cursor: pointer;
+            padding: 20px; width: 190px; text-align: center;
+            box-shadow: 0 0 18px ${lane.color}44;">
+            <div style="font-size: 26px;">${lane.icon}</div>
+            <div style="color: ${lane.color}; font-size: 11px; letter-spacing: 3px; margin-top: 6px;">${lane.label}</div>
+            <div style="color: #ffffff; font-size: 15px; margin-top: 10px;">${perk.name}</div>
+            <div style="color: #999999; font-size: 11px; margin-top: 8px; line-height: 1.4;">${perk.blurb}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div style="color: #ffdd44; font-size: 14px; letter-spacing: 4px; margin-bottom: 20px;">
+            CHOOSE YOUR TRAINING
+        </div>
+        <div style="display: flex; gap: 18px;">${cards}</div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+function choosePerk(id) {
+    const pilot = game.pilot;
+    if (!pilot || pilot.perks.includes(id)) return;
+    pilot.perks.push(id);
+    pilot.pendingPerkChoices = Math.max(0, pilot.pendingPerkChoices - 1);
+
+    // Perks that grant flat stats apply once, right here; the save carries them.
+    // Rate perks (cooldown, prices, fuel) are read live via hasPerk().
+    switch (id) {
+        case 'missile_racks':
+            game.ship.weapons.missiles.maxAmmo += 3;
+            game.ship.weapons.missiles.ammo += 3;
+            break;
+        case 'packrat':
+            game.ship.cargoMax += 3;
+            break;
+        case 'deflector_tuning':
+            game.ship.shieldMax += 10;
+            game.ship.shield += 10;
+            break;
+        case 'long_range_scanner':
+            game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE * 1.4);
+            break;
+    }
+
+    const perk = Object.values(PERK_LANES).flatMap(l => l.perks).find(p => p.id === id);
+    showHudFeedback(`Training complete: ${perk.name} — ${perk.blurb}`, 'success', 4000);
+    playPickupSound();
+
+    const overlay = document.getElementById('perkChoiceOverlay');
+    if (overlay) overlay.remove();
+    game.paused = false;
+
+    updateUI();
+    characterManager.saveCharacter(true);
+
+    // Stacked promotions (retroactive commissions) choose again immediately
+    if (pilot.pendingPerkChoices > 0) maybeShowPerkChoice();
+}
+window.choosePerk = choosePerk;
+
+// Effects that live outside the save (map range) re-apply on every load
+function reapplyPerkEffects() {
+    if (hasPerk('long_range_scanner')) {
+        game.map.miniMapRange = Math.round(MINIMAP_BASE_RANGE * 1.4);
+    }
 }
 
 window.grantXP = function(amount) {
