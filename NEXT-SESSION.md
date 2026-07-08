@@ -63,6 +63,39 @@ Same rule as last time: feel pass with Arthur before building anything new.
 - Persistent rival characters growing out of traffic + grudges
 - Boss taunts using the pilot's rank title ("run home, *Captain*")
 
+### Big seed: ship progression + ship-as-character (Foggy, 2026-07-08)
+
+Problem: one implicit ship + six numeric upgrade tracks means everyone ends
+up flying the same maxed ship. Wanted: Millennium Falcon energy — the ship
+as its own character, mods with story, and a hull ladder you dream up.
+
+Design sketch (three layers, buildable independently, in this order):
+
+1. **Hull ladder.** 4-5 buyable hulls sold at shipyards (not every planet).
+   Each hull defines the *caps*: cargo ceiling, berth count, weapon
+   hardpoints, upgrade-slot maxes, base handling. Starter is a one-seater
+   (0 berths, cargo cap ~20, no missile hardpoint); next is a two-seater
+   (1 berth); then a slow fat freighter vs. an agile gunship fork; one
+   endgame hull. Trade-in credit on your old hull. Berth count moves from
+   pilot rank to the hull (rank still gates *hiring*, hull gates *housing*)
+   — this is a cleaner home for berths than rank anyway.
+2. **Named mods with provenance.** Replace "Cargo Upgrade Lv 3" at the high
+   end with named used parts stocked rotationally per station ("salvaged
+   Vex-pattern compressor — +6 cargo, runs hot: +5% laser heat"). Small
+   quirk side effects make two ships genuinely different. A "ship's log"
+   panel records where each part was bolted on and what it's survived —
+   cheap to build, does most of the character work.
+3. **Graphics per hull.** Distinct canvas silhouettes per hull class;
+   mods could add visible greebles later.
+
+The dreaming mechanic: shipyard shows ships you *can't afford yet* with
+prices — the poster-on-the-wall effect. Arthur names the ship at purchase.
+
+Scope warning: this touches save schema (migration for existing saves),
+economy balance, trading UI, combat stats, and render. It's a multi-session
+arc, not a feature — sequence it as hull ladder first (pure data + shop UI),
+mods second, art last. Gated like everything else on the RPG-layer feel pass.
+
 ## Workflow that works
 
 One-sentence playtest note → diagnose → build → playtest again. Small scope,
