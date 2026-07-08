@@ -100,6 +100,19 @@ function updateUI() {
         }
     }
 
+    // Active powerup countdown
+    const pwEl = document.getElementById('powerupLine');
+    if (pwEl) {
+        if (game.powerup) {
+            const pwSpec = POWERUPS[game.powerup.type];
+            pwEl.style.display = 'block';
+            pwEl.style.color = pwSpec.color;
+            pwEl.textContent = `⚡ ${pwSpec.name} ${Math.ceil(game.powerup.timeLeft)}s`;
+        } else {
+            pwEl.style.display = 'none';
+        }
+    }
+
     document.getElementById('posX').textContent = Math.floor(game.ship.x);
     document.getElementById('posY').textContent = Math.floor(game.ship.y);
 

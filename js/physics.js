@@ -112,6 +112,7 @@ function update() {
     updateEconomy(deltaTime);
     updateAsteroids(deltaTime);
     updateDrops(deltaTime);
+    updatePowerup(deltaTime);
 
     updateUI();
     updateMaps();

@@ -153,6 +153,9 @@ function render() {
     // Draw projectiles
     renderProjectiles(ctx, game.camera);
 
+    // Draw orbiting option orbs (Twin Options powerup)
+    renderPowerupOrbs(ctx, game.camera);
+
     // Draw explosions, sparks, floating text
     renderEffects(ctx, game.camera);
 

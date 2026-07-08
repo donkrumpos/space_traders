@@ -124,6 +124,140 @@ function renderAsteroids(ctx, camera) {
     });
 }
 
+// --- Zanac-style weapon powerups (timed super-weapons, scooped like cargo) ---
+
+const POWERUPS = {
+    wave: { name: 'WAVE BEAM', color: '#44aaff', duration: 20, blurb: 'shots pierce everything' },
+    rear: { name: 'REAR GUARD', color: '#ffaa44', duration: 25, blurb: 'fires backward too' },
+    options: { name: 'TWIN OPTIONS', color: '#66ff88', duration: 25, blurb: 'orbiting auto-guns' },
+    nova: { name: 'NOVA BOMB', color: '#ffffff', duration: 0, blurb: 'radial blast' }
+};
+
+function randomPowerupType() {
+    const roll = Math.random();
+    if (roll < 0.30) return 'wave';
+    if (roll < 0.55) return 'rear';
+    if (roll < 0.85) return 'options';
+    return 'nova'; // the rare one
+}
+
+function spawnPowerupDrop(x, y) {
+    game.drops.push({
+        kind: 'powerup',
+        powerType: randomPowerupType(),
+        x, y,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        life: 30
+    });
+}
+
+function activatePowerup(type) {
+    const spec = POWERUPS[type];
+
+    if (type === 'nova') {
+        // Instant: a radial burst of high-power bolts straight from the ship —
+        // rides the normal projectile pipeline so kills pay bounties as usual
+        const shots = 28;
+        const baseDamage = 40 + (game.ship.upgrades.weapons - 1) * 10;
+        for (let s = 0; s < shots; s++) {
+            const a = (s / shots) * Math.PI * 2;
+            game.projectiles.push({
+                type: 'laser',
+                x: game.ship.x, y: game.ship.y,
+                velocity: {
+                    x: Math.cos(a) * 700 + game.ship.velocity.x * 60,
+                    y: Math.sin(a) * 700 + game.ship.velocity.y * 60
+                },
+                damage: baseDamage, range: 550, distanceTraveled: 0,
+                color: '#ffffff', size: 4, age: 0, maxAge: 1500
+            });
+        }
+        spawnParticles(game.ship.x, game.ship.y, {
+            count: 40, colors: ['#ffffff', '#ffee88'], speed: 300, life: 0.5, size: 2.5
+        });
+        addShake(0.6);
+        playExplosionSound();
+        spawnFloater(game.ship.x, game.ship.y - 30, 'NOVA BOMB', '#ffffff', 20);
+        showHudFeedback('☀ NOVA BOMB detonated!', 'warning', 3000);
+        return;
+    }
+
+    // Timed powerups: a fresh scoop replaces whatever was running
+    game.powerup = { type, timeLeft: spec.duration, optionCooldown: 0, optionAngle: 0 };
+    playBountySound();
+    spawnFloater(game.ship.x, game.ship.y - 30, spec.name, spec.color, 18);
+    showHudFeedback(`⚡ ${spec.name} — ${spec.blurb} (${spec.duration}s)`, 'success', 3500);
+}
+
+function optionPositions() {
+    const pw = game.powerup;
+    const r = 34;
+    return [pw.optionAngle, pw.optionAngle + Math.PI].map(a => ({
+        x: game.ship.x + Math.cos(a) * r,
+        y: game.ship.y + Math.sin(a) * r
+    }));
+}
+
+function updatePowerup(deltaTime) {
+    const pw = game.powerup;
+    if (!pw) return;
+    pw.timeLeft -= deltaTime;
+    if (pw.timeLeft <= 0) {
+        showHudFeedback(`${POWERUPS[pw.type].name} expired`, 'info', 2000);
+        game.powerup = null;
+        return;
+    }
+
+    if (pw.type === 'options') {
+        pw.optionAngle += 2.2 * deltaTime;
+        pw.optionCooldown -= deltaTime;
+        if (pw.optionCooldown <= 0 && game.enemies && game.enemies.length > 0) {
+            // Each orb snipes the nearest unshielded pirate in reach
+            let fired = false;
+            optionPositions().forEach(pos => {
+                let nearest = null, best = Infinity;
+                game.enemies.forEach(e => {
+                    if (e.shielded) return;
+                    const dSq = Math.pow(e.x - pos.x, 2) + Math.pow(e.y - pos.y, 2);
+                    if (dSq < best) { best = dSq; nearest = e; }
+                });
+                if (nearest && best < 550 * 550) {
+                    const a = Math.atan2(nearest.y - pos.y, nearest.x - pos.x);
+                    game.projectiles.push({
+                        type: 'laser',
+                        x: pos.x, y: pos.y,
+                        velocity: { x: Math.cos(a) * 750, y: Math.sin(a) * 750 },
+                        damage: 10 + (game.ship.upgrades.weapons - 1) * 5,
+                        range: 550, distanceTraveled: 0,
+                        color: POWERUPS.options.color, size: 2.5, age: 0, maxAge: 1200
+                    });
+                    fired = true;
+                }
+            });
+            if (fired) playLaserSound();
+            pw.optionCooldown = 0.55;
+        }
+    }
+}
+
+function renderPowerupOrbs(ctx, camera) {
+    const pw = game.powerup;
+    if (!pw || pw.type !== 'options') return;
+    optionPositions().forEach(pos => {
+        const sx = pos.x - camera.x;
+        const sy = pos.y - camera.y;
+        ctx.save();
+        ctx.fillStyle = POWERUPS.options.color;
+        ctx.shadowColor = POWERUPS.options.color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
 // --- Cargo drops ---
 
 function spawnCargoDrop(x, y, goodType, amount) {
@@ -156,6 +290,12 @@ function updateDrops(deltaTime) {
             Math.pow(d.y - game.ship.y, 2)
         );
         if (dist < 26) {
+            // Powerups need no cargo space — they slot straight into the ship
+            if (d.kind === 'powerup') {
+                activatePowerup(d.powerType);
+                game.drops.splice(i, 1);
+                continue;
+            }
             const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
             const space = game.ship.cargoMax - cargoUsed;
             if (space <= 0) continue; // full hold — the crate keeps floating
@@ -178,6 +318,27 @@ function renderDrops(ctx, camera) {
         const screenY = d.y - camera.y;
         if (screenX < -20 || screenX > ctx.canvas.width + 20 ||
             screenY < -20 || screenY > ctx.canvas.height + 20) return;
+
+        // Powerups render as a slow-spinning four-point star
+        if (d.kind === 'powerup') {
+            const pColor = POWERUPS[d.powerType].color;
+            ctx.save();
+            ctx.translate(screenX, screenY);
+            ctx.rotate(Date.now() * 0.003);
+            ctx.globalAlpha = d.life < 5 ? pulse * (d.life / 5) : pulse;
+            ctx.strokeStyle = pColor;
+            ctx.shadowColor = pColor;
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -8); ctx.lineTo(2.5, -2.5); ctx.lineTo(8, 0); ctx.lineTo(2.5, 2.5);
+            ctx.lineTo(0, 8); ctx.lineTo(-2.5, 2.5); ctx.lineTo(-8, 0); ctx.lineTo(-2.5, -2.5);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+            ctx.globalAlpha = 1;
+            return;
+        }
 
         const color = goods[d.goodType].color;
         ctx.save();

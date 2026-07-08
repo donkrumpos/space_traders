@@ -75,6 +75,13 @@ function fireLaser() {
     const muzzleY = game.ship.y + Math.sin(game.ship.angle) * 12;
     const baseDamage = 20 + (game.ship.upgrades.weapons - 1) * 10; // More damage with upgrades
 
+    // Active powerup can reshape the volley
+    const pw = game.powerup;
+    const waveActive = pw && pw.type === 'wave';
+    const shotDamage = Math.round(baseDamage * spec.damageMult * (1 + 0.3 * (level - 1)));
+    const shotSize = 3 + (level - 1) * 0.7 + (waveActive ? 2 : 0);
+    const shotRange = spec.range + (level - 1) * 30;
+
     spec.shots.forEach(shot => {
         const angle = game.ship.angle + shot.angleOffset;
         // Perpendicular offset for parallel barrels (Twin)
@@ -93,16 +100,39 @@ function fireLaser() {
                 y: Math.sin(angle) * 800 + game.ship.velocity.y * 60
             },
             // Level scaling: +30% damage, fatter bolt, a bit more reach per level
-            damage: Math.round(baseDamage * spec.damageMult * (1 + 0.3 * (level - 1))),
+            damage: shotDamage,
             homing: spec.homing || false,
-            range: spec.range + (level - 1) * 30,
+            pierce: waveActive,
+            range: shotRange,
             distanceTraveled: 0,
-            color: spec.color,
-            size: 3 + (level - 1) * 0.7,
+            color: waveActive ? POWERUPS.wave.color : spec.color,
+            size: shotSize,
             age: 0,
             maxAge: 1500 // Generous cap; range (distanceTraveled) is the real limiter
         });
     });
+
+    // Rear Guard: one mirrored bolt from the tail
+    if (pw && pw.type === 'rear') {
+        const rearAngle = game.ship.angle + Math.PI;
+        game.projectiles.push({
+            type: 'laser',
+            x: game.ship.x + Math.cos(rearAngle) * 12,
+            y: game.ship.y + Math.sin(rearAngle) * 12,
+            velocity: {
+                x: Math.cos(rearAngle) * 800 + game.ship.velocity.x * 60,
+                y: Math.sin(rearAngle) * 800 + game.ship.velocity.y * 60
+            },
+            damage: shotDamage,
+            pierce: waveActive,
+            range: shotRange,
+            distanceTraveled: 0,
+            color: POWERUPS.rear.color,
+            size: shotSize,
+            age: 0,
+            maxAge: 1500
+        });
+    }
 
     lasers.cooldown = spec.cooldown;
 
@@ -625,6 +655,11 @@ function checkProjectileCollisions() {
             for (let j = game.enemies.length - 1; j >= 0; j--) {
                 const enemy = game.enemies[j];
 
+                // Wave Beam bolts pierce — but only bite each target once
+                if (projectile.pierce && projectile.hitTargets && projectile.hitTargets.includes(enemy)) {
+                    continue;
+                }
+
                 // Forgiving hitbox: the drawn ship is ~16 units wide, and this is
                 // an action game, not a simulation — err toward hits landing.
                 const hitRadius = enemy.size * 2 + projectile.size;
@@ -652,9 +687,14 @@ function checkProjectileCollisions() {
                     playHitSound();
                     addShake(0.08);
 
-                    // Remove projectile
-                    game.projectiles.splice(i, 1);
-                    hitSomething = true;
+                    // Piercing bolts sail on; everything else stops here
+                    if (projectile.pierce) {
+                        if (!projectile.hitTargets) projectile.hitTargets = [];
+                        projectile.hitTargets.push(enemy);
+                    } else {
+                        game.projectiles.splice(i, 1);
+                        hitSomething = true;
+                    }
 
                     // Check if enemy is destroyed
                     if (enemy.hull <= 0) {
@@ -697,6 +737,11 @@ function checkProjectileCollisions() {
                             );
                         }
 
+                        // Sometimes their weapon rig survives the blast — grab it
+                        if (enemy.isBandBoss || Math.random() < 0.15) {
+                            spawnPowerupDrop(enemy.x + 20, enemy.y - 10);
+                        }
+
                         // Remove enemy
                         game.enemies.splice(j, 1);
 
@@ -712,7 +757,9 @@ function checkProjectileCollisions() {
                         autoSave('combat_victory');
                     }
 
-                    break; // Projectile can only hit one target
+                    if (!projectile.pierce) {
+                        break; // Non-piercing projectile can only hit one target
+                    }
                 }
             }
         }
@@ -721,6 +768,9 @@ function checkProjectileCollisions() {
         if (!hitSomething && game.asteroids) {
             for (let j = game.asteroids.length - 1; j >= 0; j--) {
                 const rock = game.asteroids[j];
+                if (projectile.pierce && projectile.hitTargets && projectile.hitTargets.includes(rock)) {
+                    continue;
+                }
                 const distance = pointToSegmentDistance(
                     rock.x, rock.y, prevX, prevY, projectile.x, projectile.y
                 );
@@ -728,8 +778,13 @@ function checkProjectileCollisions() {
                     rock.hull -= projectile.damage;
                     spawnHitSparks(projectile.x, projectile.y, '#bbaa88');
                     playHitSound();
-                    game.projectiles.splice(i, 1);
-                    hitSomething = true;
+                    if (projectile.pierce) {
+                        if (!projectile.hitTargets) projectile.hitTargets = [];
+                        projectile.hitTargets.push(rock);
+                    } else {
+                        game.projectiles.splice(i, 1);
+                        hitSomething = true;
+                    }
 
                     if (rock.hull <= 0) {
                         spawnExplosion(rock.x, rock.y, '#998877', rock.vx * 60, rock.vy * 60);
@@ -744,9 +799,15 @@ function checkProjectileCollisions() {
                                 1 + Math.floor(Math.random() * 2)
                             );
                         }
+                        // Rarely, a rock hides precursor tech
+                        if (Math.random() < 0.08) {
+                            spawnPowerupDrop(rock.x, rock.y);
+                        }
                         game.asteroids.splice(j, 1);
                     }
-                    break;
+                    if (!projectile.pierce) {
+                        break;
+                    }
                 }
             }
         }
