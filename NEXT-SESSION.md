@@ -1,104 +1,78 @@
 # Next Session Roadmap
 
-State as of 2026-07-08 (evening): the morning's five features passed their
-human playtest ("playtest works"), and the RPG progression layer queued from
-that session is now BUILT and committed (one commit each):
+State as of 2026-07-08 (late): the RPG layer (ranks/perks/grudges/crew/
+escorts) passed its human playtest, and the ship progression arc queued
+behind it is now BUILT and committed (one commit each):
 
-1. **Pilot XP + ranks** — XP from kills (~hull/3), sells ($50/XP),
-   deliveries (30), first landfall (25), escorts (40). Nine ranks
-   Cadet→Living Legend, full-screen promotion banner. Old saves get a
-   retroactive commission on first load — expect a promotion parade.
-2. **Perk choice per promotion** — pick-one modal (game pauses), three
-   lanes × four perks: FIGHTER (cooldown/missiles/heat/warheads), TRADER
-   (sell+5%/cargo/buy-5%/contracts+20%), EXPLORER (fuel/minimap/limp/shields).
-3. **Faction grudges** — broken raids escalate Marked→Hunted→VENDETTA per
-   faction; grudged factions muster likelier, +minions, +boss hull (cap
-   +60%), +pay (+20%/level). Reputation panel appears once grudged.
-4. **Named crew** — 12 characters with quirks in station bars; Engineer
-   (auto-repair 10s), Tail Gunner (rear bolt every other volley), Navigator
-   (fuel −15%). Berths: 1 at Pilot rank, 2 at Captain.
-5. **Escort missions + distress pings** — ⛡ contracts to shepherd a named
-   freighter; departure spawns a 2-raider ambush; failure voids pay. All
-   chased freighters blink orange on the minimap; escort clamps to map edge.
+1. **Hull ladder** — five buyable ships: Sparrow Skiff (one-seater, 0
+   berths) → Magpie Courier ($6k, 1 berth) → Pelican Freighter ($18k,
+   hauler) / Kestrel Gunship ($24k, warbird) → Albatross Clipper ($60k,
+   3 berths). Shipyards at Agricon, Tech Hub, Core World, Frontier show
+   the FULL catalog — including what you can't afford and what's sold
+   elsewhere. The dreaming is the point. Trade-in is 60% of the old hull.
+2. **Ship-as-character** — buying (or first-loading an unnamed save)
+   opens a christening modal with name suggestions; the ship gets a name,
+   a sidebar identity panel ("The Ship"), and a log where purchases and
+   installs accumulate. Hull gates berths (min with rank), upgrade caps
+   per track ("HULL CAP" in the shop), top speed, and turn agility.
+3. **Named mods** — 8 one-of-a-kind used parts at a rotating Mechanic's
+   Bench, most with a quirk beside the gift (Vex compressor runs lasers
+   hot; Whisperdrive coil scrambles the minimap; Barnacle plating sheds
+   speed; Smuggler's False Deck blinds customs; Old Grinner's bore,
+   Back-Alley Injectors, Saint Elmo's Capacitor, Songbird Array).
+4. **Per-hull silhouettes** — each hull draws its own wireframe body;
+   shield ring and flames follow.
 
-All five verified headless — `?verify` runs a 57-assertion suite
-(js/verify.js, committed this session; see chrome-headless-shell one-liner
-in that file's header). **None of the RPG layer is human-playtested yet.**
-Same rule as last time: feel pass with Arthur before building anything new.
+Legacy saves are commissioned retroactively into the smallest hull that
+fits their upgrade levels and crew — Arthur's save may load into a
+Courier or better, then get asked to name her. All headless-verified:
+`?verify` runs 92 assertions (js/verify.js). **None of the ship layer is
+human-playtested yet.** Same rule as always: feel pass with Arthur
+before building anything new.
 
 ## Playtest checklist (do this first)
 
-- Load Arthur's existing save: does the retroactive promotion parade land as
-  a great moment or as noise? (Several banners + perk choices may stack.)
-- Rank pacing: is the Cadet→Ensign 60 XP gap quick enough that Arthur hits a
-  promotion in his first session, and is Captain (1000) a real horizon?
-- Perk modal: can Arthur read/choose the three cards himself? Does pausing
-  mid-flight feel safe or jarring?
-- Break 2-3 raids from one faction: does VENDETTA escalation read? Is a
-  +60%-hull vendetta boss a wall or a boss fight?
-- Hire someone at a bar (needs Pilot rank): do the names/quirks land? Is the
-  Engineer's 10s auto-fix noticeable next to field-repair kits?
-- Fly one escort start to finish: is staying with a slow freighter fun or a
-  chore? Is the ambush survivable at Arthur's ship level? Does the cyan
-  edge-clamped blip make the charge findable?
+- Load Arthur's save: what hull does the retroactive commission give him?
+  Does the christening modal land as a moment? (It queues BEFORE any
+  pending perk modals — watch the ordering feel.)
+- Can Arthur read the shipyard catalog and does the "can't afford it yet"
+  row make him want something? Which ship does he say he wants?
+- Buy a hull with him: does the trade-in math read? Does the new
+  silhouette + banner land? Does he want to rename or keep the name?
+- Skiff berth-lock: does "no bunks on a one-seater" read as a reason to
+  save up, or as a punishment? (New players can't hire crew until the
+  Courier — watch whether that feels like progression or a wall.)
+- Mechanic's Bench: do the quirks read at his reading level? Does a
+  drawback mod (Grinner's bore heat) feel like character or like a trap?
+- Freighter feel: is 6.5 top speed + 0.8 agility "big and heavy" or just
+  "worse"? Gunship at 9/1.25 — noticeably mean?
+- Does "The Ship" panel (name/hull/mods/log) get glanced at? Does Arthur
+  retell the log entries?
 
 ## Tuning flags (carried + new)
 
-- XP curve numbers are first-pass; sell-XP ($50/XP) is exploitable at a
-  credit loss by buy-sell loops — watch whether it matters in practice
-- Retroactive XP may vault a veteran save 3-4 ranks instantly — stacked
-  perk choices on load could overwhelm; consider spacing them
-- Gunner rear bolt + Rear Guard powerup stack — probably fine, may be loud
-- Escort freighter speed (3.2) vs player max 8 — player waits a lot;
-  consider a "match speed" nudge if it drags
-- Grudge has no forgiveness mechanic — VENDETTA is forever (bribe/amnesty
-  at a lawless port could be a future release valve)
-- Economy numbers still first-pass; spread lasers vs Scout packs still
-  untested against a human (carried from last session)
+- Hull prices ($6k/$18k/$24k/$60k) vs. income rate are first-pass —
+  watch how many sessions to the first Courier
+- Upgrade caps may strand credits early (skiff caps everything at 2-3);
+  if the skiff phase drags, either cheapen the Courier or raise a cap
+- Mod stock rate (45%/dock) untested for drought/flood
+- Trade-in at 60% means downgrade round-trips lose 40% — intended
+  friction, verify it doesn't read as a bug
+- XP sell-loop exploit + escort freighter speed (3.2) still carried
+- Grudge has no forgiveness mechanic — VENDETTA is forever (carried)
 
 ## Future feature seeds
 
-- Grudge amnesty: pay off a faction at Frontier Outpost (credits sink)
-- Crew levels or loyalty — crew that survives raids gets better
-- Persistent rival characters growing out of traffic + grudges
-- Boss taunts using the pilot's rank title ("run home, *Captain*")
-
-### Big seed: ship progression + ship-as-character (Foggy, 2026-07-08)
-
-Problem: one implicit ship + six numeric upgrade tracks means everyone ends
-up flying the same maxed ship. Wanted: Millennium Falcon energy — the ship
-as its own character, mods with story, and a hull ladder you dream up.
-
-Design sketch (three layers, buildable independently, in this order):
-
-1. **Hull ladder.** 4-5 buyable hulls sold at shipyards (not every planet).
-   Each hull defines the *caps*: cargo ceiling, berth count, weapon
-   hardpoints, upgrade-slot maxes, base handling. Starter is a one-seater
-   (0 berths, cargo cap ~20, no missile hardpoint); next is a two-seater
-   (1 berth); then a slow fat freighter vs. an agile gunship fork; one
-   endgame hull. Trade-in credit on your old hull. Berth count moves from
-   pilot rank to the hull (rank still gates *hiring*, hull gates *housing*)
-   — this is a cleaner home for berths than rank anyway.
-2. **Named mods with provenance.** Replace "Cargo Upgrade Lv 3" at the high
-   end with named used parts stocked rotationally per station ("salvaged
-   Vex-pattern compressor — +6 cargo, runs hot: +5% laser heat"). Small
-   quirk side effects make two ships genuinely different. A "ship's log"
-   panel records where each part was bolted on and what it's survived —
-   cheap to build, does most of the character work.
-3. **Graphics per hull.** Distinct canvas silhouettes per hull class;
-   mods could add visible greebles later.
-
-The dreaming mechanic: shipyard shows ships you *can't afford yet* with
-prices — the poster-on-the-wall effect. Arthur names the ship at purchase.
-
-Scope warning: this touches save schema (migration for existing saves),
-economy balance, trading UI, combat stats, and render. It's a multi-session
-arc, not a feature — sequence it as hull ladder first (pure data + shop UI),
-mods second, art last. Gated like everything else on the RPG-layer feel pass.
+- Mods visible on the silhouette (greebles per installed mod)
+- Ship log auto-entries for milestones: first vendetta boss kill,
+  100th landing, surviving under 10% hull
+- Grudge amnesty at Frontier Outpost (credits sink, carried)
+- Crew loyalty; persistent rivals; boss taunts by rank title (carried)
+- Second-hand hulls: a cheaper, quirky used version of the next hull up
 
 ## Workflow that works
 
-One-sentence playtest note → diagnose → build → playtest again. Small scope,
-verify in browser before next feature. Serve: python3 -m http.server 8377.
-Console: spawnEnemyShip(), spawnRaidBand(), spawnPowerupDrop(x, y),
-grantXP(n), exportCharacter(), resetCharacter(). Headless: see js/verify.js.
+One-sentence playtest note → diagnose → build → playtest again. Small
+scope, verify in browser before next feature. Serve: python3 -m
+http.server 8377. Console: grantXP(n), nameShip('...'), spawnRaidBand(),
+exportCharacter(), resetCharacter(). Headless: see js/verify.js header.
