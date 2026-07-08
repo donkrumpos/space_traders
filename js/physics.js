@@ -108,6 +108,7 @@ function update() {
     updateWeaponCooldowns(deltaTime);
     updateEnemies(deltaTime);
     updateDamageEffects(deltaTime);
+    updateEffects(deltaTime);
 
     updateUI();
     updateMaps();

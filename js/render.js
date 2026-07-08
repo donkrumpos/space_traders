@@ -3,6 +3,11 @@ function render() {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
 
+    // Screen shake — offset the whole frame while trauma decays
+    const shakeOffset = getShakeOffset();
+    ctx.save();
+    ctx.translate(shakeOffset.x, shakeOffset.y);
+
     // Damage flash effect
     if (game.damage && game.damage.flashTime > 0) {
         const flashIntensity = game.damage.flashTime / 300; // Normalize to 0-1
@@ -144,6 +149,12 @@ function render() {
     // Draw projectiles
     renderProjectiles(ctx, game.camera);
 
+    // Draw explosions, sparks, floating text
+    renderEffects(ctx, game.camera);
+
+    // Draw lead-target reticle (where to aim at the nearest enemy)
+    renderLeadReticle(ctx, game.camera);
+
     // Draw ship (always in center)
     const shipX = game.canvas.width / 2;
     const shipY = game.canvas.height / 2;
@@ -226,5 +237,8 @@ function render() {
         ctx.globalAlpha = 1;
     }
 
+    ctx.restore();
+
+    // End screen-shake translate
     ctx.restore();
 }
