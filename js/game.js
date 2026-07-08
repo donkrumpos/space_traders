@@ -158,6 +158,10 @@ function init() {
         size: 20
     }));
 
+    // Initialize living economy and world hazards
+    initEconomy();
+    initAsteroids();
+
     // Generate starfield with variety and depth
     const starColors = ['#ffffff', '#aaccff', '#ffffaa', '#ffccaa', '#ffaaaa'];
     const starColorNames = ['white', 'blue', 'yellow', 'orange', 'red'];

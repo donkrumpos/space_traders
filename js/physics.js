@@ -109,6 +109,9 @@ function update() {
     updateEnemies(deltaTime);
     updateDamageEffects(deltaTime);
     updateEffects(deltaTime);
+    updateEconomy(deltaTime);
+    updateAsteroids(deltaTime);
+    updateDrops(deltaTime);
 
     updateUI();
     updateMaps();

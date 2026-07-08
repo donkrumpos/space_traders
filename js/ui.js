@@ -1,3 +1,11 @@
+function flashCredits() {
+    const el = document.getElementById('credits');
+    if (!el) return;
+    el.classList.remove('credits-pulse');
+    void el.offsetWidth; // restart the CSS animation
+    el.classList.add('credits-pulse');
+}
+
 function showHudFeedback(message, type = 'info', duration = 3000) {
     const feedbackEl = document.getElementById('hudFeedback');
     if (!feedbackEl) return;
@@ -55,6 +63,19 @@ function updateUI() {
 
     document.getElementById('missiles').textContent = game.ship.weapons.missiles.ammo;
     document.getElementById('missilesMax').textContent = game.ship.weapons.missiles.maxAmmo;
+
+    // Bounty streak indicator (only shown mid-streak)
+    const streakEl = document.getElementById('streakLine');
+    if (streakEl) {
+        const streak = game.combatStreak || 0;
+        if (streak > 1) {
+            const mult = Math.min(1 + 0.25 * (streak - 1), 3);
+            streakEl.style.display = 'block';
+            streakEl.textContent = `Bounty streak ×${mult.toFixed(2).replace(/0$/, '')} (${streak} kills)`;
+        } else {
+            streakEl.style.display = 'none';
+        }
+    }
 
     document.getElementById('posX').textContent = Math.floor(game.ship.x);
     document.getElementById('posY').textContent = Math.floor(game.ship.y);

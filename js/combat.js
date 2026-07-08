@@ -389,15 +389,31 @@ function checkProjectileCollisions() {
 
                     // Check if enemy is destroyed
                     if (enemy.hull <= 0) {
-                        // Award credits
-                        const reward = Math.floor(enemy.reward);
+                        // Kill streak: consecutive bounties multiply, up to 3x. Docking resets it.
+                        game.combatStreak = (game.combatStreak || 0) + 1;
+                        const streakMult = Math.min(1 + 0.25 * (game.combatStreak - 1), 3);
+                        const reward = Math.floor(enemy.reward * streakMult);
                         game.ship.credits += reward;
 
                         spawnExplosion(enemy.x, enemy.y, enemy.color,
                             enemy.velocity.x * 60, enemy.velocity.y * 60);
-                        spawnFloater(enemy.x, enemy.y - 20, `+${reward} cr`, '#00ff88');
+                        const streakTag = streakMult > 1 ? ` ×${streakMult.toFixed(2).replace(/0$/, '')}` : '';
+                        spawnFloater(enemy.x, enemy.y - 25, `BOUNTY +$${reward}${streakTag}`, '#00ff88', 18);
                         playExplosionSound();
+                        playBountySound();
                         addShake(0.35);
+                        flashCredits();
+                        showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
+
+                        // Pirates sometimes jettison cargo — fly through to scoop it
+                        if (Math.random() < 0.6) {
+                            const goodTypes = Object.keys(goods);
+                            spawnCargoDrop(
+                                enemy.x, enemy.y,
+                                goodTypes[Math.floor(Math.random() * goodTypes.length)],
+                                1 + Math.floor(Math.random() * 3)
+                            );
+                        }
 
                         // Remove enemy
                         game.enemies.splice(j, 1);
@@ -407,6 +423,40 @@ function checkProjectileCollisions() {
                     }
 
                     break; // Projectile can only hit one target
+                }
+            }
+        }
+
+        // Any projectile can crack an asteroid — mining and stray shots alike
+        if (!hitSomething && game.asteroids) {
+            for (let j = game.asteroids.length - 1; j >= 0; j--) {
+                const rock = game.asteroids[j];
+                const distance = pointToSegmentDistance(
+                    rock.x, rock.y, prevX, prevY, projectile.x, projectile.y
+                );
+                if (distance < rock.size + projectile.size) {
+                    rock.hull -= projectile.damage;
+                    spawnHitSparks(projectile.x, projectile.y, '#bbaa88');
+                    playHitSound();
+                    game.projectiles.splice(i, 1);
+                    hitSomething = true;
+
+                    if (rock.hull <= 0) {
+                        spawnExplosion(rock.x, rock.y, '#998877', rock.vx * 60, rock.vy * 60);
+                        addShake(0.15);
+                        // Cracked rocks shed raw materials
+                        const chunks = 1 + Math.floor(Math.random() * 2);
+                        for (let c = 0; c < chunks; c++) {
+                            spawnCargoDrop(
+                                rock.x + (Math.random() - 0.5) * 12,
+                                rock.y + (Math.random() - 0.5) * 12,
+                                'materials',
+                                1 + Math.floor(Math.random() * 2)
+                            );
+                        }
+                        game.asteroids.splice(j, 1);
+                    }
+                    break;
                 }
             }
         }
@@ -437,9 +487,10 @@ function damagePlayer(damage) {
         return;
     }
 
-    // Apply shield absorption first (if shields are upgraded)
+    // Apply shield absorption first — 15% per level, capped at 60%,
+    // so even level 1 shields do something
     const shieldLevel = game.ship.upgrades.shields;
-    const shieldAbsorption = (shieldLevel - 1) * 0.2; // 20% absorption per shield level above 1
+    const shieldAbsorption = Math.min(0.15 * shieldLevel, 0.6);
     const actualDamage = damage * (1 - shieldAbsorption);
 
     // Apply damage to hull
@@ -485,8 +536,9 @@ function handlePlayerDestruction() {
     game.ship.velocity.x = 0;
     game.ship.velocity.y = 0;
 
-    // Clear all enemies to give player a break
+    // Clear all enemies to give player a break; dying ends the bounty streak
     game.enemies = [];
+    game.combatStreak = 0;
 
     // Auto-save the respawn state
     autoSave('respawn');

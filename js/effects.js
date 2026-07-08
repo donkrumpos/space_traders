@@ -3,6 +3,7 @@
 const effects = {
     particles: [],
     floaters: [],
+    rings: [],
     shake: { trauma: 0 }
 };
 
@@ -55,6 +56,9 @@ function spawnExplosion(x, y, color, baseVx, baseVy) {
     spawnParticles(x, y, { count: 24, colors: ['#ff8800', '#ffcc00', '#ff4400'], speed: 160, life: 0.7, size: 2.5, baseVx, baseVy });
     // Debris in the ship's color
     spawnParticles(x, y, { count: 14, colors: [color, '#888888'], speed: 220, life: 1.1, size: 2, baseVx, baseVy });
+    // Expanding shockwave rings
+    effects.rings.push({ x, y, radius: 4, maxRadius: 70, life: 0.5, maxLife: 0.5, color: '#ffffff', lineWidth: 3 });
+    effects.rings.push({ x, y, radius: 2, maxRadius: 45, life: 0.7, maxLife: 0.7, color, lineWidth: 2 });
 }
 
 function spawnHitSparks(x, y, color) {
@@ -63,8 +67,8 @@ function spawnHitSparks(x, y, color) {
 
 // --- Floating text (credit rewards, etc.) ---
 
-function spawnFloater(x, y, text, color) {
-    effects.floaters.push({ x, y, text, color, life: 1.4, maxLife: 1.4 });
+function spawnFloater(x, y, text, color, size = 14) {
+    effects.floaters.push({ x, y, text, color, size, life: 1.4 + size / 10, maxLife: 1.4 + size / 10 });
 }
 
 function updateEffects(deltaTime) {
@@ -87,6 +91,14 @@ function updateEffects(deltaTime) {
         f.life -= deltaTime;
         if (f.life <= 0) effects.floaters.splice(i, 1);
     }
+
+    for (let i = effects.rings.length - 1; i >= 0; i--) {
+        const r = effects.rings[i];
+        const progress = 1 - r.life / r.maxLife;
+        r.radius = r.maxRadius * (1 - Math.pow(1 - progress, 2)); // ease-out expansion
+        r.life -= deltaTime;
+        if (r.life <= 0) effects.rings.splice(i, 1);
+    }
 }
 
 function renderEffects(ctx, camera) {
@@ -104,12 +116,24 @@ function renderEffects(ctx, camera) {
     });
     ctx.globalAlpha = 1;
 
+    effects.rings.forEach(r => {
+        const screenX = r.x - camera.x;
+        const screenY = r.y - camera.y;
+        ctx.globalAlpha = Math.max(0, r.life / r.maxLife) * 0.8;
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = r.lineWidth;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, r.radius, 0, Math.PI * 2);
+        ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
     effects.floaters.forEach(f => {
         const screenX = f.x - camera.x;
         const screenY = f.y - camera.y;
         ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
         ctx.fillStyle = f.color;
-        ctx.font = 'bold 14px Courier New';
+        ctx.font = `bold ${f.size || 14}px Courier New`;
         ctx.textAlign = 'center';
         ctx.fillText(f.text, screenX, screenY);
     });
@@ -275,6 +299,39 @@ function playHitSound() {
     src.connect(filter).connect(gain).connect(ac.destination);
     src.start();
     src.stop(ac.currentTime + 0.1);
+}
+
+function playPickupSound() {
+    const ac = sfx.ensure();
+    if (!ac) return;
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(660, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(990, ac.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.1, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.15);
+    osc.connect(gain).connect(ac.destination);
+    osc.start();
+    osc.stop(ac.currentTime + 0.16);
+}
+
+function playBountySound() {
+    const ac = sfx.ensure();
+    if (!ac) return;
+    // Quick rising two-note "cha-ching"
+    [[880, 0], [1320, 0.09]].forEach(([freq, delay]) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, ac.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.15, ac.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + 0.18);
+        osc.connect(gain).connect(ac.destination);
+        osc.start(ac.currentTime + delay);
+        osc.stop(ac.currentTime + delay + 0.2);
+    });
 }
 
 function playExplosionSound() {

@@ -143,6 +143,10 @@ function render() {
         }
     });
 
+    // Draw asteroid fields and floating cargo
+    renderAsteroids(ctx, game.camera);
+    renderDrops(ctx, game.camera);
+
     // Draw enemies
     renderEnemies(ctx, game.camera);
 

@@ -36,6 +36,14 @@ function dock(planet) {
         resizeCanvas();
     }, 300); // Wait for CSS transition
 
+    // Economy: markets drift while you fly, this station's prices get recorded,
+    // deliveries pay out, fresh contracts are posted, and your bounty streak ends
+    driftMarkets();
+    completeMissionsAt(planet);
+    recordLedger(planet);
+    generateMissionOffers(planet);
+    game.combatStreak = 0;
+
     // Populate trading interface
     updateTradingInterface(planet);
 
@@ -62,23 +70,13 @@ function updateTradingInterface(planet) {
     document.getElementById('stationInfo').textContent = `Type: ${planet.type} | Status: DOCKED`;
 
     // Update buying section (what the station sells)
-    const buyingSection = document.getElementById('buyingSection');
-    buyingSection.innerHTML = '';
-    Object.keys(planet.produces).forEach(goodType => {
-        const price = planet.produces[goodType];
-        buyingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}</span>
-            <span>${price}</span>
-            <button onclick="buyGood('${goodType}', ${price})">Buy</button>
-        </div>`;
-    });
-
-    if (Object.keys(planet.produces).length === 0) {
-        buyingSection.innerHTML = '<div style="color: #666;">Nothing for sale</div>';
-    }
+    updateBuyingSectionUI();
 
     // Update selling section (what the station buys)
     updateSellingSectionUI();
+
+    // Update mission board
+    updateMissionBoardUI(planet);
 
     // Update upgrades section
     updateUpgradesUI(planet);
@@ -89,6 +87,37 @@ function updateTradingInterface(planet) {
 
     // Update missile cost
     updateMissileCost();
+
+    // Update repair cost
+    updateRepairCost();
+}
+
+function updateBuyingSectionUI() {
+    const buyingSection = document.getElementById('buyingSection');
+    const planet = game.currentPlanet;
+    if (!planet) return;
+
+    buyingSection.innerHTML = '';
+    Object.keys(planet.produces).forEach(goodType => {
+        const base = planet.produces[goodType];
+        const price = getBuyPrice(planet, goodType);
+        // For buying, above-base is bad (red), below-base is a deal (green)
+        const trend = price > base * 1.05 ? ' <span style="color:#ff6666;">▲</span>'
+                    : price < base * 0.95 ? ' <span style="color:#66ff66;">▼</span>' : '';
+        buyingSection.innerHTML += `<div class="trade-item">
+            <span>${goods[goodType].name}</span>
+            <span>$${price}${trend}</span>
+            <span class="qty-buttons">
+                <button onclick="buyGood('${goodType}', 1)">+1</button>
+                <button onclick="buyGood('${goodType}', 5)">+5</button>
+                <button onclick="buyGood('${goodType}', 'max')">Max</button>
+            </span>
+        </div>`;
+    });
+
+    if (Object.keys(planet.produces).length === 0) {
+        buyingSection.innerHTML = '<div style="color: #666;">Nothing for sale</div>';
+    }
 }
 
 function updateSellingSectionUI() {
@@ -97,12 +126,21 @@ function updateSellingSectionUI() {
 
     sellingSection.innerHTML = '';
     Object.keys(planet.demands).forEach(goodType => {
-        const price = planet.demands[goodType];
+        const base = planet.demands[goodType];
+        const price = getSellPrice(planet, goodType);
+        // For selling, above-base is a windfall (green), below-base is weak (red)
+        const trend = price > base * 1.05 ? ' <span style="color:#66ff66;">▲</span>'
+                    : price < base * 0.95 ? ' <span style="color:#ff6666;">▼</span>' : '';
         const playerHas = game.ship.cargo[goodType] || 0;
+        const off = playerHas === 0 ? 'disabled' : '';
         sellingSection.innerHTML += `<div class="trade-item">
             <span>${goods[goodType].name} (You have: ${playerHas})</span>
-            <span>${price}</span>
-            <button onclick="sellGood('${goodType}', ${price})" ${playerHas === 0 ? 'disabled' : ''}>Sell</button>
+            <span>$${price}${trend}</span>
+            <span class="qty-buttons">
+                <button onclick="sellGood('${goodType}', 1)" ${off}>-1</button>
+                <button onclick="sellGood('${goodType}', 5)" ${off}>-5</button>
+                <button onclick="sellGood('${goodType}', 'all')" ${off}>All</button>
+            </span>
         </div>`;
     });
 }
@@ -319,24 +357,44 @@ function buyMissiles() {
     updateMissileCost(); // Refresh missile cost display
 }
 
-function buyGood(goodType, price) {
-    const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+function buyGood(goodType, qty = 1) {
+    const planet = game.currentPlanet;
+    if (!planet) return;
+    const price = getBuyPrice(planet, goodType);
 
-    if (cargoUsed >= game.ship.cargoMax) {
+    const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+    const spaceLeft = game.ship.cargoMax - cargoUsed;
+    const affordable = Math.floor(game.ship.credits / price);
+
+    if (spaceLeft <= 0) {
         showHudFeedback('Cargo hold is full!', 'error');
         return;
     }
-
-    if (game.ship.credits < price) {
+    if (affordable <= 0) {
         showHudFeedback('Insufficient credits!', 'error');
         return;
     }
 
-    game.ship.credits -= price;
-    game.ship.cargo[goodType] = (game.ship.cargo[goodType] || 0) + 1;
+    const wanted = qty === 'max' ? Infinity : qty;
+    const amount = Math.min(wanted, spaceLeft, affordable);
+    const totalCost = amount * price;
+
+    game.ship.credits -= totalCost;
+    game.ship.cargo[goodType] = (game.ship.cargo[goodType] || 0) + amount;
+
+    // Your purchase tightens local supply — the price creeps up
+    applyTradeImpact(planet, goodType, 'buy', amount);
+
+    if (amount > 1) {
+        showHudFeedback(`Bought ${amount} ${goods[goodType].name} for $${totalCost}`, 'success');
+    } else if (qty !== 1 && amount === 1) {
+        showHudFeedback(`Only room/credits for 1 ${goods[goodType].name} ($${totalCost})`, 'warning');
+    }
 
     updateUI();
+    updateBuyingSectionUI(); // Prices moved
     updateSellingSectionUI(); // Refresh the selling section with new cargo
+    updateMissionsUI(); // Cargo counts toward contracts
     updateFuelCost(); // Refresh fuel options
     updateFuelButton();
 
@@ -344,23 +402,89 @@ function buyGood(goodType, price) {
     autoSave('trade');
 }
 
-function sellGood(goodType, price) {
-    if ((game.ship.cargo[goodType] || 0) === 0) {
+function sellGood(goodType, qty = 1) {
+    const planet = game.currentPlanet;
+    if (!planet) return;
+    const price = getSellPrice(planet, goodType);
+
+    const playerHas = game.ship.cargo[goodType] || 0;
+    if (playerHas === 0) {
         showHudFeedback('You don\'t have any ' + goods[goodType].name + '!', 'error');
         return;
     }
 
-    game.ship.credits += price;
-    game.ship.cargo[goodType]--;
+    const amount = qty === 'all' ? playerHas : Math.min(qty, playerHas);
+    const totalEarned = amount * price;
+
+    game.ship.credits += totalEarned;
+    game.ship.cargo[goodType] -= amount;
     if (game.ship.cargo[goodType] === 0) {
         delete game.ship.cargo[goodType];
     }
 
+    // Flooding the market drives the price down
+    applyTradeImpact(planet, goodType, 'sell', amount);
+
+    if (amount > 1) {
+        showHudFeedback(`Sold ${amount} ${goods[goodType].name} for $${totalEarned}`, 'success');
+    }
+    flashCredits();
+
     updateUI();
+    updateBuyingSectionUI(); // Prices moved
     updateSellingSectionUI(); // Refresh the selling section
+    updateMissionsUI(); // Cargo counts toward contracts
     updateFuelCost(); // Refresh fuel options
     updateFuelButton();
 
     // Auto-save on trade
     autoSave('trade');
+}
+
+function updateRepairCost() {
+    const label = document.getElementById('repairCost');
+    const button = document.querySelector('button[onclick="buyRepair()"]');
+    if (!label || !button) return;
+
+    const needed = game.ship.hullMax - Math.floor(game.ship.hull);
+    const fullCost = needed * 2; // $2 per hull point
+
+    if (needed === 0) {
+        label.textContent = 'Hull OK';
+        button.textContent = 'Repaired';
+        button.disabled = true;
+    } else if (game.ship.credits >= fullCost) {
+        label.textContent = '$' + fullCost;
+        button.textContent = 'Repair All';
+        button.disabled = false;
+    } else if (game.ship.credits >= 2) {
+        const points = Math.min(Math.floor(game.ship.credits / 2), needed);
+        label.textContent = `$${points * 2} (${points} pts)`;
+        button.textContent = `Repair ${points}`;
+        button.disabled = false;
+    } else {
+        label.textContent = 'Need $2 min';
+        button.textContent = 'No Credits';
+        button.disabled = true;
+    }
+}
+
+function buyRepair() {
+    const needed = game.ship.hullMax - Math.floor(game.ship.hull);
+    if (needed === 0) {
+        showHudFeedback('Hull already at full integrity', 'info');
+        return;
+    }
+    const points = Math.min(needed, Math.floor(game.ship.credits / 2));
+    if (points <= 0) {
+        showHudFeedback('Insufficient credits! Repairs cost $2 per hull point.', 'error');
+        return;
+    }
+    game.ship.credits -= points * 2;
+    game.ship.hull += points;
+    showHudFeedback(`Hull repaired +${points} for $${points * 2}`, 'success');
+    updateUI();
+    updateRepairCost();
+    updateFuelCost();
+    updateFuelButton();
 }

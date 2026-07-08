@@ -10,14 +10,14 @@
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
         <div id="ui">
-            <div class="panel">
+            <div class="panel" id="shipStatusPanel">
                 <h3>Ship Status</h3>
-                <div id="hudFeedback" style="display: none; margin-bottom: 10px; padding: 8px; border-radius: 3px; font-weight: bold; text-align: center;"></div>
                 <div>Credits: $<span id="credits">1000</span></div>
                 <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
                 <div>Hull: <span id="hull">100</span>/<span id="hullMax">100</span></div>
                 <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
                 <div>Missiles: <span id="missiles">5</span>/<span id="missilesMax">5</span></div>
+                <div id="streakLine" style="display: none; color: #ffcc00;"></div>
             </div>
 
             <div class="panel">
@@ -32,6 +32,20 @@
                 <div>Position: (<span id="posX">0</span>, <span id="posY">0</span>)</div>
                 <div>Sector: <span id="sector">Deep Space</span></div>
                 <div id="nearbyObjects"></div>
+            </div>
+
+            <div class="panel">
+                <h3>Missions</h3>
+                <div id="missionList">
+                    <div style="color:#666;">None — check station mission boards</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Trade Ledger</h3>
+                <div id="ledgerList">
+                    <div style="color:#666;">Dock at stations to record prices</div>
+                </div>
             </div>
 
             <div class="panel">
@@ -64,6 +78,11 @@
                 <div id="upgradesSection"></div>
 
                 <div style="margin: 15px 0;">
+                    <strong style="color: #00ffff;">Mission Board:</strong>
+                </div>
+                <div id="missionBoard"></div>
+
+                <div style="margin: 15px 0;">
                     <strong style="color: #00ffff;">Station Services:</strong>
                 </div>
                 <div id="servicesSection">
@@ -76,6 +95,11 @@
                         <span>Rearm Missiles</span>
                         <span id="missileCost">0</span>
                         <button onclick="buyMissiles()">Rearm</button>
+                    </div>
+                    <div class="trade-item">
+                        <span>Repair Hull</span>
+                        <span id="repairCost">0</span>
+                        <button onclick="buyRepair()">Repair</button>
                     </div>
                 </div>
 
@@ -104,6 +128,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Toast notifications (overlay, never shifts layout) -->
+    <div id="hudFeedback" style="display: none;"></div>
 
     <!-- Mini-map -->
     <div id="miniMap">
@@ -137,6 +164,8 @@
     <script src="js/ui.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/events.js"></script>
+    <script src="js/economy.js"></script>
+    <script src="js/world.js"></script>
     <script src="js/effects.js"></script>
     <script src="js/combat.js"></script>
     <script src="js/character.js"></script>
