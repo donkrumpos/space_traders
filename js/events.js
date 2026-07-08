@@ -24,17 +24,6 @@ const eventTypes = {
         fuelCost: 50,
         action: "investigateDerelict"
     },
-    asteroidField: {
-        name: "Asteroid Field",
-        probability: 0.3,
-        size: 25,
-        color: '#8B4513',
-        symbol: '🪨',
-        description: "A dense asteroid field blocks your path. Choose your route carefully.",
-        interactionText: "Navigate Asteroid Field",
-        fuelCost: 0,
-        action: "enterAsteroidField"
-    },
     fuelDepot: {
         name: "Fuel Depot",
         probability: 0.2,
@@ -325,29 +314,6 @@ function generateEventChoices(eventObj) {
             });
             break;
 
-        case 'asteroidField':
-            choices.push({
-                text: `🐌 Navigate carefully<br><small>Cost: 30 fuel | Safe passage guaranteed</small>`,
-                action: 'navigate_safe',
-                enabled: game.ship.fuel >= 30
-            });
-            choices.push({
-                text: `⚡ Risk fast passage<br><small>No fuel cost | 20% chance of hull damage</small>`,
-                action: 'navigate_risky',
-                enabled: true
-            });
-            choices.push({
-                text: `🔄 Go around<br><small>Cost: 20 fuel | Longer but safe route</small>`,
-                action: 'navigate_around',
-                enabled: game.ship.fuel >= 20
-            });
-            choices.push({
-                text: `🛫 Turn back<br><small>Avoid the field entirely</small>`,
-                action: 'decline',
-                enabled: true
-            });
-            break;
-
         case 'fuelDepot':
             const fuelNeeded = game.ship.fuelMax - game.ship.fuel;
             const fullCost = fuelNeeded * 6;
@@ -421,18 +387,6 @@ function executeSpecificAction(eventObj, action) {
         case 'derelictShip':
             if (action === 'investigate') {
                 return eventActions.investigateDerelict();
-            }
-            break;
-
-        case 'asteroidField':
-            if (action === 'navigate_safe') {
-                game.ship.fuel -= 30;
-                return { message: "You carefully navigate through the asteroid field without incident.", rewards: {} };
-            } else if (action === 'navigate_risky') {
-                return eventActions.enterAsteroidField();
-            } else if (action === 'navigate_around') {
-                game.ship.fuel -= 20;
-                return { message: "You take a longer route around the asteroid field. Better safe than sorry.", rewards: {} };
             }
             break;
 
@@ -660,34 +614,6 @@ const eventActions = {
         ];
 
         return getRandomOutcome(outcomes);
-    },
-
-    enterAsteroidField: () => {
-        // Present multiple choices via message and apply random result
-        const outcomes = [
-            {
-                probability: 0.5,
-                message: "You carefully navigate through the asteroid field, using extra fuel but avoiding damage.",
-                rewards: {},
-                fuelCost: 30
-            },
-            {
-                probability: 0.3,
-                message: "You take a risky fast route through the asteroids and make it through unscathed!",
-                rewards: {}
-            },
-            {
-                probability: 0.2,
-                message: "An asteroid clips your hull while attempting a risky passage! Hull damage sustained.",
-                rewards: { hull: -25 }
-            }
-        ];
-
-        const result = getRandomOutcome(outcomes);
-        if (result.fuelCost) {
-            game.ship.fuel -= result.fuelCost;
-        }
-        return result;
     },
 
     accessFuelDepot: () => {
