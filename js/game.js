@@ -74,7 +74,8 @@ const goods = {
     food: { name: 'Food', color: '#ffff00' },
     technology: { name: 'Technology', color: '#00ffff' },
     materials: { name: 'Raw Materials', color: '#ff8800' },
-    luxury: { name: 'Luxury Goods', color: '#ff00ff' }
+    luxury: { name: 'Luxury Goods', color: '#ff00ff' },
+    contraband: { name: 'Contraband', color: '#ff44cc' } // illegal — customs scans at lawful ports
 };
 
 // Planet definitions
@@ -97,7 +98,7 @@ const planetData = [
         type: 'industrial',
         color: '#888888',
         produces: { materials: 60 },
-        demands: { food: 180, luxury: 140 },
+        demands: { food: 180, luxury: 140, contraband: 220 },
         upgrades: {
             hull: { name: 'Hull Reinforcement', baseCost: 1000, description: 'Increases hull strength by 50 points' },
             engine: { name: 'Industrial Thrusters', baseCost: 1200, description: 'Faster acceleration (2s to max thrust) and improved fuel efficiency' }
@@ -121,7 +122,8 @@ const planetData = [
         x: 3000, y: 2000,
         type: 'frontier',
         color: '#ff0000',
-        produces: {},
+        lawless: true, // no customs — the only place to buy contraband openly
+        produces: { contraband: 40 },
         demands: { food: 300, technology: 280, materials: 250, luxury: 200 },
         upgrades: {
             shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
@@ -136,7 +138,7 @@ const planetData = [
         type: 'core',
         color: '#ffff00',
         produces: { luxury: 90 },
-        demands: { materials: 130, technology: 110 },
+        demands: { materials: 130, technology: 110, contraband: 350 },
         upgrades: {
             cargo: { name: 'Luxury Cargo Bay', baseCost: 2000, description: 'Premium cargo expansion with climate control' },
             fuel_tank: { name: 'Premium Fuel System', baseCost: 2500, description: 'High-capacity fuel system with purification' }

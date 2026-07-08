@@ -36,6 +36,16 @@ function dock(planet) {
         resizeCanvas();
     }, 300); // Wait for CSS transition
 
+    // Customs scan at lawful ports: 35% chance contraband is found,
+    // seized, and fined at $100/unit. Frontier Outpost doesn't ask questions.
+    if (!planet.lawless && (game.ship.cargo.contraband || 0) > 0 && Math.random() < 0.35) {
+        const seized = game.ship.cargo.contraband;
+        delete game.ship.cargo.contraband;
+        const fine = Math.min(game.ship.credits, seized * 100);
+        game.ship.credits -= fine;
+        showHudFeedback(`CUSTOMS SCAN — ${seized} contraband seized, fined $${fine}!`, 'error', 6000);
+    }
+
     // Economy: markets drift while you fly, this station's prices get recorded,
     // deliveries pay out, fresh contracts are posted, and your bounty streak ends
     driftMarkets();
@@ -104,8 +114,9 @@ function updateBuyingSectionUI() {
         // For buying, above-base is bad (red), below-base is a deal (green)
         const trend = price > base * 1.05 ? ' <span style="color:#ff6666;">▲</span>'
                     : price < base * 0.95 ? ' <span style="color:#66ff66;">▼</span>' : '';
+        const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         buyingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}</span>
+            <span>${goods[goodType].name}${illegal}</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="buyGood('${goodType}', 1)">+1</button>
@@ -133,8 +144,9 @@ function updateSellingSectionUI() {
                     : price < base * 0.95 ? ' <span style="color:#ff6666;">▼</span>' : '';
         const playerHas = game.ship.cargo[goodType] || 0;
         const off = playerHas === 0 ? 'disabled' : '';
+        const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         sellingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name} (You have: ${playerHas})</span>
+            <span>${goods[goodType].name}${illegal} (You have: ${playerHas})</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="sellGood('${goodType}', 1)" ${off}>-1</button>

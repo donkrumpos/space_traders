@@ -160,13 +160,15 @@ function averageDemandPrice(goodType) {
 
 function generateMissionOffers(planet) {
     const offers = [];
-    const produced = Object.keys(planet.produces);
+    // No station posts contraband runs on its public board
+    const produced = Object.keys(planet.produces).filter(g => g !== 'contraband');
+    const legalGoods = Object.keys(goods).filter(g => g !== 'contraband');
     const count = 2 + Math.floor(Math.random() * 2);
     for (let i = 0; i < count; i++) {
         // Mostly ship what this station produces (buy here, haul there)
         const goodType = produced.length > 0 && Math.random() < 0.7
             ? produced[Math.floor(Math.random() * produced.length)]
-            : Object.keys(goods)[Math.floor(Math.random() * Object.keys(goods).length)];
+            : legalGoods[Math.floor(Math.random() * legalGoods.length)];
         const destinations = game.planets.filter(p => p !== planet && p.demands[goodType] !== undefined);
         if (destinations.length === 0) continue;
         const dest = destinations[Math.floor(Math.random() * destinations.length)];
