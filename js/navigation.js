@@ -69,6 +69,48 @@ function updateMiniMap() {
         });
     }
 
+    // Asteroids: dim gray specks
+    if (game.asteroids) {
+        ctx.fillStyle = '#665f55';
+        game.asteroids.forEach(a => {
+            const dx = a.x - game.ship.x;
+            const dy = a.y - game.ship.y;
+            if (dx * dx + dy * dy > range * range) return;
+            ctx.fillRect(centerX + dx * scale - 1, centerY + dy * scale - 1, 2, 2);
+        });
+    }
+
+    // Cargo drops: blips in their good's color
+    if (game.drops) {
+        game.drops.forEach(d => {
+            const dx = d.x - game.ship.x;
+            const dy = d.y - game.ship.y;
+            if (dx * dx + dy * dy > range * range) return;
+            ctx.fillStyle = goods[d.goodType].color;
+            ctx.fillRect(centerX + dx * scale - 1, centerY + dy * scale - 1, 2, 2);
+        });
+    }
+
+    // Enemies: red blips; bounty targets get a bigger ringed marker
+    if (game.enemies) {
+        game.enemies.forEach(e => {
+            const dx = e.x - game.ship.x;
+            const dy = e.y - game.ship.y;
+            if (dx * dx + dy * dy > range * range) return;
+            const mapX = centerX + dx * scale;
+            const mapY = centerY + dy * scale;
+            ctx.fillStyle = e.isBoss ? '#ff2266' : '#ff4444';
+            ctx.beginPath();
+            ctx.arc(mapX, mapY, e.isBoss ? 4 : 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            if (e.isBoss) {
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+    }
+
     // Draw ALL planets in range - strategic overview
     game.planets.forEach(planet => {
         const dx = planet.x - game.ship.x;
@@ -268,6 +310,32 @@ function updateFullMap() {
         ctx.font = '8px Courier New';
         ctx.fillText(`${Math.floor(distance)} units`, mapX, mapY + 30);
     });
+
+    // Asteroid fields
+    if (game.asteroids) {
+        ctx.fillStyle = '#665f55';
+        game.asteroids.forEach(a => {
+            ctx.fillRect(a.x * scale + offsetX - 1, a.y * scale + offsetY - 1, 3, 3);
+        });
+    }
+
+    // Enemies — bounty targets labeled by name
+    if (game.enemies) {
+        game.enemies.forEach(e => {
+            const ex = e.x * scale + offsetX;
+            const ey = e.y * scale + offsetY;
+            ctx.fillStyle = e.isBoss ? '#ff2266' : '#ff4444';
+            ctx.beginPath();
+            ctx.arc(ex, ey, e.isBoss ? 6 : 3, 0, Math.PI * 2);
+            ctx.fill();
+            if (e.isBoss) {
+                ctx.fillStyle = '#ff6688';
+                ctx.font = '10px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('☠ ' + e.tierName, ex, ey - 10);
+            }
+        });
+    }
 
     // Draw ship
     const shipMapX = game.ship.x * scale + offsetX;
