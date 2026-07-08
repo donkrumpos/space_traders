@@ -137,6 +137,10 @@ class CharacterManager {
         if (typeof lasers.heat === 'undefined') lasers.heat = 0;
         if (typeof lasers.overheated === 'undefined') lasers.overheated = false;
 
+        // Legacy saves predate the per-system laser progression tree
+        if (!lasers.levels) lasers.levels = {};
+        lasers.owned.forEach(m => { if (!lasers.levels[m]) lasers.levels[m] = 1; });
+
         // Apply game state
         game.isDocked = this.character.gameState.isDocked;
         game.currentPlanet = this.character.gameState.currentPlanet;

@@ -465,30 +465,57 @@ const WEAPON_SYSTEM_PRICES = { double: 1200, spread: 2600, seeker: 4200 };
 
 function updateWeaponSystemsUI(planet) {
     const el = document.getElementById('weaponSystemsSection');
-    if (!el) return;
-    const systems = planet.weaponSystems || [];
-    if (systems.length === 0) {
-        el.innerHTML = '<div style="color:#666;">None sold here</div>';
-        return;
-    }
+    if (!el || !planet) return;
+    const stocked = planet.weaponSystems || [];
     const owned = game.ship.weapons.lasers.owned || ['single'];
-    el.innerHTML = systems.map(mode => {
-        const spec = LASER_MODES[mode];
-        const cost = WEAPON_SYSTEM_PRICES[mode];
-        const has = owned.includes(mode);
-        return `<div class="trade-item">
-            <span>${spec.label} Lasers<br><small style="color:#888;">${spec.blurb}</small></span>
-            <span>$${cost}</span>
-            <button onclick="buyWeaponSystem('${mode}', ${cost})" ${has || game.ship.credits < cost ? 'disabled' : ''}>
-                ${has ? 'Owned' : 'Buy'}
-            </button>
-        </div>`;
-    }).join('');
+
+    // Every station's gunsmith can tune what you own; new systems only where stocked
+    const rows = ['single', 'double', 'spread', 'seeker']
+        .filter(mode => owned.includes(mode) || stocked.includes(mode))
+        .map(mode => {
+            const spec = LASER_MODES[mode];
+
+            if (!owned.includes(mode)) {
+                const cost = WEAPON_SYSTEM_PRICES[mode];
+                // Seeker tech is precursor-grade: needs ship Weapons Lv3 to mount
+                const gated = mode === 'seeker' && game.ship.upgrades.weapons < 3;
+                const note = gated ? 'Requires ship Weapons Lv3' : spec.blurb;
+                return `<div class="trade-item">
+                    <span>${spec.label} Lasers<br><small style="color:${gated ? '#cc8866' : '#888'};">${note}</small></span>
+                    <span>$${cost}</span>
+                    <button onclick="buyWeaponSystem('${mode}', ${cost})" ${gated || game.ship.credits < cost ? 'disabled' : ''}>Buy</button>
+                </div>`;
+            }
+
+            const level = getLaserLevel(mode);
+            const tree = LASER_TREE[mode];
+            if (level >= tree.maxLevel) {
+                return `<div class="trade-item">
+                    <span>${spec.label} Lasers Lv${level}<br><small style="color:#888;">${spec.blurb}</small></span>
+                    <span style="color:#66ffcc;">MAX</span>
+                </div>`;
+            }
+            const target = level + 1;
+            const cost = laserUpgradeCost(mode, target);
+            const locked = tree.prereq && !tree.prereq(target);
+            const note = locked ? `Lv${target} requires ${tree.prereqLabel(target)}` : `Lv${target}: bigger, harder-hitting bolts`;
+            return `<div class="trade-item">
+                <span>${spec.label} Lasers Lv${level}<br><small style="color:${locked ? '#cc8866' : '#888'};">${note}</small></span>
+                <span>$${cost}</span>
+                <button onclick="buyLaserUpgrade('${mode}')" ${locked || game.ship.credits < cost ? 'disabled' : ''}>Upgrade</button>
+            </div>`;
+        });
+
+    el.innerHTML = rows.join('') || '<div style="color:#666;">None sold here</div>';
 }
 
 function buyWeaponSystem(mode, cost) {
     const lasers = game.ship.weapons.lasers;
     if ((lasers.owned || []).includes(mode)) return;
+    if (mode === 'seeker' && game.ship.upgrades.weapons < 3) {
+        showHudFeedback('Seeker guidance needs ship Weapons Lv3 to mount', 'error');
+        return;
+    }
     if (game.ship.credits < cost) {
         showHudFeedback(`Insufficient credits! Need $${cost}.`, 'error');
         return;
@@ -496,8 +523,35 @@ function buyWeaponSystem(mode, cost) {
     game.ship.credits -= cost;
     if (!lasers.owned) lasers.owned = ['single'];
     lasers.owned.push(mode);
+    if (!lasers.levels) lasers.levels = {};
+    lasers.levels[mode] = 1;
     lasers.mode = mode; // Equip the new toy immediately
     showHudFeedback(`${LASER_MODES[mode].label} lasers installed — Z to switch systems`, 'success', 3500);
+    updateUI();
+    updateWeaponSystemsUI(game.currentPlanet);
+    autoSave('upgrade');
+}
+
+function buyLaserUpgrade(mode) {
+    const lasers = game.ship.weapons.lasers;
+    if (!lasers.levels) lasers.levels = {};
+    const level = getLaserLevel(mode);
+    const tree = LASER_TREE[mode];
+    if (level >= tree.maxLevel) return;
+
+    const target = level + 1;
+    if (tree.prereq && !tree.prereq(target)) {
+        showHudFeedback(`${LASER_MODES[mode].label} Lv${target} requires ${tree.prereqLabel(target)} first`, 'error');
+        return;
+    }
+    const cost = laserUpgradeCost(mode, target);
+    if (game.ship.credits < cost) {
+        showHudFeedback(`Insufficient credits! Need $${cost}.`, 'error');
+        return;
+    }
+    game.ship.credits -= cost;
+    lasers.levels[mode] = target;
+    showHudFeedback(`${LASER_MODES[mode].label} lasers tuned to Lv${target}`, 'success', 3000);
     updateUI();
     updateWeaponSystemsUI(game.currentPlanet);
     autoSave('upgrade');

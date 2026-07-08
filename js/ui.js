@@ -73,7 +73,8 @@ function updateUI() {
     // Weapon system + laser heat
     const lasers = game.ship.weapons.lasers;
     const modeSpec = (typeof LASER_MODES !== 'undefined' && LASER_MODES[lasers.mode]) || { label: 'Single' };
-    document.getElementById('weaponMode').textContent = modeSpec.label;
+    const modeLevel = typeof getLaserLevel === 'function' ? getLaserLevel(lasers.mode) : 1;
+    document.getElementById('weaponMode').textContent = modeSpec.label + (modeLevel > 1 ? ` Lv${modeLevel}` : '');
     const heatEl = document.getElementById('laserHeat');
     const heat = Math.round(lasers.heat || 0);
     if (lasers.overheated) {

@@ -23,6 +23,37 @@ const LASER_MODES = {
     }
 };
 
+// Per-system progression tree: each owned laser system levels up on its own,
+// firing bigger, harder-hitting bolts. Prereqs give the tree a shape: Single
+// is the trunk, Twin chases Single, Spread chases Twin, Seeker rides the
+// ship's weapons upgrade.
+const LASER_TREE = {
+    single: { maxLevel: 5, baseCost: 400, prereq: null },
+    double: {
+        maxLevel: 4, baseCost: 800,
+        prereq: target => getLaserLevel('single') >= target + 1,
+        prereqLabel: target => `Single Lv${target + 1}`
+    },
+    spread: {
+        maxLevel: 4, baseCost: 1200,
+        prereq: target => getLaserLevel('double') >= target,
+        prereqLabel: target => `Twin Lv${target}`
+    },
+    seeker: {
+        maxLevel: 3, baseCost: 1800,
+        prereq: target => game.ship.upgrades.weapons >= target + 1,
+        prereqLabel: target => `ship Weapons Lv${target + 1}`
+    }
+};
+
+function getLaserLevel(mode) {
+    return (game.ship.weapons.lasers.levels || {})[mode] || 1;
+}
+
+function laserUpgradeCost(mode, target) {
+    return Math.round(LASER_TREE[mode].baseCost * Math.pow(1.6, target - 2));
+}
+
 function fireLaser() {
     const lasers = game.ship.weapons.lasers;
     if (lasers.cooldown > 0 || lasers.overheated) {
@@ -30,6 +61,7 @@ function fireLaser() {
     }
 
     const spec = LASER_MODES[lasers.mode] || LASER_MODES.single;
+    const level = getLaserLevel(lasers.mode);
 
     // Heat: sustained fire builds heat; hitting 100 locks the lasers until cooled
     lasers.heat = Math.min(100, (lasers.heat || 0) + spec.heat);
@@ -60,12 +92,13 @@ function fireLaser() {
                 x: Math.cos(angle) * 800 + game.ship.velocity.x * 60,
                 y: Math.sin(angle) * 800 + game.ship.velocity.y * 60
             },
-            damage: Math.round(baseDamage * spec.damageMult),
+            // Level scaling: +30% damage, fatter bolt, a bit more reach per level
+            damage: Math.round(baseDamage * spec.damageMult * (1 + 0.3 * (level - 1))),
             homing: spec.homing || false,
-            range: spec.range,
+            range: spec.range + (level - 1) * 30,
             distanceTraveled: 0,
             color: spec.color,
-            size: 3,
+            size: 3 + (level - 1) * 0.7,
             age: 0,
             maxAge: 1500 // Generous cap; range (distanceTraveled) is the real limiter
         });
@@ -90,7 +123,7 @@ function cycleLaserMode() {
     }
     const idx = owned.indexOf(lasers.mode);
     lasers.mode = owned[(idx + 1) % owned.length];
-    showHudFeedback(`Weapon system: ${LASER_MODES[lasers.mode].label}`, 'info', 1500);
+    showHudFeedback(`Weapon system: ${LASER_MODES[lasers.mode].label} Lv${getLaserLevel(lasers.mode)}`, 'info', 1500);
     updateUI();
 }
 
