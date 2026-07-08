@@ -245,6 +245,82 @@ async function offlineSuite(t, { browser, base }) {
     t('no page errors', S.O.errors.length === 0, S.O.errors.slice(0, 2).join(' | '));
 }
 
+// Suite — M2 ghost presence (docs/PROTOCOL.md M2). Ghosts are render-only;
+// reuses S.A/S.B from handshakeSuite. Destructive: closes S.A2 (dup VerifyA
+// socket) up front and S.A itself for [leave] — later suites needing a second
+// pilot must open fresh pages.
+async function ghostSuite(t) {
+    // Two live VerifyA sockets (S.A + S.A2 from savesync) make presence
+    // ambiguous — retire A2 so S.A is the only VerifyA the server relays.
+    if (S.A2) { await S.A2.context.close().catch(() => {}); S.A2 = null; }
+
+    const hook = await S.B.page.evaluate(() => typeof netGhosts === 'function');
+    t('netGhosts console hook present', hook, 'js/net.js missing netGhosts');
+    if (!hook) return;
+
+    // A2's close may broadcast peer.leave for VerifyA (same-pilot trap);
+    // S.A's 10Hz ship.state re-establishes it — settle before asserting.
+    const peered = await until(() => S.B.page.evaluate(() => (netStatus().peers || []).includes('VerifyA')));
+    t('B still peers VerifyA after A2 retires', !!peered);
+
+    // 1. presence: B's ghost of VerifyA carries A's real hull + ship name.
+    const aShip = await S.A.page.evaluate(() => ({ hullId: game.ship.hullId, name: game.ship.name }));
+    const ghost = await until(() => S.B.page.evaluate(() =>
+        (netGhosts() || []).find(g => g.pilot === 'VerifyA') || false));
+    t('B sees VerifyA ghost', !!ghost);
+    t('ghost hullId matches A', !!ghost && ghost.hullId === aShip.hullId,
+        `A=${JSON.stringify(aShip.hullId)} ghost=${JSON.stringify(ghost && ghost.hullId)}`);
+    t('ghost shipName matches A', !!ghost && ghost.shipName === aShip.name,
+        `A=${JSON.stringify(aShip.name)} ghost=${JSON.stringify(ghost && ghost.shipName)}`);
+
+    // 2. render: the instrumented draw counter advances across frames. Must
+    // run BEFORE the tracking teleport — renderGhosts viewport-culls, and both
+    // pilots spawn together, so the ghost is only on B's screen right now.
+    const c0 = await S.B.page.evaluate(() => window.__ghostDrawCount || 0);
+    await sleep(500);
+    const c1 = await S.B.page.evaluate(() => window.__ghostDrawCount || 0);
+    t('ghost draw count grows across frames', c1 > c0, `before=${c0} after=${c1}`);
+
+    // 3. tracking: teleport A and give it velocity; B's extrapolated ghost
+    // (pos + vel * elapsed, ≤500ms) must converge within 60 units.
+    await S.A.page.evaluate(() => {
+        game.ship.x += 1500;
+        game.ship.y += 900;
+        game.ship.velocity.x = 2;
+        game.ship.velocity.y = 1;
+    });
+    const tracked = await until(async () => {
+        const a = await S.A.page.evaluate(() => ({ x: game.ship.x, y: game.ship.y }));
+        const g = await S.B.page.evaluate(() => (netGhosts() || []).find(g => g.pilot === 'VerifyA'));
+        return !!g && Math.hypot(g.x - a.x, g.y - a.y) <= 60;
+    });
+    t('ghost tracks A within 60 units', !!tracked, "ghost never converged on A's position");
+
+    // 4. thrust flag: physics recomputes isThrusting from input every tick
+    // (js/physics.js updateThrustSystem), so hold the key, not just the flag.
+    await S.A.page.evaluate(() => {
+        game.keys['ArrowUp'] = true;
+        game.ship.thrust.isThrusting = true;
+    });
+    const thrusting = await until(() => S.B.page.evaluate(() =>
+        ((netGhosts() || []).find(g => g.pilot === 'VerifyA') || {}).thrusting === true));
+    t('ghost thrusting flag relayed', !!thrusting);
+
+    // 5. leave: closing A clears the ghost (peer.leave or 5s expiry), B stays online.
+    await S.A.context.close();
+    S.A = null;
+    const gone = await until(() => S.B.page.evaluate(() =>
+        !(netGhosts() || []).some(g => g.pilot === 'VerifyA')), { timeout: 12000 });
+    t('ghost gone after A leaves', !!gone);
+    const bOn = await S.B.page.evaluate(() => netStatus().online === true);
+    t('B still online after A leaves', bOn);
+
+    // 6. no-collision sanity: ghosts never leak into sim arrays (friendly fire OFF).
+    const leaked = await S.B.page.evaluate(() =>
+        [...(game.enemies || []), ...(game.traders || [])].filter(e => e && 'pilot' in e).length);
+    t('no ghost leaked into enemies/traders', leaked === 0, `${leaked} sim entries carry a pilot field`);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -252,7 +328,7 @@ const SUITES = [
     ['conflict', conflictSuite],
     ['reconnect', reconnectSuite],
     ['offline', offlineSuite],
-    // M2: ['ghost', ghostSuite],
+    ['ghosts', ghostSuite],
     // M3: ['market', marketSuite],
     // M4: ['combat', combatSuite],
 ];

@@ -148,6 +148,22 @@ function updateMiniMap() {
         });
     }
 
+    // Peer ghosts (M2): cyan blips, slightly larger than trader blips.
+    // Defensive — getNetGhosts lives in render.js and may not exist yet.
+    if (typeof getNetGhosts === 'function') {
+        getNetGhosts().forEach(ghost => {
+            const dx = ghost.x - game.ship.x;
+            const dy = ghost.y - game.ship.y;
+            if (dx * dx + dy * dy > range * range) return;
+            ctx.globalAlpha = ghost.docked ? 0.4 : 0.9;
+            ctx.fillStyle = '#66e0ff';
+            ctx.beginPath();
+            ctx.arc(centerX + dx * scale, centerY + dy * scale, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        });
+    }
+
     // Draw ALL planets in range - strategic overview
     game.planets.forEach(planet => {
         const dx = planet.x - game.ship.x;
@@ -381,6 +397,23 @@ function updateFullMap() {
             ctx.beginPath();
             ctx.arc(t.x * scale + offsetX, t.y * scale + offsetY, 3, 0, Math.PI * 2);
             ctx.fill();
+        });
+    }
+
+    // Peer ghosts (M2): cyan dots labeled by pilot
+    if (typeof getNetGhosts === 'function') {
+        getNetGhosts().forEach(ghost => {
+            const gx = ghost.x * scale + offsetX;
+            const gy = ghost.y * scale + offsetY;
+            ctx.globalAlpha = ghost.docked ? 0.4 : 0.9;
+            ctx.fillStyle = '#66e0ff';
+            ctx.beginPath();
+            ctx.arc(gx, gy, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.font = '10px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(ghost.pilot, gx, gy - 8);
+            ctx.globalAlpha = 1;
         });
     }
 

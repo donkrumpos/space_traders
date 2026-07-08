@@ -45,6 +45,103 @@ const HULL_SHAPES = {
     }
 };
 
+// --- M2 ghost presence (render-only; never collidable, never targetable) ---
+// Ghosts come from js/net.js via window.net.getGhosts() — positions already
+// extrapolated there. This must no-op gracefully when net.js is absent or
+// offline (solo ?verify gate runs with no net object at all).
+const GHOST_COLOR = '#66e0ff';
+
+function getNetGhosts() {
+    try {
+        if (typeof window.net === 'object' && window.net &&
+            typeof window.net.getGhosts === 'function') {
+            const ghosts = window.net.getGhosts();
+            if (Array.isArray(ghosts)) return ghosts;
+        }
+    } catch (e) { /* a broken net layer must never take down the frame */ }
+    return [];
+}
+
+function renderGhosts(ctx, camera) {
+    const ghosts = getNetGhosts();
+    if (ghosts.length === 0) return;
+
+    ghosts.forEach(ghost => {
+        const screenX = ghost.x - camera.x;
+        const screenY = ghost.y - camera.y;
+        if (screenX < -60 || screenX > game.canvas.width + 60 ||
+            screenY < -60 || screenY > game.canvas.height + 60) return;
+
+        window.__ghostDrawCount = (window.__ghostDrawCount || 0) + 1;
+
+        const shape = HULL_SHAPES[ghost.hullId] || HULL_SHAPES.skiff;
+
+        // Docked ghosts are at a station, not flying — dim holo-flicker.
+        // In-flight ghosts read as a friendly spectral presence: translucent
+        // cyan with a soft glow, clearly not enemy red or trader green.
+        const t = Date.now();
+        const alpha = ghost.docked
+            ? 0.18 + 0.12 * Math.abs(Math.sin(t * 0.006) * Math.sin(t * 0.017))
+            : 0.75;
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(ghost.angle || 0);
+        ctx.globalAlpha = alpha;
+
+        // Engine flames when thrusting — same tail-flame idiom as own ship,
+        // in the ghost's spectral palette. Drawn first so the hull sits on top.
+        if (ghost.thrusting && !ghost.docked) {
+            const flameLength = 12;
+            ctx.strokeStyle = '#aaf0ff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(shape.tail, -2);
+            ctx.lineTo(shape.tail - flameLength, 0);
+            ctx.moveTo(shape.tail, 2);
+            ctx.lineTo(shape.tail - flameLength, 0);
+            ctx.stroke();
+        }
+
+        // Hull silhouette with a subtle glow
+        ctx.shadowColor = GHOST_COLOR;
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = GHOST_COLOR;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        shape.draw(ctx);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Shield ring
+        if (ghost.shield > 0) {
+            ctx.globalAlpha = alpha * 0.4;
+            ctx.strokeStyle = '#44aaff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, shape.shield, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // Label above the ship: "Pilot — Shipname", dark backing for
+        // readability against the starfield. Drawn unrotated.
+        const label = ghost.shipName
+            ? `${ghost.pilot} — ${ghost.shipName}` : `${ghost.pilot}`;
+        const labelY = screenY - shape.shield - 10;
+        ctx.font = '10px Courier New';
+        ctx.textAlign = 'center';
+        const labelWidth = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(0, 12, 18, 0.65)';
+        ctx.fillRect(screenX - labelWidth / 2 - 3, labelY - 9, labelWidth + 6, 12);
+        ctx.globalAlpha = ghost.docked ? 0.5 : 1;
+        ctx.fillStyle = GHOST_COLOR;
+        ctx.fillText(label, screenX, labelY);
+        ctx.globalAlpha = 1;
+    });
+}
+
 function render() {
     const ctx = game.ctx;
     ctx.fillStyle = '#000000';
@@ -196,6 +293,9 @@ function render() {
 
     // Draw NPC freighter traffic
     renderTraders(ctx, game.camera);
+
+    // Draw peer ghosts (M2 multiplayer presence — render-only)
+    renderGhosts(ctx, game.camera);
 
     // Draw enemies
     renderEnemies(ctx, game.camera);

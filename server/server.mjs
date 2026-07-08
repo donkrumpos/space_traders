@@ -1,4 +1,4 @@
-// M1 multiplayer server: handshake + shared saves (docs/PROTOCOL.md).
+// M1+M2 multiplayer server: handshake + shared saves + ghost relay (docs/PROTOCOL.md).
 // ws over plain node:http, bound to 127.0.0.1 (Apache proxies in prod).
 // Optional static serving when STATIC_DIR is set (dev + verify-net).
 import http from 'node:http';
@@ -112,7 +112,23 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Unknown t: ignore (forward compatibility with M2-M4)
+        if (msg.t === 'ship.state') {
+            // M2: relay to everyone else, pilot stamped from the handshake
+            // (never trust a pilot field in the payload). Fields whitelisted,
+            // no persistence, no logging (arrives at up to 10Hz).
+            broadcastToOthers(ws.pilot, {
+                t: 'peer.state',
+                pilot: ws.pilot,
+                x: msg.x, y: msg.y, angle: msg.angle,
+                vx: msg.vx, vy: msg.vy,
+                hull: msg.hull, hullMax: msg.hullMax, shield: msg.shield,
+                hullId: msg.hullId, shipName: msg.shipName,
+                thrusting: !!msg.thrusting, docked: !!msg.docked
+            });
+            return;
+        }
+
+        // Unknown t: ignore (forward compatibility with M3-M4)
     });
 
     ws.on('close', () => {

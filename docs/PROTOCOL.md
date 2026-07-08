@@ -104,6 +104,13 @@ server running.
 | `peer.join` | s→c *broadcast* | `{ pilot }` → toast "PILOT has entered the sector" |
 | `peer.leave` | s→c *broadcast* | `{ pilot }` → toast |
 
+**Units note (M2):** `vx`/`vy` are world-units **per second** on the wire
+(client converts from `game.ship.velocity`'s per-frame-at-60fps units, ×60).
+`net.getGhosts()` extrapolates `pos + vel * elapsedSeconds`, capped at 500ms
+past the last `peer.state`; ghost entries expire 5s after last update. The
+sender skips a frame only when x/y drift < 0.5 units AND every other field is
+unchanged, with a ≥1Hz heartbeat regardless.
+
 Ghost render: hull silhouette via `HULL_SHAPES[hullId].draw()` at interpolated
 position, pilot+ship name label above, engine flames when `thrusting`, cyan-ish
 distinct color, minimap blip. Ghosts are NOT collidable (friendly fire off).

@@ -1,4 +1,5 @@
-// Client net layer (M1) — pilot handshake, shared saves, offline fallback.
+// Client net layer (M1+M2) — pilot handshake, shared saves, offline
+// fallback, ghost presence (send own ship state, track peers' ghosts).
 // Contract: docs/PROTOCOL.md. Loads after character.js, before verify.js.
 // Solo boot must NEVER block on the network: under ?verify (no ?ws=) this
 // file installs its hooks but never prompts, polls, or opens a socket.
@@ -55,6 +56,31 @@ const net = {
         if (netSocket && netSocket.readyState === 1) {
             try { netSocket.send(JSON.stringify(obj)); } catch (e) {}
         }
+    },
+    // M2 interface contract: array of ghost snapshots with positions
+    // extrapolated from the last peer.state (pos + vel*elapsed, capped at
+    // 500ms). Entries expire 5s after last update. Empty when offline/solo.
+    getGhosts() {
+        if (!net.online) return [];
+        const now = Date.now();
+        const out = [];
+        for (const [pilot, g] of netGhostMap) {
+            const ageMs = now - g.at;
+            if (ageMs > NET_GHOST_EXPIRY_MS) { netGhostMap.delete(pilot); continue; }
+            const dt = Math.min(ageMs, NET_GHOST_EXTRAP_CAP_MS) / 1000; // seconds
+            out.push({
+                pilot: g.pilot,
+                x: g.x + g.vx * dt,
+                y: g.y + g.vy * dt,
+                angle: g.angle,
+                vx: g.vx, vy: g.vy,
+                hull: g.hull, hullMax: g.hullMax, shield: g.shield,
+                hullId: g.hullId, shipName: g.shipName,
+                thrusting: g.thrusting, docked: g.docked,
+                ageMs
+            });
+        }
+        return out;
     }
 };
 window.net = net;
@@ -69,6 +95,18 @@ let netLastSaveAck = null;
 
 const NET_CONNECT_TIMEOUT_MS = 3000;
 const NET_RETRY_MS = 30000;
+
+// M2 ghost presence
+const NET_SEND_INTERVAL_MS = 100;      // 10Hz sender
+const NET_HEARTBEAT_MS = 1000;         // always send at least this often
+const NET_DRIFT_EPSILON = 0.5;         // x/y drift below this = "unchanged"
+const NET_GHOST_EXPIRY_MS = 5000;      // drop ghosts 5s after last update
+const NET_GHOST_EXTRAP_CAP_MS = 500;   // cap dead-reckoning extrapolation
+
+const netGhostMap = new Map();         // pilot -> last peer.state + at timestamp
+let netSendTimer = null;
+let netLastSent = null;
+let netLastSentAt = 0;
 
 function netLocalLastPlayed() {
     // First handshake compares against the pre-boot disk value; after we've
@@ -114,6 +152,8 @@ function netGoOffline() {
     netSocket = null;
     net.online = false;
     net.peers = [];
+    netStopSender();
+    netGhostMap.clear();
     if (net.status !== 'rejected') net.status = 'offline';
     netScheduleRetry();
 }
@@ -134,6 +174,7 @@ function netHandleMessage(msg) {
             net.peers = (msg.peers || []).filter(p => p !== netIdentity.pilot);
             netApplySyncRule(msg.doc);
             netSyncedOnce = true;
+            netStartSender();
             break;
         }
         case 'reject': {
@@ -147,7 +188,11 @@ function netHandleMessage(msg) {
             break;
         case 'peer.join': {
             if (msg.pilot === netIdentity.pilot) break;
-            if (!net.peers.includes(msg.pilot)) net.peers.push(msg.pilot);
+            // Dedup: same-pilot reconnect re-broadcasts peer.join with no
+            // preceding peer.leave — an already-known peer gets no toast and
+            // keeps its existing ghost entry.
+            if (net.peers.includes(msg.pilot)) break;
+            net.peers.push(msg.pilot);
             if (typeof showHudFeedback === 'function') {
                 showHudFeedback(`${msg.pilot} has entered the sector`, 'info', 3000);
             }
@@ -155,12 +200,29 @@ function netHandleMessage(msg) {
         }
         case 'peer.leave': {
             net.peers = net.peers.filter(p => p !== msg.pilot);
+            netGhostMap.delete(msg.pilot);
             if (msg.pilot !== netIdentity.pilot && typeof showHudFeedback === 'function') {
                 showHudFeedback(`${msg.pilot} has left the sector`, 'info', 3000);
             }
             break;
         }
-        // Unknown t: ignored (forward compatibility with M2-M4)
+        case 'peer.state': {
+            if (!msg.pilot || msg.pilot === netIdentity.pilot) break;
+            // A peer.state from a pilot we somehow missed the join for still
+            // counts as presence (dedup rule covers the reverse case).
+            if (!net.peers.includes(msg.pilot)) net.peers.push(msg.pilot);
+            netGhostMap.set(msg.pilot, {
+                pilot: msg.pilot,
+                x: msg.x, y: msg.y, angle: msg.angle,
+                vx: msg.vx || 0, vy: msg.vy || 0,
+                hull: msg.hull, hullMax: msg.hullMax, shield: msg.shield,
+                hullId: msg.hullId, shipName: msg.shipName,
+                thrusting: !!msg.thrusting, docked: !!msg.docked,
+                at: Date.now()
+            });
+            break;
+        }
+        // Unknown t: ignored (forward compatibility with M3-M4)
     }
 }
 
@@ -207,6 +269,60 @@ window.addEventListener('beforeunload', () => {
     if (net.online) netPushChar(); // ws send is best-effort on unload
 });
 
+// --- M2: 10Hz ship.state sender -------------------------------------------
+// Runs off its own setInterval (started on welcome, stopped on close), not
+// the RAF loop. game.ship.velocity is units-per-frame at an assumed 60fps
+// (js/physics.js), so vx/vy go over the wire as units-per-second (×60) to
+// match the pos + vel*elapsed-seconds extrapolation in getGhosts().
+
+function netShipSnapshot() {
+    if (typeof game === 'undefined' || !game.ship) return null;
+    const s = game.ship;
+    return {
+        x: s.x, y: s.y, angle: s.angle,
+        vx: (s.velocity ? s.velocity.x : 0) * 60,
+        vy: (s.velocity ? s.velocity.y : 0) * 60,
+        hull: s.hull, hullMax: s.hullMax, shield: s.shield,
+        hullId: s.hullId, shipName: s.name,
+        thrusting: !!(s.thrust && (s.thrust.isThrusting || s.thrust.isReversing)),
+        docked: !!game.isDocked
+    };
+}
+
+function netShipStateUnchanged(a, b) {
+    if (!a || !b) return false;
+    if (Math.abs(a.x - b.x) >= NET_DRIFT_EPSILON) return false;
+    if (Math.abs(a.y - b.y) >= NET_DRIFT_EPSILON) return false;
+    for (const k of ['angle', 'vx', 'vy', 'hull', 'hullMax', 'shield', 'hullId', 'shipName', 'thrusting', 'docked']) {
+        if (a[k] !== b[k]) return false;
+    }
+    return true;
+}
+
+function netSendShipState() {
+    if (!net.online || !netSocket || netSocket.readyState !== 1) return;
+    const snap = netShipSnapshot();
+    if (!snap) return;
+    const now = Date.now();
+    // Cheap dirty check: skip when nothing changed beyond sub-epsilon x/y
+    // drift — but always send at least every second as a heartbeat.
+    if (netShipStateUnchanged(snap, netLastSent) && now - netLastSentAt < NET_HEARTBEAT_MS) return;
+    net.send({ t: 'ship.state', ...snap });
+    netLastSent = snap;
+    netLastSentAt = now;
+}
+
+function netStartSender() {
+    if (netSendTimer) return;
+    netLastSent = null; // fresh connection: first tick always sends
+    netSendTimer = setInterval(netSendShipState, NET_SEND_INTERVAL_MS);
+}
+
+function netStopSender() {
+    if (netSendTimer) { clearInterval(netSendTimer); netSendTimer = null; }
+    netLastSent = null;
+}
+
 function netManualConnect() {
     netSuppressUntil = 0;
     netRejected = false;
@@ -223,6 +339,7 @@ window.netForceDisconnect = function(suppressMs = 5000) {
     if (netSocket) { try { netSocket.close(); } catch (e) {} }
 };
 window.netConnect = function() { netManualConnect(); };
+window.netGhosts = function() { return net.getGhosts(); };
 
 // Auto-connect once characterManager has a character (startGame() runs from
 // the inline script after this file; poll rather than editing character.js).
