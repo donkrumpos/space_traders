@@ -38,6 +38,69 @@ function initTraffic() {
     for (let i = 0; i < TRADER_COUNT; i++) spawnTrader();
 }
 
+// A freighter under player contract: tougher hull, marked cyan, and its
+// route is fixed to the mission destination instead of wandering
+function spawnEscortTrader(mission) {
+    if (!game.traders) initTraffic();
+    const origin = game.planets.find(p => p.name === mission.from) || game.planets[0];
+    game.traders.push({
+        name: mission.traderName,
+        isEscort: true,
+        escortId: mission.id,
+        escortDest: mission.dest,
+        x: origin.x + (Math.random() - 0.5) * 120,
+        y: origin.y + (Math.random() - 0.5) * 120,
+        angle: Math.random() * Math.PI * 2,
+        velocity: { x: 0, y: 0 },
+        hull: 80, maxHull: 80,
+        size: 10,
+        color: '#44ddff',
+        state: 'docked',
+        dockTimer: 3,
+        atPlanet: origin.name,
+        dest: null,
+        goodType: null,
+        qty: 0,
+        speed: 3.2
+    });
+}
+
+// Word gets out about escorted cargo: raiders form up on the route ahead
+function spawnEscortAmbush(t) {
+    const dest = game.planets.find(p => p.name === t.escortDest);
+    if (!game.enemies) game.enemies = [];
+    const routeAngle = dest ? Math.atan2(dest.y - t.y, dest.x - t.x) : 0;
+    for (let i = 0; i < 2; i++) {
+        const raider = makeEnemyFromTier('raider',
+            t.x + Math.cos(routeAngle) * (450 + i * 180) + (Math.random() - 0.5) * 150,
+            t.y + Math.sin(routeAngle) * (450 + i * 180) + (Math.random() - 0.5) * 150);
+        raider.detectRange = 1200;
+        game.enemies.push(raider);
+    }
+    showHudFeedback(`⚠ Raiders forming up on ${t.name}'s route — stay close`, 'warning', 4500);
+}
+
+function escortArrived(t) {
+    const idx = game.missions.findIndex(m => m.id === t.escortId);
+    if (idx !== -1) {
+        const m = game.missions[idx];
+        const pay = Math.round(m.reward * (hasPerk('contract_broker') ? 1.2 : 1));
+        game.ship.credits += pay;
+        game.missions.splice(idx, 1);
+        flashCredits();
+        playBountySound();
+        showHudFeedback(`⛡ Freighter ${t.name} arrived safe — escort paid $${pay}`, 'success', 5000);
+        addXP(40, 'escort');
+        updateMissionsUI();
+        autoSave('escort');
+    }
+    // The contract ends; the freighter melts back into ordinary traffic
+    t.isEscort = false;
+    t.escortId = null;
+    t.escortDest = null;
+    t.color = '#66cc66';
+}
+
 // Docking is where the living economy happens: the freighter sells its haul
 // and buys local produce, nudging prices exactly like the player would
 function traderDock(t, planet) {
@@ -65,9 +128,21 @@ function traderDock(t, planet) {
         refreshDockedTradeUI();
         showHudFeedback(`Freighter ${t.name} docks and trades — prices shift`, 'info', 2500);
     }
+
+    // An escorted freighter reaching its contract port pays out
+    if (t.isEscort && planet.name === t.escortDest) {
+        escortArrived(t);
+    }
 }
 
 function traderDepart(t) {
+    // Escorted freighters fly their contract route — and draw an ambush
+    if (t.isEscort) {
+        t.dest = t.escortDest;
+        t.state = 'traveling';
+        spawnEscortAmbush(t);
+        return;
+    }
     // Haul toward a planet that wants the cargo; wander if hauling nothing
     const candidates = game.planets.filter(p =>
         p.name !== t.atPlanet && (!t.goodType || p.demands[t.goodType] !== undefined));
@@ -108,6 +183,7 @@ function updateTraffic(deltaTime) {
                 fleeing = true;
             }
         });
+        t.fleeing = fleeing; // distress state read by the minimap + HUD alert
 
         // Smooth turn toward the steering angle. Turn radius must stay well
         // inside the docking window or the freighter orbits its port forever.
@@ -136,6 +212,18 @@ function updateTraffic(deltaTime) {
         // Arrival
         if (distToDest < 90) traderDock(t, dest);
     });
+
+    // Distress call: one HUD ping (8s cooldown) when a freighter is being
+    // chased — always for your escort, otherwise only if it's nearby
+    game.distressTimer = Math.max(0, (game.distressTimer || 0) - deltaTime);
+    if (game.distressTimer <= 0) {
+        const inDistress = game.traders.find(t => t.fleeing && (t.isEscort ||
+            Math.pow(t.x - game.ship.x, 2) + Math.pow(t.y - game.ship.y, 2) < 1600 * 1600));
+        if (inDistress) {
+            showHudFeedback(`⚠ Freighter ${inDistress.name} under attack${inDistress.isEscort ? ' — YOUR ESCORT' : ''}!`, 'warning', 3000);
+            game.distressTimer = 8;
+        }
+    }
 }
 
 // Called from combat when an enemy shot finishes a freighter
@@ -155,7 +243,17 @@ function destroyTrader(index) {
             );
         }
     }
-    showHudFeedback(`☠ Pirates destroyed Freighter ${t.name}`, 'warning', 4000);
+    // A dead escort is a failed contract — no pay, no second chance
+    if (t.isEscort) {
+        const idx = game.missions.findIndex(m => m.id === t.escortId);
+        if (idx !== -1) {
+            game.missions.splice(idx, 1);
+            updateMissionsUI();
+        }
+        showHudFeedback(`✖ ESCORT FAILED — Freighter ${t.name} destroyed`, 'error', 6000);
+    } else {
+        showHudFeedback(`☠ Pirates destroyed Freighter ${t.name}`, 'warning', 4000);
+    }
     game.traders.splice(index, 1);
 }
 

@@ -185,6 +185,68 @@ VERIFY_SUITES.crew = (assert) => {
     game.currentPlanet = null;
 };
 
+VERIFY_SUITES.escort = (assert) => {
+    game.missions = [];
+    const planet = game.planets[0];
+    game.currentPlanet = planet;
+
+    // Offer generation is stochastic — roll until it lands (bounded)
+    let tries = 0;
+    while (!planet.escortOffer && tries++ < 300) generateEscortOffer(planet);
+    assert('escort offer generates', !!planet.escortOffer);
+    const offer = planet.escortOffer;
+    assert('reward floors at $200 + distance', offer.reward >= 200);
+
+    acceptEscort();
+    assert('accept logs mission + spawns marked freighter',
+        game.missions.some(m => m.type === 'escort') &&
+        game.traders.some(t => t.escortId === offer.id && t.isEscort));
+    assert('mission log renders escort row',
+        document.getElementById('missionList').textContent.includes(offer.traderName));
+
+    const t = game.traders.find(tr => tr.escortId === offer.id);
+    const enemiesBefore = (game.enemies || []).length;
+    traderDepart(t);
+    assert('escort flies the contract route', t.dest === offer.dest);
+    assert('departure springs a 2-raider ambush', game.enemies.length === enemiesBefore + 2);
+
+    const credits = game.ship.credits;
+    traderDock(t, game.planets.find(p => p.name === offer.dest));
+    assert('arrival pays and releases the freighter',
+        game.ship.credits >= credits + 200 && !t.isEscort);
+    assert('mission closes on arrival', !game.missions.some(m => m.type === 'escort'));
+
+    // Failure path: a dead escort voids the contract
+    tries = 0;
+    while (!planet.escortOffer && tries++ < 300) generateEscortOffer(planet);
+    const offer2 = planet.escortOffer;
+    acceptEscort();
+    destroyTrader(game.traders.findIndex(tr => tr.escortId === offer2.id));
+    assert('death voids the contract', !game.missions.some(m => m.type === 'escort'));
+
+    // Reload path: an accepted escort with no freighter flying respawns one
+    game.missions.push({ id: 'escort-restore', type: 'escort', traderName: 'Kestrel',
+        from: planet.name, dest: game.planets[1].name, reward: 500 });
+    restoreActiveEscorts();
+    assert('restore respawns the freighter', game.traders.some(tr => tr.escortId === 'escort-restore'));
+    game.missions = game.missions.filter(m => m.id !== 'escort-restore');
+    const ri = game.traders.findIndex(tr => tr.escortId === 'escort-restore');
+    if (ri !== -1) game.traders.splice(ri, 1);
+
+    // Distress plumbing: a fleeing trader sets the flag the minimap reads
+    const civilian = game.traders.find(tr => !tr.isEscort);
+    if (civilian) {
+        civilian.state = 'traveling';
+        civilian.dest = game.planets[1].name;
+        game.enemies.push(makeEnemyFromTier('scout', civilian.x + 50, civilian.y));
+        updateTraffic(1 / 60);
+        assert('chased freighter raises distress flag', civilian.fleeing === true);
+    }
+    game.enemies = [];
+    game.currentPlanet = null;
+    updateMissionsUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

@@ -216,6 +216,11 @@ class CharacterManager {
         if (typeof restoreActiveBounties === 'function') {
             restoreActiveBounties();
         }
+
+        // Accepted escorts respawn their freighter at the origin port
+        if (typeof restoreActiveEscorts === 'function') {
+            restoreActiveEscorts();
+        }
     }
 
     // Initialize emergency fuel for legacy saves that don't have it

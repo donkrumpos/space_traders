@@ -111,12 +111,38 @@ function updateMiniMap() {
         });
     }
 
-    // Freighter traffic: green blips
+    // Freighter traffic: green blips. Chased freighters blink orange
+    // (distress ping); your escort is cyan-ringed and clamps to the map edge
+    // so you can always find your charge.
     if (game.traders) {
+        const blink = Math.floor(Date.now() / 250) % 2 === 0;
         game.traders.forEach(t => {
             const dx = t.x - game.ship.x;
             const dy = t.y - game.ship.y;
-            if (dx * dx + dy * dy > range * range) return;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (t.isEscort) {
+                const clamped = Math.min(dist, range - 30);
+                const mapX = centerX + (dx / (dist || 1)) * clamped * scale;
+                const mapY = centerY + (dy / (dist || 1)) * clamped * scale;
+                ctx.fillStyle = t.fleeing && blink ? '#ffaa00' : '#44ddff';
+                ctx.fillRect(mapX - 2, mapY - 2, 4, 4);
+                ctx.strokeStyle = '#44ddff';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(mapX, mapY, 5, 0, Math.PI * 2);
+                ctx.stroke();
+                return;
+            }
+
+            if (dist > range) return;
+            if (t.fleeing) {
+                if (blink) {
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.fillRect(centerX + dx * scale - 2, centerY + dy * scale - 2, 4, 4);
+                }
+                return;
+            }
             ctx.fillStyle = '#66cc66';
             ctx.fillRect(centerX + dx * scale - 1.5, centerY + dy * scale - 1.5, 3, 3);
         });
@@ -348,10 +374,10 @@ function updateFullMap() {
         });
     }
 
-    // Freighter traffic
+    // Freighter traffic (escort contracts in cyan)
     if (game.traders) {
         game.traders.forEach(t => {
-            ctx.fillStyle = '#66cc66';
+            ctx.fillStyle = t.isEscort ? '#44ddff' : '#66cc66';
             ctx.beginPath();
             ctx.arc(t.x * scale + offsetX, t.y * scale + offsetY, 3, 0, Math.PI * 2);
             ctx.fill();

@@ -231,6 +231,10 @@ function updateMissionsUI() {
             return `<div class="ledger-row"><span>☠ ${m.name} — near ${m.nearPlanet}</span>
                 <span style="color:#ff6666;">$${m.reward}</span></div>`;
         }
+        if (m.type === 'escort') {
+            return `<div class="ledger-row"><span>⛡ ${m.traderName} → ${m.dest}</span>
+                <span style="color:#44ddff;">$${m.reward}</span></div>`;
+        }
         const have = game.ship.cargo[m.goodType] || 0;
         const ready = have >= m.qty;
         return `<div class="ledger-row"><span>${m.qty} ${goods[m.goodType].name} → ${m.dest}</span>
@@ -252,6 +256,14 @@ function updateMissionBoardUI(planet) {
             <button onclick="acceptBounty()" ${logFull ? 'disabled' : ''}>Hunt</button>
         </div>`;
     }
+    if (planet.escortOffer) {
+        const e = planet.escortOffer;
+        html += `<div class="trade-item" style="border-color:#336688;">
+            <span style="color:#44ddff;">⛡ ESCORT: ${e.traderName} → ${e.dest}<br>
+                <small style="color:#888;">Pirates will come — pays $${e.reward} on safe arrival</small></span>
+            <button onclick="acceptEscort()" ${logFull ? 'disabled' : ''}>Escort</button>
+        </div>`;
+    }
     if (planet.missionOffers && planet.missionOffers.length > 0) {
         html += planet.missionOffers.map(o => `<div class="trade-item">
             <span>${o.qty} ${goods[o.goodType].name} → ${o.dest}<br>
@@ -260,6 +272,53 @@ function updateMissionBoardUI(planet) {
         </div>`).join('');
     }
     el.innerHTML = html || '<div style="color:#666;">No contracts available</div>';
+}
+
+// --- Escort contracts (keep a named freighter alive to its destination) ---
+
+function generateEscortOffer(planet) {
+    planet.escortOffer = null;
+    // One charge at a time, and not every port has a nervous captain
+    const alreadyEscorting = game.missions.some(m => m.type === 'escort');
+    if (alreadyEscorting || Math.random() > 0.45) return;
+
+    const dests = game.planets.filter(p => p !== planet);
+    const dest = dests[Math.floor(Math.random() * dests.length)];
+    const dist = Math.sqrt(Math.pow(dest.x - planet.x, 2) + Math.pow(dest.y - planet.y, 2));
+    planet.escortOffer = {
+        id: `escort-${Date.now()}`,
+        type: 'escort',
+        traderName: TRADER_NAMES[Math.floor(Math.random() * TRADER_NAMES.length)],
+        from: planet.name,
+        dest: dest.name,
+        // Longer routes pay more — the danger scales with the distance
+        reward: 200 + Math.round(dist * 0.5 / 10) * 10
+    };
+}
+
+function acceptEscort() {
+    const planet = game.currentPlanet;
+    if (!planet || !planet.escortOffer) return;
+    if (game.missions.length >= 3) {
+        showHudFeedback('Mission log full (3 contracts max)', 'error');
+        return;
+    }
+    const mission = planet.escortOffer;
+    planet.escortOffer = null;
+    game.missions.push(mission);
+    spawnEscortTrader(mission);
+    showHudFeedback(`⛡ Escort accepted — keep Freighter ${mission.traderName} alive to ${mission.dest}`, 'success', 5000);
+    updateMissionBoardUI(planet);
+    updateMissionsUI();
+}
+
+// After a reload, an accepted escort whose freighter isn't flying respawns
+// it at the origin port (freighters themselves aren't saved)
+function restoreActiveEscorts() {
+    (game.missions || []).filter(m => m.type === 'escort').forEach(m => {
+        const alive = (game.traders || []).some(t => t.escortId === m.id);
+        if (!alive) spawnEscortTrader(m);
+    });
 }
 
 // --- Wanted posters (named Warlord hunts) ---

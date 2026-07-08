@@ -68,6 +68,7 @@ function dock(planet) {
     recordLedger(planet);
     generateMissionOffers(planet);
     generateBountyOffer(planet);
+    generateEscortOffer(planet);
     generateCrewOffers(planet);
     game.combatStreak = 0;
 
