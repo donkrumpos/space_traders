@@ -7,40 +7,64 @@ const ASTEROID_FIELDS = [
     { x: 850, y: 1250, radius: 220, count: 9 }     // near Core World
 ];
 
+function makeAsteroid(field, fieldIndex) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * field.radius;
+    const size = 6 + Math.random() * 10;
+    // Pre-baked lumpy outline so each rock keeps a stable shape
+    const points = [];
+    const vertexCount = 7 + Math.floor(Math.random() * 4);
+    for (let v = 0; v < vertexCount; v++) {
+        points.push({
+            angle: (v / vertexCount) * Math.PI * 2,
+            r: size * (0.7 + Math.random() * 0.5)
+        });
+    }
+    return {
+        fieldIndex,
+        x: field.x + Math.cos(angle) * dist,
+        y: field.y + Math.sin(angle) * dist,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        size,
+        hull: Math.round(size * 4),
+        spin: (Math.random() - 0.5) * 0.01,
+        rotation: Math.random() * Math.PI * 2,
+        points
+    };
+}
+
 function initAsteroids() {
     game.asteroids = [];
     game.drops = [];
-    ASTEROID_FIELDS.forEach(field => {
+    ASTEROID_FIELDS.forEach((field, fieldIndex) => {
         for (let i = 0; i < field.count; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.random() * field.radius;
-            const size = 6 + Math.random() * 10;
-            // Pre-baked lumpy outline so each rock keeps a stable shape
-            const points = [];
-            const vertexCount = 7 + Math.floor(Math.random() * 4);
-            for (let v = 0; v < vertexCount; v++) {
-                points.push({
-                    angle: (v / vertexCount) * Math.PI * 2,
-                    r: size * (0.7 + Math.random() * 0.5)
-                });
-            }
-            game.asteroids.push({
-                x: field.x + Math.cos(angle) * dist,
-                y: field.y + Math.sin(angle) * dist,
-                vx: (Math.random() - 0.5) * 0.3,
-                vy: (Math.random() - 0.5) * 0.3,
-                size,
-                hull: Math.round(size * 4),
-                spin: (Math.random() - 0.5) * 0.01,
-                rotation: Math.random() * Math.PI * 2,
-                points
-            });
+            game.asteroids.push(makeAsteroid(field, fieldIndex));
         }
     });
 }
 
+let asteroidRespawnTimer = 150; // seconds until the first regrowth check
+
 function updateAsteroids(deltaTime) {
     if (!game.asteroids) return;
+
+    // Mined fields slowly regrow — one rock per field every couple of minutes,
+    // capped at the original count, and never in view of the player
+    asteroidRespawnTimer -= deltaTime;
+    if (asteroidRespawnTimer <= 0) {
+        asteroidRespawnTimer = 120 + Math.random() * 60;
+        ASTEROID_FIELDS.forEach((field, fieldIndex) => {
+            const current = game.asteroids.filter(a => a.fieldIndex === fieldIndex).length;
+            const playerDist = Math.sqrt(
+                Math.pow(game.ship.x - field.x, 2) +
+                Math.pow(game.ship.y - field.y, 2)
+            );
+            if (current < field.count && playerDist > field.radius + 400) {
+                game.asteroids.push(makeAsteroid(field, fieldIndex));
+            }
+        });
+    }
     game.asteroids.forEach(a => {
         a.x += a.vx * deltaTime * 60;
         a.y += a.vy * deltaTime * 60;

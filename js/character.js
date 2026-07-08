@@ -128,7 +128,41 @@ class CharacterManager {
         game.isEngaged = this.character.gameState.isEngaged;
         game.currentEvent = this.character.gameState.currentEvent;
 
+        // Apply world state (economy, missions, hazards)
+        this.applyWorldToGame();
+
         console.log("Character data applied to game state");
+    }
+
+    // Restore world state saved alongside the ship. Legacy saves without a
+    // world section keep the freshly initialized world.
+    applyWorldToGame() {
+        const w = this.character.world;
+        if (!w) return;
+
+        if (w.markets) {
+            w.markets.forEach(saved => {
+                const planet = game.planets.find(p => p.name === saved.name);
+                if (planet) {
+                    planet.market = { buy: { ...saved.buy }, sell: { ...saved.sell } };
+                }
+            });
+        }
+        if (w.ledger) economy.ledger = w.ledger;
+        economy.marketEvent = w.marketEvent || null;
+        if (typeof w.eventCooldown === 'number') economy.eventCooldown = w.eventCooldown;
+        game.missions = w.missions || [];
+        game.combatStreak = w.combatStreak || 0;
+        if (w.asteroids && w.asteroids.length > 0) game.asteroids = w.asteroids;
+        if (w.drops) game.drops = w.drops;
+
+        updateLedgerUI();
+        updateMissionsUI();
+
+        // Bounty hunts respawn their target if it wasn't killed before reload
+        if (typeof restoreActiveBounties === 'function') {
+            restoreActiveBounties();
+        }
     }
 
     // Initialize emergency fuel for legacy saves that don't have it
@@ -209,6 +243,22 @@ class CharacterManager {
             isEngaged: game.isEngaged || false,
             currentEvent: game.currentEvent,
             lastPosition: { x: game.ship.x, y: game.ship.y }
+        };
+
+        // World state: economy, missions, combat streak, hazards
+        this.character.world = {
+            markets: game.planets.map(p => ({
+                name: p.name,
+                buy: { ...(p.market ? p.market.buy : {}) },
+                sell: { ...(p.market ? p.market.sell : {}) }
+            })),
+            ledger: JSON.parse(JSON.stringify(economy.ledger)),
+            marketEvent: economy.marketEvent ? { ...economy.marketEvent } : null,
+            eventCooldown: economy.eventCooldown,
+            missions: JSON.parse(JSON.stringify(game.missions || [])),
+            combatStreak: game.combatStreak || 0,
+            asteroids: JSON.parse(JSON.stringify(game.asteroids || [])),
+            drops: JSON.parse(JSON.stringify(game.drops || []))
         };
 
         // Update last played time
