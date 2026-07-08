@@ -590,30 +590,32 @@ const eventActions = {
     investigateDerelict: () => {
         game.ship.fuel -= 50;
 
-        const outcomes = [
-            {
-                probability: 0.4,
-                message: "You board the derelict ship and find valuable technology components!",
-                rewards: { credits: 200 + Math.floor(Math.random() * 300) }
-            },
-            {
-                probability: 0.3,
-                message: "The ship's cargo hold contains rare materials!",
-                rewards: { cargo: { materials: 2 } }
-            },
-            {
-                probability: 0.2,
+        const roll = Math.random();
+        if (roll < 0.45) {
+            // Salvaged cargo: any good, and the message names what you actually found
+            const goodTypes = Object.keys(goods);
+            const goodType = goodTypes[Math.floor(Math.random() * goodTypes.length)];
+            const amount = 2 + Math.floor(Math.random() * 3); // 2-4 units
+            return {
+                message: `The derelict's cargo hold is intact — you salvage ${amount}x ${goods[goodType].name}!`,
+                rewards: { cargo: { [goodType]: amount } }
+            };
+        } else if (roll < 0.7) {
+            const credits = 200 + Math.floor(Math.random() * 300);
+            return {
+                message: `You crack the ship's safe and recover ${credits} credits in hard currency.`,
+                rewards: { credits: credits }
+            };
+        } else if (roll < 0.9) {
+            return {
                 message: "You discover intact emergency fuel reserves!",
                 rewards: { fuel: 100 }
-            },
-            {
-                probability: 0.1,
-                message: "The derelict ship's systems are completely fried. Nothing salvageable remains.",
-                rewards: {}
-            }
-        ];
-
-        return getRandomOutcome(outcomes);
+            };
+        }
+        return {
+            message: "The derelict ship's systems are completely fried. Nothing salvageable remains.",
+            rewards: {}
+        };
     },
 
     accessFuelDepot: () => {
