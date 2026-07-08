@@ -766,6 +766,9 @@ function checkProjectileCollisions() {
                             }
                         }
 
+                        // Tougher ships teach the pilot more (~hull/3 XP)
+                        addXP(enemy.maxHull / 3, enemy.tierName || 'kill');
+
                         // Auto-save on combat victory
                         autoSave('combat_victory');
                     }

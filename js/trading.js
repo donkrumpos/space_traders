@@ -23,6 +23,13 @@ function dock(planet) {
     game.isDocked = true;
     game.currentPlanet = planet;
 
+    // First landfall on a new world is explorer XP
+    const visited = characterManager.character &&
+        characterManager.character.progress.planetsVisited;
+    if (visited && !visited.includes(planet.name)) {
+        addXP(25, 'discovery');
+    }
+
     // Stop the ship
     game.ship.velocity.x = 0;
     game.ship.velocity.y = 0;
@@ -457,6 +464,7 @@ function sellGood(goodType, qty = 1) {
         showHudFeedback(`Sold ${amount} ${goods[goodType].name} for $${totalEarned}`, 'success');
     }
     flashCredits();
+    addXP(totalEarned / 50, 'trade');
 
     updateUI();
     updateBuyingSectionUI(); // Prices moved

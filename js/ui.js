@@ -43,6 +43,18 @@ function showHudFeedback(message, type = 'info', duration = 3000) {
 }
 
 function updateUI() {
+    // Pilot rank + XP toward next promotion
+    const pilot = game.pilot;
+    const rankEl = document.getElementById('pilotRank');
+    if (pilot && rankEl) {
+        const rank = PILOT_RANKS[pilot.rank];
+        const next = PILOT_RANKS[pilot.rank + 1];
+        rankEl.textContent = `${rank.icon} ${rank.title}`;
+        document.getElementById('xpLine').textContent = next
+            ? `XP ${pilot.xp} / ${next.xp}`
+            : `XP ${pilot.xp} — highest rank`;
+    }
+
     document.getElementById('credits').textContent = game.ship.credits;
     const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 

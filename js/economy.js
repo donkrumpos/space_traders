@@ -208,6 +208,7 @@ function completeMissionsAt(planet) {
             flashCredits();
             playBountySound();
             showHudFeedback(`Delivery complete: ${m.qty} ${goods[m.goodType].name} — paid $${m.reward}`, 'success', 5000);
+            addXP(30, 'delivery');
         } else {
             showHudFeedback(`Contract for ${planet.name} needs ${m.qty - have} more ${goods[m.goodType].name}`, 'warning', 4000);
         }

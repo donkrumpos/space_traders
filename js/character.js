@@ -43,6 +43,9 @@ function createDefaultCharacter() {
             systems: { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' }
         },
 
+        // Pilot progression (XP, rank, perks, grudges, crew)
+        pilot: createDefaultPilot(),
+
         // Game progress and statistics
         progress: {
             planetsVisited: [],
@@ -145,6 +148,19 @@ class CharacterManager {
         // Legacy saves predate subsystem damage
         if (!game.ship.systems) {
             game.ship.systems = { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' };
+        }
+
+        // Legacy saves predate the pilot system: commission retroactively from
+        // the stats ledger, so a veteran's first load is a promotion parade
+        let retroXP = 0;
+        if (!this.character.pilot) {
+            this.character.pilot = createDefaultPilot();
+            retroXP = retroactivePilotXP(this.character.progress);
+        }
+        // Same object by reference: pilot state saves without an explicit sync
+        game.pilot = this.character.pilot;
+        if (retroXP > 0) {
+            setTimeout(() => addXP(retroXP, 'service record'), 1200);
         }
 
         // Apply game state
