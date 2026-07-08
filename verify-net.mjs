@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// verify-net.mjs — M1–M3 two-client convergence harness. Contract: docs/PROTOCOL.md.
+// verify-net.mjs — M1–M4 two-client convergence harness. Contract: docs/PROTOCOL.md.
 // Spawns server/server.mjs on a scratch port with a temp SQLite DB, drives
 // chrome-headless-shell pages via puppeteer-core, asserts PASS/FAIL lines,
 // prints VERIFY-NET-PASS n/n (exit 0) or VERIFY-NET-FAIL (exit 1).
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_MJS = path.join(ROOT, 'server', 'server.mjs');
 const SECRET = 'verify';
-const RUN_TIMEOUT_MS = 240000;
+const RUN_TIMEOUT_MS = 360000; // bumped 240s→360s at M4: [combat] adds retry loops (drop RNG, band-size sampling)
 
 const results = [];
 const S = {}; // shared cross-suite state (pages, port, expected xp)
@@ -82,7 +82,12 @@ function chromePath() {
 // `charDoc` extends the localStorage seeding pattern: a full character doc
 // (see seedCharDoc) written before any script runs, so the game boots with
 // seeded cargo/position instead of a blank default character.
-async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = true, charDoc = null } = {}) {
+// `tap` wires a WebSocket message recorder (window.__wsTap) so the harness can
+// observe server messages the client ignores or doesn't store (debug.state
+// replies, drop.taken, enemy.killed) without needing net.js to expose them.
+// `stubPerks` no-ops the perk rank-up overlay (pilot.js) — [combat] kills grant
+// XP past the 60-XP rank-up, and the modal sets game.paused (trap #2).
+async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = true, charDoc = null, tap = false, stubPerks = false } = {}) {
     const context = await (browser.createBrowserContext
         ? browser.createBrowserContext()
         : browser.createIncognitoBrowserContext());
@@ -102,6 +107,31 @@ async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = t
     }
     // Headless safety net: never block on a native dialog.
     await page.evaluateOnNewDocument(() => { window.prompt = () => null; });
+    if (tap) await page.evaluateOnNewDocument(() => {
+        window.__wsTap = [];
+        const Native = window.WebSocket;
+        window.WebSocket = class extends Native {
+            constructor(...args) {
+                super(...args);
+                this.addEventListener('message', ev => {
+                    try {
+                        const m = JSON.parse(ev.data);
+                        // skip the 10Hz firehose; keep the discrete events
+                        if (m && m.t && m.t !== 'world.tick' && m.t !== 'peer.state') {
+                            window.__wsTap.push(m);
+                            if (window.__wsTap.length > 300) window.__wsTap.splice(0, 150);
+                        }
+                    } catch { /* non-JSON frame */ }
+                });
+            }
+        };
+    });
+    if (stubPerks) await page.evaluateOnNewDocument(() => {
+        window.addEventListener('load', () => {
+            window.maybeShowPerkChoice = () => {};
+            window.showPerkChoice = () => {};
+        });
+    });
     // An unnamed ship gets a christening overlay 600ms after load/adopt
     // (character.js applyCharacterToGame) which sets game.paused = true.
     // js/verify.js escapes it via the 'verify' URL substring, which harness
@@ -561,6 +591,363 @@ async function worldSuite(t, { browser, base, wsUrl, restartServer }) {
     t("D's post-restart view matches too", !!dSurvived);
 }
 
+// ---------------------------------------------------------------------------
+// M4 [combat] helpers. All server reads go through the netCombat() console
+// hook (contract: { enemies, drops, lastTickN }); request/reply debug hooks
+// (debug.state) are observed via the __wsTap WebSocket recorder because the
+// client ignores unknown message types by design.
+// ---------------------------------------------------------------------------
+
+function combatView(page) {
+    return page.evaluate(() => {
+        if (typeof netCombat !== 'function') return null;
+        const c = netCombat();
+        if (!c) return null;
+        return {
+            enemies: (c.enemies || []).map(e => ({
+                id: e.id, hull: e.hull, x: e.x, y: e.y,
+                shielded: !!e.shielded, isBandBoss: !!e.isBandBoss,
+                bandId: e.bandId || null, factionName: e.factionName || null,
+                tierName: e.tierName || null,
+            })),
+            drops: (c.drops || []).map(d => ({ id: d.id, kind: d.kind, goodType: d.goodType || null })),
+            lastTickN: c.lastTickN || 0,
+        };
+    });
+}
+
+function claimDamage(page, enemyId, damage) {
+    return page.evaluate((id, d) => net.send({ t: 'damage.claim', enemyId: id, damage: d }), enemyId, damage);
+}
+
+// debug.state round-trip: send, then poll the tap for the
+// { t:'debug.state', state: {enemies, traders, drops, pilots, grudges,
+// simNow, tickN} } reply that arrives after the send (server/combat.mjs,
+// PROTOCOL M4 debug row). Resolves to the inner `state` object.
+async function debugState(page) {
+    const since = await page.evaluate(() => (window.__wsTap || []).length);
+    await page.evaluate(() => net.send({ t: 'debug.state' }));
+    const msg = await until(() => page.evaluate(s => {
+        const hits = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'debug.state' && m.state);
+        return hits.length ? hits[hits.length - 1] : false;
+    }, since), { timeout: 8000 });
+    return (msg && msg.state) || null;
+}
+
+// Send a debug.spawn* message and wait for its debug.spawned ack, matched by
+// the payload field that distinguishes the two hooks (enemyId vs bandId).
+async function debugSpawn(page, msg, ackField) {
+    const since = await page.evaluate(() => (window.__wsTap || []).length);
+    await page.evaluate(o => net.send(o), msg);
+    return await until(() => page.evaluate((s, f) => {
+        const hits = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'debug.spawned' && m[f] != null);
+        return hits.length ? hits[hits.length - 1] : false;
+    }, since, ackField), { timeout: 8000 });
+}
+
+// Spawn an enemy via debug.spawnEnemy; resolves to the page's netCombat view
+// of it (so callers get the synced hull), keyed by the acked enemyId.
+async function spawnEnemyNear(page, x, y, tier) {
+    const ack = await debugSpawn(page, { t: 'debug.spawnEnemy', x, y, tier }, 'enemyId');
+    if (!ack) return null;
+    return await until(async () => {
+        const v = await combatView(page);
+        return (v && v.enemies.find(e => e.id === ack.enemyId)) || false;
+    }, { timeout: 8000 }) || null;
+}
+
+// Spawn a faction band via debug.spawnBand. Size comes from the ack's
+// enemyIds (boss included). waitVisible=false skips the netCombat poll for
+// fast size sampling in the [scaling] test.
+async function spawnBandOf(page, factionName, { waitVisible = true } = {}) {
+    const ack = await debugSpawn(page, { t: 'debug.spawnBand', factionName }, 'bandId');
+    if (!ack || ack.faction !== factionName) return null;
+    const band = {
+        bandId: ack.bandId, bossId: ack.bossId,
+        enemyIds: ack.enemyIds || [], size: (ack.enemyIds || []).length,
+    };
+    if (waitVisible) {
+        const boss = await until(async () => {
+            const v = await combatView(page);
+            return (v && v.enemies.find(e => e.id === ack.bossId)) || false;
+        }, { timeout: 8000 });
+        if (!boss) return null;
+        band.boss = boss;
+    }
+    return band;
+}
+
+// Claim-kill an enemy, re-claiming inside the poll in case the first claim
+// raced a shield/tick boundary. True once the id is gone from the page's view.
+async function killEnemy(page, enemyId, timeout = 12000) {
+    return await until(async () => {
+        await claimDamage(page, enemyId, 999999);
+        const v = await combatView(page);
+        return !!v && !v.enemies.some(e => e.id === enemyId);
+    }, { timeout, every: 400 });
+}
+
+// Suite — M4 shared combat (docs/PROTOCOL.md M4): server-sim enemies/bands/
+// drops/grudges, client damage claims, kill-reward locality, raid scaling,
+// offline transition. Runs on FRESH pilots E and F; retires every earlier
+// page first because raid scaling counts pilots online and enemy AI anchors
+// to connected pilots. Requires VERIFY_DEBUG=1 (debug.spawnEnemy/spawnBand/
+// state) and the client netCombat() hook. Leaves unkilled [scaling] bands in
+// the world — it's the last suite; scratch DB is deleted after the run.
+async function combatSuite(t, { browser, base, wsUrl }) {
+    for (const k of ['A', 'A2', 'B', 'C', 'D', 'O']) {
+        if (S[k]) { await S[k].context.close().catch(() => {}); S[k] = null; }
+    }
+
+    // Empty space far from every planet (cluster is x 500-3000, y 400-2000)
+    // so docking/traffic can't graze the tests; enemies despawn >3000 from the
+    // nearest pilot, so spawns stay within that radius of E. F sits 600 off —
+    // the client AUTO-claims server drops within 26 units (netUpdateServerDrops),
+    // so kills must never land loot on top of either ship.
+    const EX = 8000, EY = 8000;
+    const pageOpts = (shipName, y = EY) => ({
+        charDoc: seedCharDoc({ shipName, x: EX, y }),
+        tap: true, stubPerks: true,
+    });
+    S.E = await newGamePage(browser, 'VerifyE', pageOpts('Verify Cutter'));
+    S.F = await newGamePage(browser, 'VerifyF', pageOpts('Verify Ketch', EY + 600));
+    await S.E.page.goto(`${base}/index.html?pilot=VerifyE&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.F.page.goto(`${base}/index.html?pilot=VerifyF&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('E online', !!(await until(() => S.E.page.evaluate(() => netStatus().online === true))));
+    t('F online', !!(await until(() => S.F.page.evaluate(() => netStatus().online === true))));
+
+    const hook = await until(() => S.E.page.evaluate(() => typeof netCombat === 'function' && !!netCombat()));
+    t('netCombat console hook present', !!hook, 'client missing netCombat() → {enemies,drops,lastTickN}');
+    if (!hook) return;
+
+    // Server enemies WILL engage and fire; own-ship damage is client-
+    // authoritative, so a local god-mode keeps the harness ships alive
+    // without touching anything the suite asserts on.
+    const godMode = page => page.evaluate(() => {
+        game.ship.hullMax = 1e9; game.ship.hull = 1e9;
+        game.ship.shieldMax = 1e9; game.ship.shield = 1e9;
+    });
+    await godMode(S.E.page);
+    await godMode(S.F.page);
+
+    // 1. convergence: a debug-spawned enemy shows up on BOTH clients with the
+    // same id + hull, and ticks are flowing on both.
+    const spawned = await spawnEnemyNear(S.E.page, EX + 350, EY, 'scout');
+    t('debug.spawnEnemy lands in E netCombat', !!spawned, 'no new enemy near the requested spawn point');
+    if (!spawned) return;
+    const eid = spawned.id;
+    const conv = await until(async () => {
+        const e = await combatView(S.E.page);
+        const f = await combatView(S.F.page);
+        const ee = e && e.enemies.find(x => x.id === eid);
+        const fe = f && f.enemies.find(x => x.id === eid);
+        return (ee && fe && ee.hull === fe.hull) ? { hull: ee.hull } : false;
+    }, { timeout: 10000 });
+    t('E and F converge on the enemy (same id, same hull)', !!conv);
+    const eN0 = (await combatView(S.E.page)).lastTickN;
+    const fN0 = (await combatView(S.F.page)).lastTickN;
+    t('ticks advance on E', !!(await until(async () => (await combatView(S.E.page)).lastTickN > eN0, { timeout: 5000 })), `stuck at ${eN0}`);
+    t('ticks advance on F', !!(await until(async () => (await combatView(S.F.page)).lastTickN > fN0, { timeout: 5000 })), `stuck at ${fN0}`);
+    if (!conv) return;
+
+    // 2. damage claim: E's claim reduces the hull F sees (the MULTIPLAYER.md
+    // linchpin). Nothing else damages enemies — the harness never fires.
+    const h0 = conv.hull;
+    await claimDamage(S.E.page, eid, 10);
+    const dropped = await until(async () => {
+        const f = await combatView(S.F.page);
+        const fe = f && f.enemies.find(x => x.id === eid);
+        return !!fe && fe.hull === h0 - 10;
+    }, { timeout: 8000 });
+    t("E's damage.claim drops the hull F sees by 10", !!dropped,
+        `hull F sees: ${JSON.stringify(await S.F.page.evaluate(id => (netCombat().enemies.find(e => e.id === id) || {}).hull, eid))} (want ${h0 - 10})`);
+
+    // 3. kill + reward locality: E lands the kill; enemy leaves both views,
+    // E's credits rise, F's do not. Loot is RNG (60% cargo / 15% powerup on
+    // commons) — assert drop sync only when one actually rolled, else confirm
+    // the kill via debug.state.
+    const credE0 = await S.E.page.evaluate(() => game.ship.credits);
+    const credF0 = await S.F.page.evaluate(() => game.ship.credits);
+    const dropsBefore = new Set(((await combatView(S.E.page)) || { drops: [] }).drops.map(d => d.id));
+    // The enemy has been closing on E since test 1 — step E clear before the
+    // kill so the loot doesn't land inside E's 26-unit auto-claim radius.
+    await S.E.page.evaluate(() => { game.ship.x += 2000; game.ship.velocity.x = 0; game.ship.velocity.y = 0; });
+    const killed = await killEnemy(S.E.page, eid);
+    t('lethal claim removes the enemy from E', !!killed);
+    const goneF = await until(async () => {
+        const f = await combatView(S.F.page);
+        return !!f && !f.enemies.some(e => e.id === eid);
+    }, { timeout: 8000 });
+    t('enemy gone from F too', !!goneF);
+    let dropId = null;
+    const newDrop = await until(async () => {
+        const v = await combatView(S.E.page);
+        return (v && v.drops.find(d => d.id != null && !dropsBefore.has(d.id))) || false;
+    }, { timeout: 4000 });
+    if (newDrop) {
+        dropId = newDrop.id;
+        const dropOnF = await until(async () => {
+            const f = await combatView(S.F.page);
+            return !!f && f.drops.some(d => d.id === dropId);
+        }, { timeout: 6000 });
+        t('kill drop synced to both clients', !!dropOnF);
+    } else {
+        const st = await debugState(S.E.page);
+        t('server confirms the kill via debug.state (no loot rolled)',
+            !!st && !((st.enemies || []).some(e => e.id === eid)), 'enemy still in server state');
+    }
+    const eRose = await until(() => S.E.page.evaluate(b => game.ship.credits > b, credE0), { timeout: 8000 });
+    t("E's credits rose on the kill (enemy.killed reward, client-side)", !!eRose,
+        `credits ${await S.E.page.evaluate(() => game.ship.credits)} (started ${credE0})`);
+    const credF1 = await S.F.page.evaluate(() => game.ship.credits);
+    t("F's credits did NOT rise (kill-reward locality)", credF1 === credF0, `F: ${credF0} → ${credF1}`);
+
+    // 4. drop first-wins: both pilots race drop.claim on the same drop;
+    // exactly one drop.taken lands (one `by`), and the drop leaves both views.
+    for (let i = 0; !dropId && i < 5; i++) {
+        const extra = await spawnEnemyNear(S.E.page, EX + 500, EY + 250, 'scout');
+        if (!extra) break;
+        const before = new Set(((await combatView(S.E.page)) || { drops: [] }).drops.map(d => d.id));
+        await killEnemy(S.E.page, extra.id);
+        const d = await until(async () => {
+            const v = await combatView(S.E.page);
+            return (v && v.drops.find(x => x.id != null && !before.has(x.id))) || false;
+        }, { timeout: 4000 });
+        if (d) dropId = d.id;
+    }
+    t('a loot drop exists to race for', dropId != null, 'no drop rolled across 5 spawn+kill attempts (60%+15% odds each)');
+    if (dropId != null) {
+        const seenByF = await until(async () => {
+            const f = await combatView(S.F.page);
+            return !!f && f.drops.some(d => d.id === dropId);
+        }, { timeout: 6000 });
+        t('the race drop is visible to F', !!seenByF);
+        const sinceE = await S.E.page.evaluate(() => (window.__wsTap || []).length);
+        const sinceF = await S.F.page.evaluate(() => (window.__wsTap || []).length);
+        await Promise.all([
+            S.E.page.evaluate(id => net.send({ t: 'drop.claim', dropId: id }), dropId),
+            S.F.page.evaluate(id => net.send({ t: 'drop.claim', dropId: id }), dropId),
+        ]);
+        const takens = await until(async () => {
+            const [te, tf] = await Promise.all([
+                S.E.page.evaluate((s, id) => (window.__wsTap || []).slice(s).filter(m => m && m.t === 'drop.taken' && m.dropId === id), sinceE, dropId),
+                S.F.page.evaluate((s, id) => (window.__wsTap || []).slice(s).filter(m => m && m.t === 'drop.taken' && m.dropId === id), sinceF, dropId),
+            ]);
+            return (te.length && tf.length) ? { te, tf } : false;
+        }, { timeout: 8000 });
+        t('drop.taken broadcast reached both', !!takens);
+        if (takens) {
+            const bys = new Set([...takens.te, ...takens.tf].map(m => m.by));
+            t(`exactly one claimer won (${[...bys].join(', ') || 'nobody'})`,
+                bys.size === 1 && (bys.has('VerifyE') || bys.has('VerifyF')),
+                `distinct winners: ${JSON.stringify([...bys])}`);
+        }
+        const cleared = await until(async () => {
+            const e = await combatView(S.E.page);
+            const f = await combatView(S.F.page);
+            return !!e && !!f && !e.drops.some(d => d.id === dropId) && !f.drops.some(d => d.id === dropId);
+        }, { timeout: 8000 });
+        t('drop removed from both views after the race', !!cleared);
+    }
+
+    // 5. shared vendetta: E breaks a Void Choir band; F's grudge rises via
+    // grudge.update without F firing a shot. Boss is escort-shielded — kill
+    // the minions first (updateEnemies unshields it once they're gone).
+    const FACTION = 'Void Choir';
+    const g0 = await S.F.page.evaluate(f => (game.pilot.grudges || {})[f] || 0, FACTION);
+    const band = await spawnBandOf(S.E.page, FACTION);
+    t('debug.spawnBand fields a Void Choir band (boss + escort)', !!band && band.size >= 2,
+        band ? `size=${band.size}` : 'no debug.spawned ack / boss never synced');
+    if (band) {
+        for (const id of band.enemyIds.filter(id => id !== band.bossId)) {
+            await killEnemy(S.E.page, id); // minions first — the escort shield eats boss claims
+        }
+        const unshielded = await until(async () => {
+            const v = await combatView(S.E.page);
+            const b = v && v.enemies.find(e => e.id === band.bossId);
+            return !!b && !b.shielded;
+        }, { timeout: 10000 });
+        t('boss unshields once the escort is dead', !!unshielded);
+        const bossDead = await killEnemy(S.E.page, band.bossId);
+        t('E kills the band boss', !!bossDead);
+        const vendetta = await until(() => S.F.page.evaluate((f, g) =>
+            ((game.pilot.grudges || {})[f] || 0) > g, FACTION, g0), { timeout: 10000 });
+        t(`F's ${FACTION} grudge rose without F firing (shared vendetta)`, !!vendetta,
+            `F grudge still ${await S.F.page.evaluate(f => (game.pilot.grudges || {})[f] || 0, FACTION)} (started ${g0})`);
+    }
+
+    // 6. raid scaling: same faction (Iron Shoal — its grudge is untouched, so
+    // the grudge reinforcement term is constant), one pilot vs two. The server
+    // adds +1 minion per extra pilot on top of a 3-or-4 RNG base, so single
+    // samples tie ~50% of the time — compare SUMS of 4 cheap ack-sized spawns
+    // per config instead (residual flake odds (1/16)² ≈ 0.4%).
+    await S.F.context.close().catch(() => {});
+    S.F = null;
+    const fGone = await until(() => S.E.page.evaluate(() => !(netStatus().peers || []).includes('VerifyF')), { timeout: 10000 });
+    t('server down to one pilot (F left peers)', !!fGone);
+    const sampleBands = async n => {
+        const sizes = [];
+        for (let i = 0; i < n; i++) {
+            const b = await spawnBandOf(S.E.page, 'Iron Shoal', { waitVisible: false });
+            if (b) sizes.push(b.size);
+        }
+        return sizes;
+    };
+    const soloSizes = await sampleBands(4);
+    t('bands muster with one pilot online', soloSizes.length === 4 && soloSizes.every(s => s >= 2),
+        `sizes=${JSON.stringify(soloSizes)}`);
+    S.F = await newGamePage(browser, 'VerifyF', pageOpts('Verify Ketch II'));
+    await S.F.page.goto(`${base}/index.html?pilot=VerifyF&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('F back online', !!(await until(() => S.F.page.evaluate(() => netStatus().online === true))));
+    await godMode(S.F.page);
+    await until(() => S.E.page.evaluate(() => (netStatus().peers || []).includes('VerifyF')), { timeout: 10000 });
+    const duoSizes = await sampleBands(4);
+    const sum = a => a.reduce((x, y) => x + y, 0);
+    t(`raid bands scale to pilots online (1p=${JSON.stringify(soloSizes)} 2p=${JSON.stringify(duoSizes)})`,
+        soloSizes.length === 4 && duoSizes.length === 4 && sum(duoSizes) > sum(soloSizes),
+        'two-pilot bands not larger in aggregate');
+    // NOTE: the 8 sampled bands stay alive (unkilled) — acceptable leftovers,
+    // this is the last suite and they feed the reconnect leg below.
+
+    // 7. offline transition: E drops — server enemies clear client-side and
+    // the LOCAL sim takes over; reconnect brings server enemies + ticks back.
+    // (The [scaling] bands keep the server world populated for the return leg;
+    // F stays connected so the server still has a pilot to anchor to.)
+    await S.E.page.evaluate(() => netForceDisconnect());
+    t('E offline', !!(await until(() => S.E.page.evaluate(() => netStatus().online === false))));
+    const serverCleared = await until(async () => {
+        const v = await combatView(S.E.page);
+        return !v || v.enemies.length === 0;
+    }, { timeout: 10000 });
+    t('server enemies cleared from E after disconnect', !!serverCleared);
+    const localSim = await S.E.page.evaluate(async () => {
+        if ((game.enemies || []).some(e => e && e.id != null)) {
+            return { ok: false, why: 'server-id enemies still in game.enemies' };
+        }
+        // prove the local update loop is live again: a pushed local enemy moves
+        const e = CombatCore.makeEnemy('scout', game.ship.x + 900, game.ship.y);
+        game.enemies.push(e);
+        const x0 = e.x, y0 = e.y, a0 = e.angle;
+        await new Promise(r => setTimeout(r, 1200));
+        const moved = Math.hypot(e.x - x0, e.y - y0) > 1 || e.angle !== a0;
+        const i = game.enemies.indexOf(e);
+        if (i !== -1) game.enemies.splice(i, 1); // don't pollute the reconnect
+        return { ok: moved, why: moved ? '' : 'pushed local enemy never updated (local sim not resumed)' };
+    });
+    t('local enemy sim resumes offline', !!localSim.ok, localSim.why);
+    t('no page errors on E across the transition', S.E.errors.length === 0, S.E.errors.slice(0, 2).join(' | '));
+    await S.E.page.evaluate(() => netConnect());
+    t('E back online', !!(await until(() => S.E.page.evaluate(() => netStatus().online === true))));
+    let returned = await until(async () => {
+        const v = await combatView(S.E.page);
+        return !!v && v.enemies.length > 0;
+    }, { timeout: 8000 });
+    if (!returned) returned = await spawnEnemyNear(S.E.page, EX + 300, EY - 200, 'scout');
+    t('server enemies present again after reconnect', !!returned);
+    const nBack = (await combatView(S.E.page)).lastTickN;
+    t('ticks resume after reconnect', !!(await until(async () => (await combatView(S.E.page)).lastTickN > nBack, { timeout: 5000 })), `stuck at ${nBack}`);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -570,7 +957,7 @@ const SUITES = [
     ['offline', offlineSuite],
     ['ghosts', ghostSuite],
     ['world', worldSuite],
-    // M4: ['combat', combatSuite],
+    ['combat', combatSuite],
 ];
 
 // ---------------------------------------------------------------------------

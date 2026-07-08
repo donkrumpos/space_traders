@@ -116,6 +116,50 @@ export function startWorld(broadcastFn) {
     }
 }
 
+// --- M4 accessors: grudges + trader market impact ---------------------------
+// combat.mjs owns the combat sim but grudges and markets are WORLD state
+// (persisted in the snapshot), so mutation goes through here.
+
+export function getGrudges() {
+    return world.grudges;
+}
+
+// Grudge migration (PROTOCOL.md M4): merge a pilot doc's grudges by max.
+// Returns true when anything changed (caller broadcasts grudge.update).
+export function mergeGrudgesMax(map) {
+    if (!map) return false;
+    let changed = false;
+    for (const [faction, val] of Object.entries(map)) {
+        const n = Number(val);
+        if (!Number.isFinite(n)) continue;
+        if (n > (world.grudges[faction] || 0)) {
+            world.grudges[faction] = n;
+            changed = true;
+        }
+    }
+    if (changed) markDirty();
+    return changed;
+}
+
+// Band-boss kill deepens the shared vendetta
+export function bumpGrudge(faction, amount) {
+    if (!faction) return;
+    world.grudges[faction] = (world.grudges[faction] || 0) + amount;
+    markDirty();
+}
+
+// NPC freighter dockings nudge world markets exactly like a player trade
+// (TrafficCore.dockTrader's applyImpact seam). Returns the mutated market
+// (combat.mjs broadcasts market.update) or null on unknown planet.
+export function applyTraderImpact(planetName, goodType, side, qty) {
+    const meta = metaByName.get(planetName);
+    const market = world.markets[planetName];
+    if (!meta || !market) return null;
+    EconomyCore.tradeImpact(market, meta, goodType, side, qty);
+    markDirty();
+    return market;
+}
+
 // --- Snapshot + wire handlers ------------------------------------------------
 
 export function worldSnapshotMessage() {

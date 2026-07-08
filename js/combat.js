@@ -217,27 +217,23 @@ function fireMissile() {
     playMissileSound();
 }
 
-// Combat targets system — three pirate tiers. Danger scales with wealth:
-// a rich trader is a juicy target, so tougher pirates come looking.
-const ENEMY_TIERS = {
-    scout: {
-        name: 'Scout', hull: 30, size: 7, color: '#ff8844',
-        maxThrust: 0.18, maxSpeed: 7, turnSpeed: 0.04,
-        cooldownMin: 1200, cooldownVar: 800, damage: 10, accuracy: 0.75,
-        rewardMin: 80, rewardVar: 80, detectRange: 700
-    },
-    raider: {
-        name: 'Raider', hull: 70, size: 9, color: '#ff4444',
-        maxThrust: 0.15, maxSpeed: 6, turnSpeed: 0.03,
-        cooldownMin: 900, cooldownVar: 600, damage: 16, accuracy: 0.85,
-        rewardMin: 220, rewardVar: 160, detectRange: 850
-    },
-    warlord: {
-        name: 'Warlord', hull: 140, size: 12, color: '#cc44ff',
-        maxThrust: 0.13, maxSpeed: 5.5, turnSpeed: 0.025,
-        cooldownMin: 650, cooldownVar: 350, damage: 24, accuracy: 0.9,
-        rewardMin: 600, rewardVar: 400, detectRange: 1000
-    }
+// Combat targets system — three pirate tiers. The pure sim (tier tables,
+// factories, AI update, damage/kill resolution) lives in js/sim/combat-core.js
+// (shared browser+server, docs/PROTOCOL.md "Combat/traffic sim extraction");
+// this file is the browser adapter: same public names, delegating to
+// CombatCore with game-state args and the real fx implementation below.
+const ENEMY_TIERS = CombatCore.ENEMY_TIERS;
+
+// Real feedback wiring for the shared sim (see combat-core.js fx interface)
+const COMBAT_FX = {
+    floater: (x, y, text, color, size) => spawnFloater(x, y, text, color, size),
+    sparks: (x, y, color) => spawnHitSparks(x, y, color),
+    hud: (text, kind, ms) => showHudFeedback(text, kind, ms),
+    shake: amount => addShake(amount),
+    sound: name => ({
+        laser: playLaserSound, hit: playHitSound,
+        explosion: playExplosionSound, bounty: playBountySound
+    })[name]()
 };
 
 function cargoUnitsCarried() {
@@ -245,57 +241,11 @@ function cargoUnitsCarried() {
 }
 
 function pickEnemyTier() {
-    const wealth = game.ship.credits;
-    const roll = Math.random();
-    if (wealth < 2000) {
-        return roll < 0.85 ? 'scout' : 'raider';
-    } else if (wealth < 6000) {
-        return roll < 0.45 ? 'scout' : (roll < 0.9 ? 'raider' : 'warlord');
-    }
-    return roll < 0.2 ? 'scout' : (roll < 0.65 ? 'raider' : 'warlord');
+    return CombatCore.pickEnemyTier(game.ship.credits);
 }
 
 function makeEnemyFromTier(tierKey, x, y) {
-    const tier = ENEMY_TIERS[tierKey];
-    return {
-        type: 'enemy_ship',
-        tierName: tier.name,
-        x, y,
-        angle: Math.random() * Math.PI * 2,
-        velocity: { x: 0, y: 0 },
-        hull: tier.hull,
-        maxHull: tier.hull,
-        size: tier.size,
-        color: tier.color,
-        maxSpeed: tier.maxSpeed,
-        damage: tier.damage,
-        detectRange: tier.detectRange,
-        reward: tier.rewardMin + Math.random() * tier.rewardVar,
-        lastSpawn: Date.now(),
-        weapons: {
-            fireCooldown: 0,
-            maxCooldown: tier.cooldownMin + Math.random() * tier.cooldownVar,
-            range: 400, // Firing range
-            accuracy: tier.accuracy
-        },
-        thrust: {
-            current: 0,
-            target: 0,
-            maxThrust: tier.maxThrust,
-            acceleration: 0.008
-        },
-        rotation: {
-            current: 0,
-            turnSpeed: tier.turnSpeed
-        },
-        ai: {
-            state: 'patrol',
-            targetDistance: 300,
-            evasionCooldown: 0,
-            strafeDirection: 0,
-            lastDamageHull: tier.hull
-        }
-    };
+    return CombatCore.makeEnemy(tierKey, x, y);
 }
 
 function spawnEnemyShip() {
@@ -320,67 +270,15 @@ function spawnEnemyShip() {
 // fires 3-shot volleys, waits near its "last seen" planet, never despawns.
 function spawnNamedWarlord(bounty) {
     const planet = game.planets.find(p => p.name === bounty.nearPlanet) || game.planets[0];
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 350 + Math.random() * 250;
-
-    const boss = {
-        type: 'enemy_ship',
-        isBoss: true,
-        bountyId: bounty.id,
-        tierName: bounty.name,
-        x: planet.x + Math.cos(angle) * dist,
-        y: planet.y + Math.sin(angle) * dist,
-        angle: Math.random() * Math.PI * 2,
-        velocity: { x: 0, y: 0 },
-        hull: 200,
-        maxHull: 200,
-        size: 14,
-        color: '#ff2266',
-        maxSpeed: 6,
-        damage: 24,
-        detectRange: 1100,
-        reward: bounty.reward,
-        lastSpawn: Date.now(),
-        weapons: {
-            fireCooldown: 0,
-            maxCooldown: 1100,
-            range: 450,
-            accuracy: 0.9,
-            volley: 3 // fires a 3-shot spread
-        },
-        thrust: { current: 0, target: 0, maxThrust: 0.15, acceleration: 0.008 },
-        rotation: { current: 0, turnSpeed: 0.028 },
-        ai: {
-            state: 'patrol',
-            targetDistance: 320,
-            evasionCooldown: 0,
-            strafeDirection: 0,
-            lastDamageHull: 200
-        }
-    };
-
     if (!game.enemies) game.enemies = [];
-    game.enemies.push(boss);
+    game.enemies.push(CombatCore.makeNamedWarlord(bounty, planet));
 }
 
 // --- Pirate faction raid bands ---
 // An authored encounter: 3-4 faction minions escorting a warlord boss.
 // The boss shields up and shadows the fight from long range; only once its
 // escort is dead does it drop shields and engage.
-const PIRATE_FACTIONS = [
-    {
-        name: 'Rustfang Cartel', color: '#ff7744', minionTier: 'scout',
-        bossTitle: 'Fang-Boss', bossNames: ['Gnash', 'Korrode', 'Scrapjaw', 'Old Tetanus']
-    },
-    {
-        name: 'Void Choir', color: '#bb66ff', minionTier: 'raider',
-        bossTitle: 'Choirmaster', bossNames: ['Dirge', 'Hymnal', 'Echo-of-Nine', 'Vesper']
-    },
-    {
-        name: 'Iron Shoal', color: '#88ccff', minionTier: 'raider',
-        bossTitle: 'Shoal-Tyrant', bossNames: ['Undertow', 'Riptide', 'Brack', 'Deepmaw']
-    }
-];
+const PIRATE_FACTIONS = CombatCore.PIRATE_FACTIONS;
 
 let raidBandTimer = 150; // seconds until the first band can muster
 
@@ -398,69 +296,25 @@ function updateRaidBands(deltaTime) {
 // Grudge-weighted faction pick: a broken raid makes that faction likelier
 // to come back for you (weight 1 + grudge each)
 function pickRaidFaction() {
-    const weights = PIRATE_FACTIONS.map(f => 1 + factionGrudge(f.name));
-    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < PIRATE_FACTIONS.length; i++) {
-        roll -= weights[i];
-        if (roll <= 0) return PIRATE_FACTIONS[i];
-    }
-    return PIRATE_FACTIONS[0];
+    return CombatCore.pickRaidFaction((game.pilot && game.pilot.grudges) || {});
 }
 
 function spawnRaidBand() {
-    const faction = pickRaidFaction();
-    const grudge = factionGrudge(faction.name);
-    const bandId = `band-${Date.now()}`;
-    const bandAngle = Math.random() * Math.PI * 2;
-    const bandDist = 1100 + Math.random() * 500;
-    const cx = game.ship.x + Math.cos(bandAngle) * bandDist;
-    const cy = game.ship.y + Math.sin(bandAngle) * bandDist;
+    const band = CombatCore.makeRaidBand(game.ship.x, game.ship.y,
+        (game.pilot && game.pilot.grudges) || {});
 
     if (!game.enemies) game.enemies = [];
+    band.enemies.forEach(e => game.enemies.push(e));
 
-    // Escort: minions in a loose ring, keyed to the faction's colors and name.
-    // Grudges bring reinforcements: +1 minion per 2 grudge, capped at +2.
-    const factionTag = faction.name.split(' ')[0];
-    const minionCount = 3 + (Math.random() < 0.5 ? 1 : 0) + Math.min(2, Math.floor(grudge / 2));
-    for (let i = 0; i < minionCount; i++) {
-        const a = (i / minionCount) * Math.PI * 2;
-        const minion = makeEnemyFromTier(faction.minionTier,
-            cx + Math.cos(a) * 90, cy + Math.sin(a) * 90);
-        minion.bandId = bandId;
-        minion.color = faction.color;
-        minion.tierName = `${factionTag} ${minion.tierName}`;
-        minion.detectRange = 1400; // the band came for YOU — no wandering off
-        game.enemies.push(minion);
-    }
-
-    // The boss trails behind its escort, shields up
-    const bossName = faction.bossNames[Math.floor(Math.random() * faction.bossNames.length)];
-    const boss = makeEnemyFromTier('warlord',
-        cx + Math.cos(bandAngle) * 260, cy + Math.sin(bandAngle) * 260);
-    // Vendetta bosses are tougher and worth more: +15% hull and +20% pay per
-    // grudge level (hull capped at +60%)
-    const bossHull = Math.round(170 * (1 + Math.min(0.6, grudge * 0.15)));
-    Object.assign(boss, {
-        bandId,
-        isBandBoss: true,
-        holdingBack: true,
-        shielded: true,
-        factionName: faction.name,
-        tierName: `${faction.bossTitle} ${bossName}`,
-        color: faction.color,
-        hull: bossHull,
-        maxHull: bossHull,
-        size: 13,
-        reward: (700 + Math.random() * 300) * (1 + grudge * 0.2),
-        detectRange: 1600
-    });
-    boss.weapons.volley = 3;
-    boss.weapons.maxCooldown = 1000;
-    game.enemies.push(boss);
-
-    const vendetta = grudge > 0 ? ` They remember you (grudge ×${grudge}).` : '';
-    showHudFeedback(`⚠ ${faction.name} raid band inbound — ${boss.tierName} won't fight until its escort falls.${vendetta}`, 'warning', 6000);
+    const vendetta = band.grudge > 0 ? ` They remember you (grudge ×${band.grudge}).` : '';
+    showHudFeedback(`⚠ ${band.faction.name} raid band inbound — ${band.boss.tierName} won't fight until its escort falls.${vendetta}`, 'warning', 6000);
     playBountySound();
+}
+
+// True when the M4 net layer is up — net.js loads after this file, so the
+// lookup happens at call time, and solo/?verify (net offline) never branches.
+function combatNetOnline() {
+    return typeof window !== 'undefined' && window.net && window.net.online === true;
 }
 
 function updateEnemies(deltaTime) {
@@ -468,8 +322,28 @@ function updateEnemies(deltaTime) {
         game.enemies = [];
     }
 
-    // Spawn cadence and pack size scale with how tempting a target you are.
-    // Hauling cargo makes you actively hunted.
+    // M4 online: the server owns enemy spawn/AI/band scheduling — the whole
+    // local cadence below is bypassed. game.enemies becomes the extrapolated
+    // server set merged with the client-local exceptions, which KEEP their
+    // local CombatCore AI: named-warlord bounty targets (isBoss — the hunt is
+    // client-local) and escort-ambush raiders (escortAmbush — part of the
+    // client-local escort path). Server enemies carry `id`; locals don't.
+    if (combatNetOnline()) {
+        const locals = game.enemies.filter(e => e.id === undefined);
+        if (locals.length > 0) {
+            const targets = [{ x: game.ship.x, y: game.ship.y, cargoUnits: cargoUnitsCarried() }];
+            const { shots } = CombatCore.updateEnemies(
+                { enemies: locals, targets, traders: game.traders || [] },
+                deltaTime, COMBAT_FX);
+            shots.forEach(shot => game.projectiles.push(shot));
+        }
+        game.enemies = [...window.net.getServerEnemies(), ...locals];
+        return;
+    }
+
+    // Spawn cadence stays caller-owned (browser here, server cadence on the
+    // server). Cadence and pack size scale with how tempting a target you
+    // are. Hauling cargo makes you actively hunted.
     const hasCargo = cargoUnitsCarried() > 0;
     const maxEnemies = (game.ship.credits < 2000 ? 2 : game.ship.credits < 6000 ? 3 : 4) + (hasCargo ? 1 : 0);
     const spawnInterval = hasCargo ? 10000 + Math.random() * 10000 : 15000 + Math.random() * 15000;
@@ -481,204 +355,13 @@ function updateEnemies(deltaTime) {
     // Faction raid bands muster on their own clock
     updateRaidBands(deltaTime);
 
-    // Update enemy AI with realistic physics-based movement
-    game.enemies.forEach(enemy => {
-        // Update weapon cooldown
-        if (enemy.weapons.fireCooldown > 0) {
-            enemy.weapons.fireCooldown -= deltaTime * 1000;
-        }
-
-        // Update evasion cooldown
-        if (enemy.ai.evasionCooldown > 0) {
-            enemy.ai.evasionCooldown -= deltaTime * 1000;
-        }
-
-        // Pick prey: raid bands and bounty bosses came for YOU; common pirates
-        // chase whichever target is closer — the player or a hauling freighter
-        let prey = game.ship;
-        if (!enemy.bandId && !enemy.isBoss && game.traders) {
-            let bestSq = Math.pow(enemy.x - prey.x, 2) + Math.pow(enemy.y - prey.y, 2);
-            game.traders.forEach(t => {
-                if (t.state !== 'traveling') return; // berthed freighters are safe in port
-                const dSq = Math.pow(enemy.x - t.x, 2) + Math.pow(enemy.y - t.y, 2);
-                if (dSq < bestSq) { bestSq = dSq; prey = t; }
-            });
-        }
-
-        const distanceToPlayer = Math.sqrt(
-            Math.pow(enemy.x - prey.x, 2) +
-            Math.pow(enemy.y - prey.y, 2)
-        );
-        const angleToPlayer = Math.atan2(
-            prey.y - enemy.y,
-            prey.x - enemy.x
-        );
-
-        // Check if enemy took damage and trigger evasion
-        if (enemy.hull < enemy.ai.lastDamageHull && enemy.ai.evasionCooldown <= 0) {
-            enemy.ai.state = 'evading';
-            enemy.ai.evasionCooldown = 2000;
-            enemy.ai.strafeDirection = Math.random() < 0.5 ? -1 : 1;
-            enemy.ai.lastDamageHull = enemy.hull;
-        } else if (enemy.hull === enemy.ai.lastDamageHull && enemy.ai.state === 'evading' && enemy.ai.evasionCooldown <= 0) {
-            enemy.ai.state = distanceToPlayer < enemy.detectRange ? 'engage' : 'patrol';
-        }
-
-        // Cargo haulers are worth chasing — pirates smell the goods from further out
-        const effectiveDetectRange = enemy.detectRange + (cargoUnitsCarried() > 0 ? 300 : 0);
-
-        // Band boss: drop shields and engage the moment the last escort dies
-        if (enemy.isBandBoss && enemy.holdingBack) {
-            const escortAlive = game.enemies.some(e => e.bandId === enemy.bandId && !e.isBandBoss);
-            if (!escortAlive) {
-                enemy.holdingBack = false;
-                enemy.shielded = false;
-                spawnFloater(enemy.x, enemy.y - 30, 'SHIELDS DOWN', '#ffff66', 16);
-                showHudFeedback(`⚠ ${enemy.tierName} drops shields and engages!`, 'warning', 4000);
-            }
-        }
-
-        // AI behavior based on state
-        let targetAngle = enemy.angle;
-        let shouldThrust = false;
-
-        if (enemy.ai.state === 'evading') {
-            // Evasive maneuvers: turn perpendicular and thrust away
-            targetAngle = angleToPlayer + (Math.PI / 2 * enemy.ai.strafeDirection);
-            shouldThrust = true;
-        } else if (enemy.holdingBack) {
-            // Shielded boss shadows the fight from long range and never fires
-            if (distanceToPlayer > 950) {
-                targetAngle = angleToPlayer;
-                shouldThrust = true;
-            } else if (distanceToPlayer < 650) {
-                targetAngle = angleToPlayer + Math.PI;
-                shouldThrust = true;
-            } else {
-                targetAngle = angleToPlayer + Math.PI / 2; // drift sideways, looming
-                shouldThrust = false;
-            }
-        } else if (distanceToPlayer < effectiveDetectRange) {
-            enemy.ai.state = 'engage';
-
-            if (distanceToPlayer > enemy.ai.targetDistance) {
-                // Approach player: turn toward player and thrust
-                targetAngle = angleToPlayer;
-                shouldThrust = true;
-            } else if (distanceToPlayer < enemy.ai.targetDistance - 50) {
-                // Too close: turn away and reverse thrust
-                targetAngle = angleToPlayer + Math.PI;
-                shouldThrust = true;
-            } else {
-                // At optimal range: orbit player for strafing shots
-                targetAngle = angleToPlayer + Math.PI / 2;
-                shouldThrust = distanceToPlayer > enemy.ai.targetDistance - 25;
-            }
-        } else {
-            // Patrol: drift with occasional course corrections
-            enemy.ai.state = 'patrol';
-            if (Math.random() < 0.02) {
-                targetAngle = angleToPlayer + (Math.random() - 0.5) * Math.PI;
-                shouldThrust = Math.random() < 0.3;
-            }
-        }
-
-        // Smooth rotation toward target angle
-        let angleDiff = targetAngle - enemy.angle;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-        const turnAmount = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), enemy.rotation.turnSpeed);
-        enemy.rotation.current = turnAmount;
-        enemy.angle += turnAmount;
-
-        // Update thrust with smooth acceleration
-        if (shouldThrust) {
-            enemy.thrust.target = 1.0;
-            if (enemy.thrust.current < enemy.thrust.target) {
-                enemy.thrust.current = Math.min(enemy.thrust.current + enemy.thrust.acceleration, enemy.thrust.target);
-            }
-        } else {
-            enemy.thrust.target = 0.0;
-            if (enemy.thrust.current > enemy.thrust.target) {
-                enemy.thrust.current = Math.max(enemy.thrust.current - enemy.thrust.acceleration * 2, enemy.thrust.target);
-            }
-        }
-
-        // Apply thrust to velocity (like player physics)
-        if (enemy.thrust.current > 0) {
-            const actualThrust = enemy.thrust.maxThrust * enemy.thrust.current;
-            enemy.velocity.x += Math.cos(enemy.angle) * actualThrust;
-            enemy.velocity.y += Math.sin(enemy.angle) * actualThrust;
-        }
-
-        // Apply drag
-        enemy.velocity.x *= 0.99;
-        enemy.velocity.y *= 0.99;
-
-        // Speed limit (per tier — scouts are fast, warlords lumber)
-        const maxSpeed = enemy.maxSpeed;
-        const currentSpeed = Math.sqrt(enemy.velocity.x * enemy.velocity.x + enemy.velocity.y * enemy.velocity.y);
-        if (currentSpeed > maxSpeed) {
-            enemy.velocity.x = (enemy.velocity.x / currentSpeed) * maxSpeed;
-            enemy.velocity.y = (enemy.velocity.y / currentSpeed) * maxSpeed;
-        }
-
-        // Fire at player if weapon is ready and aimed (shielded bosses hold fire)
-        if (enemy.ai.state === 'engage' && !enemy.holdingBack && enemy.weapons.fireCooldown <= 0 && Math.abs(angleDiff) < 0.2) {
-            fireEnemyWeapon(enemy);
-            enemy.weapons.fireCooldown = enemy.weapons.maxCooldown;
-        }
-
-        // Update position
-        enemy.x += enemy.velocity.x * deltaTime * 60;
-        enemy.y += enemy.velocity.y * deltaTime * 60;
-    });
-
-    // Remove enemies that are too far away (bounty bosses never despawn)
-    game.enemies = game.enemies.filter(enemy => {
-        if (enemy.isBoss) return true;
-        const distance = Math.sqrt(
-            Math.pow(enemy.x - game.ship.x, 2) +
-            Math.pow(enemy.y - game.ship.y, 2)
-        );
-        return distance < 3000;
-    });
-}
-
-function fireEnemyWeapon(enemy) {
-    // Bosses fire a fanned volley; regular pirates fire a single shot
-    const shots = enemy.weapons.volley || 1;
-
-    for (let s = 0; s < shots; s++) {
-        // Calculate firing angle with some inaccuracy, plus volley fan spread
-        const baseAngle = enemy.angle;
-        const spread = (1 - enemy.weapons.accuracy) * 0.5; // Convert accuracy to spread
-        const inaccuracy = (Math.random() - 0.5) * spread;
-        const fanOffset = shots > 1 ? (s - (shots - 1) / 2) * 0.12 : 0;
-        const firingAngle = baseAngle + inaccuracy + fanOffset;
-
-        // Create enemy projectile
-        const projectile = {
-            type: 'enemy_laser',
-            source: 'enemy',
-            x: enemy.x,
-            y: enemy.y,
-            velocity: {
-                x: Math.cos(firingAngle) * 600 + enemy.velocity.x * 60, // Inherits enemy velocity too
-                y: Math.sin(firingAngle) * 600 + enemy.velocity.y * 60
-            },
-            damage: enemy.damage, // Per tier
-            range: 350, // Shorter range than player weapons
-            distanceTraveled: 0,
-            color: enemy.color,
-            size: 2,
-            age: 0,
-            maxAge: 583 // 583ms at 600 units/second = 350 unit range
-        };
-
-        game.projectiles.push(projectile);
-    }
+    // AI/movement/band logic runs in the shared core; enemy fire comes back
+    // as projectile objects (the client owns its projectile list)
+    const targets = [{ x: game.ship.x, y: game.ship.y, cargoUnits: cargoUnitsCarried() }];
+    const { shots } = CombatCore.updateEnemies(
+        { enemies: game.enemies, targets, traders: game.traders || [] },
+        deltaTime, COMBAT_FX);
+    shots.forEach(shot => game.projectiles.push(shot));
 }
 
 // Distance from point (px, py) to the segment (x1,y1)-(x2,y2).
@@ -698,10 +381,70 @@ function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
     return Math.sqrt(Math.pow(px - closestX, 2) + Math.pow(py - closestY, 2));
 }
 
+// Kill celebration — streak math, credits, explosion, floaters, sounds,
+// mission close, loot spawning, XP, autosave. Client-authoritative per the
+// M4 authority split, so BOTH kill paths land here: local CombatCore kills
+// (offline sim + client-local bounty bosses) and server-confirmed kills
+// (net.js enemy.killed, which passes grudgeDelta:null because online grudges
+// are server-owned and arrive via grudge.update, and drops:[] because server
+// loot arrives via world.tick).
+function applyKillRewards(enemy, outcome) {
+    // Kill streak: consecutive bounties multiply, up to 3x. Docking resets it.
+    game.combatStreak = (game.combatStreak || 0) + 1;
+    const streakMult = Math.min(1 + 0.25 * (game.combatStreak - 1), 3);
+    const reward = Math.floor(outcome.reward * streakMult);
+    game.ship.credits += reward;
+
+    spawnExplosion(enemy.x, enemy.y, enemy.color,
+        enemy.velocity.x * 60, enemy.velocity.y * 60);
+    const streakTag = streakMult > 1 ? ` ×${streakMult.toFixed(2).replace(/0$/, '')}` : '';
+    spawnFloater(enemy.x, enemy.y - 25, `BOUNTY +$${reward}${streakTag}`, '#00ff88', 18);
+    playExplosionSound();
+    playBountySound();
+    addShake(0.35);
+    flashCredits();
+    if (outcome.bountyId) {
+        // Wanted-poster target down: close out the hunt
+        const bountyIdx = game.missions.findIndex(m => m.id === outcome.bountyId);
+        if (bountyIdx !== -1) game.missions.splice(bountyIdx, 1);
+        updateMissionsUI();
+        spawnFloater(enemy.x, enemy.y - 45, `${enemy.tierName} DOWN`, '#ff6666', 16);
+        showHudFeedback(`☠ BOUNTY CLAIMED: ${enemy.tierName} — $${reward}${streakTag}`, 'success', 5000);
+    } else if (outcome.isBandBoss) {
+        spawnFloater(enemy.x, enemy.y - 45, 'RAID BROKEN', '#ffcc44', 18);
+        showHudFeedback(`☠ RAID BROKEN — ${enemy.tierName} of the ${enemy.factionName || 'pirates'} destroyed! $${reward}${streakTag}`, 'success', 5000);
+        if (outcome.grudgeDelta) recordRaidBroken(outcome.grudgeDelta.faction);
+    } else {
+        showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
+    }
+
+    // Loot rolled by the core lands here (server kills pass none)
+    (outcome.drops || []).forEach(d => {
+        if (d.kind === 'cargo') spawnCargoDrop(d.x, d.y, d.goodType, d.qty);
+        else spawnPowerupDrop(d.x, d.y);
+    });
+
+    // Escort down: count off what stands between you and the boss
+    if (outcome.escortsLeft > 0) {
+        spawnFloater(enemy.x, enemy.y - 45,
+            `${outcome.escortsLeft} ESCORT${outcome.escortsLeft > 1 ? 'S' : ''} LEFT`, '#ffcc66', 14);
+    }
+
+    // Tougher ships teach the pilot more (~hull/3 XP)
+    addXP(outcome.xp, enemy.tierName || 'kill');
+
+    // Auto-save on combat victory
+    autoSave('combat_victory');
+}
+
 function checkProjectileCollisions() {
     for (let i = game.projectiles.length - 1; i >= 0; i--) {
         const projectile = game.projectiles[i];
         let hitSomething = false;
+
+        // Peer-aimed enemy fire (M4) renders as a tracer: pure visual,
+        // collides with nothing, expires by age/range in updateProjectiles.
+        if (projectile.tracer) continue;
 
         // Swept path for this frame (prev position set in updateProjectiles)
         const prevX = projectile.prevX !== undefined ? projectile.prevX : projectile.x;
@@ -725,24 +468,54 @@ function checkProjectileCollisions() {
                 );
 
                 if (distance < hitRadius) {
-                    // Escort shield: shots splash off until the minions are dead
-                    if (enemy.shielded) {
-                        spawnHitSparks(projectile.x, projectile.y, '#66ffff');
-                        if (Math.random() < 0.35) {
-                            spawnFloater(enemy.x, enemy.y - 25, 'SHIELDED — KILL THE ESCORT', '#66ffff', 11);
+                    // Server-owned enemy (M4 online, carries `id`): the hit
+                    // becomes a fire-and-forget damage.claim plus client-
+                    // predicted feedback — sparks/sound now, predicted hull
+                    // dent on the stash object (the next world.tick corrects
+                    // it). Kill celebration WAITS for enemy.killed; nothing
+                    // is removed or rewarded here.
+                    if (enemy.id !== undefined && combatNetOnline()) {
+                        if (enemy.shielded) {
+                            // Mirror the core's escort-shield splash locally;
+                            // no claim — the server would no-op it anyway
+                            spawnHitSparks(projectile.x, projectile.y, '#66ffff');
+                            if (Math.random() < 0.35) {
+                                spawnFloater(enemy.x, enemy.y - 25, 'SHIELDED — KILL THE ESCORT', '#66ffff', 11);
+                            }
+                            playHitSound();
+                        } else {
+                            window.net.send({ t: 'damage.claim', enemyId: enemy.id, damage: projectile.damage });
+                            enemy.hull = Math.max(0, enemy.hull - projectile.damage); // prediction
+                            spawnHitSparks(projectile.x, projectile.y, enemy.color);
+                            playHitSound();
+                            addShake(0.08);
                         }
-                        playHitSound();
+                        if (projectile.pierce) {
+                            if (!projectile.hitTargets) projectile.hitTargets = [];
+                            projectile.hitTargets.push(enemy);
+                            continue;
+                        }
                         game.projectiles.splice(i, 1);
                         hitSomething = true;
                         break;
                     }
 
-                    // Hit!
-                    enemy.hull -= projectile.damage;
+                    // Damage + kill resolution run in the shared core, which
+                    // returns a structured outcome (reward, drops, grudge)
+                    // instead of performing side effects. The celebration
+                    // is the browser's job — credits/XP/streak are
+                    // client-authoritative per the M4 authority split.
+                    const outcome = CombatCore.applyDamage(
+                        game.enemies, enemy, projectile.damage,
+                        projectile.x, projectile.y, COMBAT_FX,
+                        { goodTypes: Object.keys(goods) });
 
-                    spawnHitSparks(projectile.x, projectile.y, enemy.color);
-                    playHitSound();
-                    addShake(0.08);
+                    // Escort shield: shots splashed off (core showed the feedback)
+                    if (outcome.shielded) {
+                        game.projectiles.splice(i, 1);
+                        hitSomething = true;
+                        break;
+                    }
 
                     // Piercing bolts sail on; everything else stops here
                     if (projectile.pierce) {
@@ -753,69 +526,8 @@ function checkProjectileCollisions() {
                         hitSomething = true;
                     }
 
-                    // Check if enemy is destroyed
-                    if (enemy.hull <= 0) {
-                        // Kill streak: consecutive bounties multiply, up to 3x. Docking resets it.
-                        game.combatStreak = (game.combatStreak || 0) + 1;
-                        const streakMult = Math.min(1 + 0.25 * (game.combatStreak - 1), 3);
-                        const reward = Math.floor(enemy.reward * streakMult);
-                        game.ship.credits += reward;
-
-                        spawnExplosion(enemy.x, enemy.y, enemy.color,
-                            enemy.velocity.x * 60, enemy.velocity.y * 60);
-                        const streakTag = streakMult > 1 ? ` ×${streakMult.toFixed(2).replace(/0$/, '')}` : '';
-                        spawnFloater(enemy.x, enemy.y - 25, `BOUNTY +$${reward}${streakTag}`, '#00ff88', 18);
-                        playExplosionSound();
-                        playBountySound();
-                        addShake(0.35);
-                        flashCredits();
-                        if (enemy.bountyId) {
-                            // Wanted-poster target down: close out the hunt
-                            const bountyIdx = game.missions.findIndex(m => m.id === enemy.bountyId);
-                            if (bountyIdx !== -1) game.missions.splice(bountyIdx, 1);
-                            updateMissionsUI();
-                            spawnFloater(enemy.x, enemy.y - 45, `${enemy.tierName} DOWN`, '#ff6666', 16);
-                            showHudFeedback(`☠ BOUNTY CLAIMED: ${enemy.tierName} — $${reward}${streakTag}`, 'success', 5000);
-                        } else if (enemy.isBandBoss) {
-                            spawnFloater(enemy.x, enemy.y - 45, 'RAID BROKEN', '#ffcc44', 18);
-                            showHudFeedback(`☠ RAID BROKEN — ${enemy.tierName} of the ${enemy.factionName} destroyed! $${reward}${streakTag}`, 'success', 5000);
-                            recordRaidBroken(enemy.factionName);
-                        } else {
-                            showHudFeedback(`${enemy.tierName || 'Pirate'} destroyed — bounty $${reward}${streakTag}`, 'success', 2500);
-                        }
-
-                        // Pirates sometimes jettison cargo — fly through to scoop it
-                        // (a band boss always drops its plunder)
-                        if (enemy.isBandBoss || Math.random() < 0.6) {
-                            const goodTypes = Object.keys(goods);
-                            spawnCargoDrop(
-                                enemy.x, enemy.y,
-                                goodTypes[Math.floor(Math.random() * goodTypes.length)],
-                                1 + Math.floor(Math.random() * 3)
-                            );
-                        }
-
-                        // Sometimes their weapon rig survives the blast — grab it
-                        if (enemy.isBandBoss || Math.random() < 0.15) {
-                            spawnPowerupDrop(enemy.x + 20, enemy.y - 10);
-                        }
-
-                        // Remove enemy
-                        game.enemies.splice(j, 1);
-
-                        // Escort down: count off what stands between you and the boss
-                        if (enemy.bandId && !enemy.isBandBoss) {
-                            const left = game.enemies.filter(e => e.bandId === enemy.bandId && !e.isBandBoss).length;
-                            if (left > 0) {
-                                spawnFloater(enemy.x, enemy.y - 45, `${left} ESCORT${left > 1 ? 'S' : ''} LEFT`, '#ffcc66', 14);
-                            }
-                        }
-
-                        // Tougher ships teach the pilot more (~hull/3 XP)
-                        addXP(enemy.maxHull / 3, enemy.tierName || 'kill');
-
-                        // Auto-save on combat victory
-                        autoSave('combat_victory');
+                    if (outcome.killed) {
+                        applyKillRewards(enemy, outcome);
                     }
 
                     if (!projectile.pierce) {
@@ -896,6 +608,9 @@ function checkProjectileCollisions() {
             for (let j = game.traders.length - 1; j >= 0; j--) {
                 const t = game.traders[j];
                 if (t.state !== 'traveling') continue;
+                // Server-owned freighters (M4): the server resolves their
+                // damage in its own sim — a local shot must not kill them
+                if (t.id !== undefined) continue;
                 const distance = pointToSegmentDistance(
                     t.x, t.y, prevX, prevY, projectile.x, projectile.y
                 );

@@ -291,6 +291,17 @@ function render() {
     renderAsteroids(ctx, game.camera);
     renderDrops(ctx, game.camera);
 
+    // M4: server-owned loot drops (world.tick) draw through the same path —
+    // stash entries are shaped exactly like local drops, so borrow
+    // renderDrops wholesale by swapping the list for one call. (Server
+    // enemies/traders need no such hop: net.js hands them to combat.js /
+    // traffic.js, which merge them into game.enemies / game.traders.)
+    if (window.net && window.net.online && typeof window.net.getServerDrops === 'function') {
+        const localDrops = game.drops;
+        game.drops = window.net.getServerDrops();
+        try { renderDrops(ctx, game.camera); } finally { game.drops = localDrops; }
+    }
+
     // Draw NPC freighter traffic
     renderTraders(ctx, game.camera);
 

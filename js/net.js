@@ -1,6 +1,8 @@
-// Client net layer (M1+M2+M3) — pilot handshake, shared saves, offline
+// Client net layer (M1+M2+M3+M4) — pilot handshake, shared saves, offline
 // fallback, ghost presence (send own ship state, track peers' ghosts),
-// shared world (server-authoritative markets, market events, mission boards).
+// shared world (server-authoritative markets, market events, mission boards),
+// shared combat (server-owned enemies/traders/drops via world.tick, damage
+// claims, drop claims, shared grudges).
 // Contract: docs/PROTOCOL.md. Loads after character.js, before verify.js.
 // Solo boot must NEVER block on the network: under ?verify (no ?ws=) this
 // file installs its hooks but never prompts, polls, or opens a socket.
@@ -111,6 +113,30 @@ const net = {
         planet.missionOffers = board ? (board.offers || []).slice() : [];
         const alreadyHunting = (game.missions || []).some(m => m.type === 'bounty');
         planet.bountyOffer = (!alreadyHunting && board) ? (board.bountyOffer || null) : null;
+    },
+    // --- M4: server-owned combat entities ---------------------------------
+    // Persistent, game-shaped objects (same fields the local sim produces, so
+    // render/collision/homing code needs no branches). Positions extrapolate
+    // ghost-style between 10Hz ticks: pos + tick-derived vel * elapsed,
+    // capped at 500ms. The getters mutate x/y in place and return the live
+    // objects — combat.js/traffic.js merge them into game.enemies/game.traders
+    // each frame, so hull predictions and hit feedback land on the same
+    // objects the next tick corrects.
+    serverEnemies: [],
+    serverTraders: [],
+    serverDrops: [],
+    getServerEnemies() {
+        if (!net.online) return [];
+        netExtrapolate(netEnemyMap);
+        return net.serverEnemies;
+    },
+    getServerTraders() {
+        if (!net.online) return [];
+        netExtrapolate(netTraderMap);
+        return net.serverTraders;
+    },
+    getServerDrops() {
+        return net.online ? net.serverDrops : [];
     }
 };
 window.net = net;
@@ -143,6 +169,14 @@ const NET_REQ_TIMEOUT_MS = 5000;       // pending trade/mission requests
 const netPending = new Map();          // reqId -> { resolve, reject, timer, kind }
 const netBoards = new Map();           // planetName -> { offers, bountyOffer }
 let netReqSeq = 0;
+
+// M4 shared combat
+const NET_TICK_EXTRAP_CAP_MS = 500;    // cap dead-reckoning past the last tick
+const NET_DROP_CLAIM_RETRY_MS = 1500;  // re-claim window if drop.taken never lands
+const netEnemyMap = new Map();         // id -> persistent game-shaped enemy
+const netTraderMap = new Map();        // id -> persistent game-shaped trader
+const netDropMap = new Map();          // id -> persistent game-shaped drop
+let netLastTickN = 0;
 
 function netLocalLastPlayed() {
     // First handshake compares against the pre-boot disk value; after we've
@@ -190,6 +224,7 @@ function netGoOffline() {
     net.peers = [];
     netStopSender();
     netGhostMap.clear();
+    netClearServerWorld();
     netRejectAllPending('offline');
     if (net.status !== 'rejected') net.status = 'offline';
     netScheduleRetry();
@@ -212,6 +247,7 @@ function netHandleMessage(msg) {
             netApplySyncRule(msg.doc);
             netSyncedOnce = true;
             netStartSender();
+            netCombatTakeover();
             // world.snapshot is "sent in welcome" — tolerate either an
             // embedded snapshot field or a standalone world.snapshot message
             // right after (handled below). Applied AFTER the sync rule so an
@@ -283,7 +319,25 @@ function netHandleMessage(msg) {
         case 'board.update':
             netApplyBoardUpdate(msg);
             break;
-        // Unknown t: ignored (forward compatibility with M4)
+        // --- M4: shared combat -------------------------------------------
+        case 'world.tick':
+            netApplyWorldTick(msg);
+            break;
+        case 'enemy.hit': {
+            const e = netEnemyMap.get(msg.enemyId);
+            if (e && typeof msg.hull === 'number') e.hull = msg.hull;
+            break;
+        }
+        case 'enemy.killed':
+            netHandleEnemyKilled(msg);
+            break;
+        case 'drop.taken':
+            netHandleDropTaken(msg);
+            break;
+        case 'grudge.update':
+            netApplyGrudges(msg.grudges, false);
+            break;
+        // Unknown t: ignored (forward compatibility)
     }
 }
 
@@ -457,7 +511,10 @@ function netApplySnapshot(snap) {
             if (b) netStashBoard(planet.name, b);
         });
     }
-    if (snap.grudges) net.grudges = snap.grudges; // stashed; applied in M4
+    // Grudges mirror by MAX on snapshot: the server may not have seeded this
+    // pilot's doc yet (char.push races the snapshot), so solo-earned grudges
+    // must survive until grudge.update arrives with the merged truth.
+    if (snap.grudges) netApplyGrudges(snap.grudges, true);
 }
 
 function netApplyMarket(planetName, market) {
@@ -583,6 +640,389 @@ acceptBounty = function() {
     }).catch(() => showHudFeedback('Poster already claimed', 'error'));
 };
 
+// --- M4: shared combat (server-owned enemies, traders, drops, grudges) ------
+// Authority split (PROTOCOL.md): server owns enemy/raid-band/NPC-trader
+// spawn/AI/movement, loot drops, grudges. Client owns its OWN projectiles,
+// hits on its own ship, its credits/XP. Enemy firing decisions arrive as
+// shots-in-tick; the client spawns the visual projectile and resolves damage
+// against its own ship locally. Kill celebration waits for enemy.killed.
+
+// One extrapolation pass over a stash map: pos + tick-derived vel * elapsed
+// (capped), mutating the persistent objects in place. Velocity is derived
+// from consecutive tick positions because the M4 wire carries no vx/vy.
+function netExtrapolate(map) {
+    const now = Date.now();
+    for (const e of map.values()) {
+        const dt = Math.min(now - e._at, NET_TICK_EXTRAP_CAP_MS) / 1000;
+        e.x = e._bx + e._vx * dt;
+        e.y = e._by + e._vy * dt;
+    }
+}
+
+// Update an entry's dead-reckoning base from a fresh tick position. A jump
+// too fast to be flight (server-side respawn/teleport) zeroes the velocity
+// instead of slinging the entity across the sector.
+function netTrackMotion(e, wx, wy, now) {
+    const dtS = (now - e._at) / 1000;
+    if (dtS > 0.01) {
+        const vx = (wx - e._bx) / dtS;
+        const vy = (wy - e._by) / dtS;
+        const tooFast = (vx * vx + vy * vy) > 2000 * 2000;
+        e._vx = tooFast ? 0 : vx;
+        e._vy = tooFast ? 0 : vy;
+    }
+    e._bx = wx; e._by = wy; e._at = now;
+    // velocity in per-frame-at-60fps units, matching local sim objects
+    // (spawnExplosion / shot-inheritance read enemy.velocity * 60)
+    e.velocity.x = e._vx / 60;
+    e.velocity.y = e._vy / 60;
+}
+
+// The M4 enemy wire has no per-shot damage field; infer the tier's damage
+// from tierName (band minions arrive prefixed, e.g. "Rustfang Scout"), then
+// size, defaulting to raider. Cosmetically exact is not required — own-ship
+// damage is client-authoritative and this IS the client's own resolution.
+function netInferEnemyDamage(src) {
+    if (!src) return 16;
+    if (typeof src.damage === 'number') return src.damage;
+    if (src.isBandBoss || src.isBoss) return 24;
+    const name = (src.tierName || '').toLowerCase();
+    if (name.includes('scout')) return 10;
+    if (name.includes('warlord')) return 24;
+    if (name.includes('raider')) return 16;
+    return src.size >= 12 ? 24 : (src.size <= 7 ? 10 : 16);
+}
+
+// Deterministic fallback name when the trader wire omits one — both clients
+// derive the same label from the same id.
+function netTraderNameFor(id) {
+    const s = String(id);
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const names = (typeof TrafficCore !== 'undefined' && TrafficCore.TRADER_NAMES) || ['Freighter'];
+    return names[h % names.length];
+}
+
+function netUpsertEnemy(w, now) {
+    let e = netEnemyMap.get(w.id);
+    if (!e) {
+        e = {
+            id: w.id,
+            type: 'enemy_ship',
+            velocity: { x: 0, y: 0 },
+            // synthesized: render draws the red range ring from weapons.range
+            weapons: { fireCooldown: 0, maxCooldown: 999999, range: 400, accuracy: 1 },
+            _bx: w.x, _by: w.y, _vx: 0, _vy: 0, _at: now
+        };
+        netEnemyMap.set(w.id, e);
+    } else {
+        netTrackMotion(e, w.x, w.y, now);
+    }
+    e.x = w.x; e.y = w.y;
+    e.angle = w.angle || 0;
+    e.hull = w.hull;            // authoritative — corrects client prediction
+    e.maxHull = w.maxHull;
+    e.tierName = w.tierName;
+    e.color = w.color;
+    e.size = w.size;
+    e.bandId = w.bandId || null;
+    e.isBandBoss = !!w.isBandBoss;
+    e.shielded = !!w.shielded;
+    e.factionName = w.factionName || null;
+    e.isBoss = !!w.isBoss;
+    if (typeof w.damage === 'number') e.damage = w.damage;
+    return e;
+}
+
+function netUpsertTrader(w, now) {
+    let t = netTraderMap.get(w.id);
+    if (!t) {
+        t = {
+            id: w.id,
+            velocity: { x: 0, y: 0 },
+            // synthesized fields the render path reads but the wire omits:
+            // full hull hides the health bar; no goodType = no cargo glow
+            hull: 60, maxHull: 60, size: 10,
+            goodType: null, qty: 0, fleeing: false,
+            _bx: w.x, _by: w.y, _vx: 0, _vy: 0, _at: now
+        };
+        netTraderMap.set(w.id, t);
+    } else {
+        netTrackMotion(t, w.x, w.y, now);
+    }
+    t.x = w.x; t.y = w.y;
+    t.angle = w.angle || 0;
+    t.state = w.state;
+    t.color = w.color;
+    t.isEscort = !!w.isEscort;
+    t.fleeing = !!w.fleeing; // additive tick field — feeds the distress ping
+    t.name = w.name || t.name || netTraderNameFor(w.id);
+    return t;
+}
+
+function netUpsertDrop(w) {
+    let d = netDropMap.get(w.id);
+    if (!d) {
+        d = {
+            id: w.id,
+            vx: 0, vy: 0,
+            life: 30 // cosmetic only (fade threshold is <5); server owns expiry
+        };
+        if (w.kind === 'powerup') {
+            d.kind = 'powerup';
+            // The wire carries no powerType; each client rolls its own flavor
+            // (color pre-claim is cosmetic; the claimer's roll is what lands)
+            d.powerType = (typeof randomPowerupType === 'function')
+                ? randomPowerupType() : 'wave';
+        }
+        netDropMap.set(w.id, d);
+    }
+    d.x = w.x; d.y = w.y;
+    d.goodType = w.goodType || d.goodType || null;
+    d.amount = w.qty || d.amount || 1;
+    return d;
+}
+
+function netApplyWorldTick(msg) {
+    if (!net.online) return;
+    netLastTickN = msg.n || netLastTickN;
+    const now = Date.now();
+
+    const seenE = new Set();
+    (msg.enemies || []).forEach(w => {
+        if (!w || w.id === undefined) return;
+        seenE.add(w.id);
+        netUpsertEnemy(w, now);
+    });
+    for (const id of [...netEnemyMap.keys()]) {
+        if (!seenE.has(id)) netRemoveServerEnemy(id); // quiet (kills come via enemy.killed)
+    }
+
+    const seenT = new Set();
+    (msg.traders || []).forEach(w => {
+        if (!w || w.id === undefined) return;
+        seenT.add(w.id);
+        netUpsertTrader(w, now);
+    });
+    for (const id of [...netTraderMap.keys()]) {
+        if (!seenT.has(id)) netTraderMap.delete(id);
+    }
+
+    const seenD = new Set();
+    (msg.drops || []).forEach(w => {
+        if (!w || w.id === undefined) return;
+        seenD.add(w.id);
+        netUpsertDrop(w);
+    });
+    for (const id of [...netDropMap.keys()]) {
+        if (!seenD.has(id)) netDropMap.delete(id); // expired or taken elsewhere
+    }
+
+    net.serverEnemies = [...netEnemyMap.values()];
+    net.serverTraders = [...netTraderMap.values()];
+    net.serverDrops = [...netDropMap.values()];
+
+    (msg.shots || []).forEach(netSpawnEnemyShot);
+}
+
+// Enemy fire event → projectile. Fire aimed at THIS pilot is a real
+// enemy_laser (own-ship damage resolves locally, client-authoritative).
+// Fire aimed at a peer renders as a collisionless tracer — same visual,
+// zero damage, skipped by every collision branch.
+function netSpawnEnemyShot(s) {
+    if (typeof game === 'undefined' || !game.projectiles) return;
+    const mine = s.targetPilot === netIdentity.pilot;
+    const src = netEnemyMap.get(s.enemyId);
+    const angle = s.angle || 0;
+    const proj = {
+        type: 'enemy_laser',
+        source: 'enemy',
+        enemyId: s.enemyId,
+        x: s.x, y: s.y,
+        angle,
+        velocity: {
+            x: Math.cos(angle) * 600 + (src ? src.velocity.x * 60 : 0),
+            y: Math.sin(angle) * 600 + (src ? src.velocity.y * 60 : 0)
+        },
+        damage: mine ? ((typeof s.damage === 'number') ? s.damage : netInferEnemyDamage(src)) : 0,
+        range: 350,
+        distanceTraveled: 0,
+        color: s.color || (src && src.color) || '#ff4444',
+        size: 2,
+        age: 0,
+        maxAge: 583
+    };
+    if (!mine) proj.tracer = true;
+    game.projectiles.push(proj);
+}
+
+function netRemoveServerEnemy(id) {
+    const e = netEnemyMap.get(id);
+    if (!e) return null;
+    netEnemyMap.delete(id);
+    // Rebuild NOW, not at the next tick — combat.js re-merges
+    // net.serverEnemies into game.enemies every frame, and a killed enemy
+    // must not haunt the sector for 100ms after its explosion.
+    net.serverEnemies = [...netEnemyMap.values()];
+    if (typeof game !== 'undefined' && game.enemies) {
+        const gi = game.enemies.indexOf(e);
+        if (gi !== -1) game.enemies.splice(gi, 1);
+    }
+    return e;
+}
+
+// Server-confirmed kill. The killer gets the FULL celebration through the
+// same combat.js path as local kills (streak math, credits, XP, mission UI);
+// everyone else gets the explosion and a modest floater — no credits, no XP.
+// grudgeDelta stays null here: grudges are server-owned online and arrive
+// via grudge.update (calling recordRaidBroken too would double-count).
+function netHandleEnemyKilled(msg) {
+    const e = netRemoveServerEnemy(msg.enemyId);
+
+    // Drops that ride the kill message get stashed immediately (idempotent
+    // by id — the next world.tick carries the same entries).
+    (msg.drops || []).forEach(d => {
+        if (d && d.id !== undefined) netUpsertDrop(d);
+    });
+    net.serverDrops = [...netDropMap.values()];
+
+    if (typeof game === 'undefined' || !game.ship) return;
+
+    if (msg.by === netIdentity.pilot) {
+        const kill = e || {
+            x: game.ship.x, y: game.ship.y, color: '#ff4444',
+            velocity: { x: 0, y: 0 }, maxHull: 60, tierName: null,
+            isBandBoss: false, bandId: null
+        };
+        // Escorts left in the band, counted from what the stash still holds
+        let escortsLeft = null;
+        if (kill.bandId && !kill.isBandBoss) {
+            escortsLeft = 0;
+            for (const o of netEnemyMap.values()) {
+                if (o.bandId === kill.bandId && !o.isBandBoss) escortsLeft++;
+            }
+        }
+        if (typeof applyKillRewards === 'function') {
+            applyKillRewards(kill, {
+                reward: msg.reward || 0,
+                xp: (kill.maxHull || 60) / 3,
+                drops: [],          // server loot arrives via the tick, not local spawns
+                bountyId: null,     // named-warlord hunts stay client-local
+                isBandBoss: !!kill.isBandBoss,
+                grudgeDelta: null,  // server-owned; grudge.update is the truth
+                escortsLeft
+            });
+        }
+    } else if (e) {
+        if (typeof spawnExplosion === 'function') {
+            spawnExplosion(e.x, e.y, e.color, e.velocity.x * 60, e.velocity.y * 60);
+        }
+        if (typeof spawnFloater === 'function') {
+            spawnFloater(e.x, e.y - 25, `☠ ${msg.by}`, '#8899aa', 13);
+        }
+    }
+}
+
+// Fly-through claim pass for server drops — runs from the updateDrops shadow
+// below, so it shares the frame cadence of local drop scooping. First claim
+// wins server-side; drop.taken settles it. A full hold never claims cargo
+// (the claimer applies the pickup, so claiming what you can't scoop would
+// vaporize the crate for everyone).
+function netUpdateServerDrops() {
+    if (typeof game === 'undefined' || !game.ship) return;
+    const now = Date.now();
+    for (const d of netDropMap.values()) {
+        const dx = d.x - game.ship.x;
+        const dy = d.y - game.ship.y;
+        if (dx * dx + dy * dy >= 26 * 26) continue;
+        if (d._claimedAt && now - d._claimedAt < NET_DROP_CLAIM_RETRY_MS) continue;
+        if (d.kind !== 'powerup') {
+            const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+            if (game.ship.cargoMax - cargoUsed <= 0) continue;
+        }
+        d._claimedAt = now;
+        net.send({ t: 'drop.claim', dropId: d.id });
+    }
+}
+
+function netHandleDropTaken(msg) {
+    const d = netDropMap.get(msg.dropId);
+    netDropMap.delete(msg.dropId);
+    net.serverDrops = [...netDropMap.values()];
+    if (!d || typeof game === 'undefined' || !game.ship) return;
+    if (msg.by !== netIdentity.pilot) return; // someone else scooped it
+
+    if (d.kind === 'powerup') {
+        activatePowerup(d.powerType || (typeof randomPowerupType === 'function'
+            ? randomPowerupType() : 'wave'));
+        return;
+    }
+    // Same semantics as the local scoop path in world.js updateDrops:
+    // space-capped pickup, floater + sound, missions refresh. Overflow is
+    // lost (first claim wins) — which the claim gate above makes rare.
+    const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+    const taken = Math.min(Math.max(game.ship.cargoMax - cargoUsed, 0), d.amount || 1);
+    if (taken <= 0) return;
+    game.ship.cargo[d.goodType] = (game.ship.cargo[d.goodType] || 0) + taken;
+    spawnFloater(d.x, d.y - 12, `+${taken} ${goods[d.goodType].name}`, goods[d.goodType].color);
+    playPickupSound();
+    updateMissionsUI();
+}
+
+// Mirror shared grudges into game.pilot.grudges. Direct assignment on
+// grudge.update (server is authority); max-merge on snapshot (see
+// netApplySnapshot). Solo play keeps working offline from the mirrored copy.
+function netApplyGrudges(grudges, seedByMax) {
+    if (!grudges) return;
+    net.grudges = grudges;
+    if (typeof game === 'undefined' || !game.pilot || !game.pilot.grudges) return;
+    const g = game.pilot.grudges;
+    Object.keys(grudges).forEach(f => {
+        g[f] = seedByMax ? Math.max(g[f] || 0, grudges[f] || 0) : grudges[f];
+    });
+    if (typeof updateFactionUI === 'function') updateFactionUI();
+}
+
+// Reconnect: the local sim stops cleanly — quiet despawn (no explosions) of
+// local sim entities. Survivors: named-warlord bounty targets (client-local
+// hunts, isBoss), escort-ambush raiders (escortAmbush, tagged in traffic.js),
+// and isEscort traders. Server entities flow in on the next world.tick.
+function netCombatTakeover() {
+    if (typeof game === 'undefined') return;
+    if (game.enemies) {
+        game.enemies = game.enemies.filter(e =>
+            e.id !== undefined || e.isBoss || e.escortAmbush);
+    }
+    if (game.traders) {
+        game.traders = game.traders.filter(t => t.isEscort);
+    }
+}
+
+// Disconnect: server entities fade out quietly (no explosions, no bounty) and
+// the local sim resumes on its own spawn cadence next frame.
+function netClearServerWorld() {
+    if (typeof game !== 'undefined') {
+        if (game.enemies) game.enemies = game.enemies.filter(e => e.id === undefined);
+        if (game.traders) game.traders = game.traders.filter(t => t.id === undefined);
+        if (game.projectiles) game.projectiles = game.projectiles.filter(p => !p.tracer);
+    }
+    netEnemyMap.clear();
+    netTraderMap.clear();
+    netDropMap.clear();
+    net.serverEnemies = [];
+    net.serverTraders = [];
+    net.serverDrops = [];
+    netLastTickN = 0;
+}
+
+// Server-drop claim pass rides the same frame cadence as local drop scooping.
+// Instance-shadow pattern (like startMarketEvent): world.js is not edited.
+const netOrigUpdateDrops = updateDrops;
+updateDrops = function(deltaTime) {
+    netOrigUpdateDrops(deltaTime);
+    if (net.online) netUpdateServerDrops();
+};
+
 function netManualConnect() {
     netSuppressUntil = 0;
     netRejected = false;
@@ -609,6 +1049,24 @@ window.netWorld = function() {
         },
         marketEvent: (typeof economy !== 'undefined') ? economy.marketEvent : null,
         boardFor(planetName) { return netBoards.get(planetName) || null; }
+    };
+};
+
+window.netCombat = function() {
+    return {
+        enemies: net.getServerEnemies().map(e => ({
+            id: e.id, x: e.x, y: e.y, hull: e.hull, maxHull: e.maxHull,
+            tierName: e.tierName, bandId: e.bandId, isBandBoss: e.isBandBoss,
+            shielded: e.shielded, factionName: e.factionName, isBoss: e.isBoss
+        })),
+        traders: net.getServerTraders().map(t => ({
+            id: t.id, x: t.x, y: t.y, state: t.state, name: t.name, isEscort: t.isEscort
+        })),
+        drops: net.getServerDrops().map(d => ({
+            id: d.id, x: d.x, y: d.y, kind: d.kind || 'cargo',
+            goodType: d.goodType, qty: d.amount
+        })),
+        lastTickN: netLastTickN
     };
 };
 

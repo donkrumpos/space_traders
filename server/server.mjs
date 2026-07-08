@@ -1,5 +1,6 @@
-// M1+M2+M3 multiplayer server: handshake + shared saves + ghost relay +
-// world authority (markets/events/mission boards) per docs/PROTOCOL.md.
+// M1+M2+M3+M4 multiplayer server: handshake + shared saves + ghost relay +
+// world authority (markets/events/mission boards) + combat authority
+// (enemies/raid bands/traffic/drops/grudges) per docs/PROTOCOL.md.
 // ws over plain node:http, bound to 127.0.0.1 (Apache proxies in prod).
 // Optional static serving when STATIC_DIR is set (dev + verify-net).
 import http from 'node:http';
@@ -9,6 +10,10 @@ import { WebSocketServer } from 'ws';
 import { getPilot, savePilot, closeDb } from './db.mjs';
 import config from './config.mjs';
 import { startWorld, worldSnapshotMessage, handleWorldMessage, flushWorld } from './world.mjs';
+import {
+    startCombat, handleCombatMessage,
+    combatPilotConnected, combatPilotDoc, combatPilotState, combatPilotLeft
+} from './combat.mjs';
 
 const PORT = Number(process.env.PORT) || 8378;
 const FAMILY_SECRET = process.env.FAMILY_SECRET || 'dev-secret';
@@ -98,16 +103,20 @@ wss.on('connection', (ws) => {
             ws.pilot = name;
             pilots.set(name, ws);
             const stored = getPilot(name);
+            const storedDoc = stored ? JSON.parse(stored.doc) : null;
             send(ws, {
                 t: 'welcome',
                 pilot: name,
-                doc: stored ? JSON.parse(stored.doc) : null,
+                doc: storedDoc,
                 peers: [...pilots.keys()].filter(p => p !== name),
                 config
             });
             // World state follows immediately as its own message (documented
             // choice in PROTOCOL.md — welcome itself stays M1-shaped).
             send(ws, worldSnapshotMessage());
+            // M4: presence for enemy targeting + grudge migration off the
+            // stored doc (merge-by-max, broadcasts grudge.update on change)
+            combatPilotConnected(name, storedDoc);
             broadcastToOthers(name, { t: 'peer.join', pilot: name });
             log(`connect: ${name} (${pilots.size} online)`);
             return;
@@ -119,11 +128,15 @@ wss.on('connection', (ws) => {
             if (!msg.doc) return;
             const updated = savePilot(ws.pilot, JSON.stringify(msg.doc));
             send(ws, { t: 'char.saved', updated });
+            // M4: refresh credits/cargo cache + grudge merge-by-max
+            combatPilotDoc(ws.pilot, msg.doc);
             log(`save: ${ws.pilot}`);
             return;
         }
 
         if (msg.t === 'ship.state') {
+            // M4: latest position feeds enemy AI targeting
+            combatPilotState(ws.pilot, msg);
             // M2: relay to everyone else, pilot stamped from the handshake
             // (never trust a pilot field in the payload). Fields whitelisted,
             // no persistence, no logging (arrives at up to 10Hz).
@@ -142,12 +155,16 @@ wss.on('connection', (ws) => {
         // M3: trade / dock / mission.take / debug.* (VERIFY_DEBUG-gated)
         if (handleWorldMessage(ws, msg, send)) return;
 
-        // Unknown t: ignore (forward compatibility with M4)
+        // M4: damage.claim / drop.claim / debug.* (VERIFY_DEBUG-gated)
+        if (handleCombatMessage(ws, msg, send)) return;
+
+        // Unknown t: ignore (forward compatibility with M5+)
     });
 
     ws.on('close', () => {
         if (ws.pilot && pilots.get(ws.pilot) === ws) {
             pilots.delete(ws.pilot);
+            combatPilotLeft(ws.pilot);
             broadcastToOthers(ws.pilot, { t: 'peer.leave', pilot: ws.pilot });
             log(`disconnect: ${ws.pilot} (${pilots.size} online)`);
         }
@@ -157,6 +174,7 @@ wss.on('connection', (ws) => {
 });
 
 startWorld(broadcastAll);
+startCombat(broadcastAll);
 
 httpServer.listen(PORT, '127.0.0.1', () => {
     log(`space-traders server on ws://127.0.0.1:${PORT}${STATIC_DIR ? ` (static: ${STATIC_DIR})` : ''}`);
