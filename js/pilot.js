@@ -51,6 +51,7 @@ function addXP(amount, label) {
 function celebratePromotion(rank) {
     playBountySound();
     addShake(0.3);
+    updateCrewPanelUI(); // a promotion can open a crew berth
     spawnFloater(game.ship.x, game.ship.y - 60, 'PROMOTED', '#ffdd44', 20);
 
     const old = document.getElementById('promotionBanner');

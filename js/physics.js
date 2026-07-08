@@ -52,7 +52,8 @@ function update() {
         const fuelEfficiency = 1 - (game.ship.upgrades.engine - 1) * 0.1; // 10% better per level
         const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
         const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency)
-            * (hasPerk('fuel_sipper') ? 0.8 : 1);
+            * (hasPerk('fuel_sipper') ? 0.8 : 1)
+            * (crewHasRole('navigator') ? 0.85 : 1);
 
         if (game.ship.fuel > 0) {
             // Consume main fuel first
@@ -122,6 +123,7 @@ function update() {
     updateDrops(deltaTime);
     updatePowerup(deltaTime);
     updateTraffic(deltaTime);
+    updateCrew(deltaTime);
 
     updateUI();
     updateMaps();

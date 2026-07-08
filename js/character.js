@@ -163,6 +163,7 @@ class CharacterManager {
         if (!game.pilot.crew) game.pilot.crew = [];
         reapplyPerkEffects();
         updateFactionUI();
+        updateCrewPanelUI();
         if (retroXP > 0) {
             setTimeout(() => addXP(retroXP, 'service record'), 1200);
         } else if (game.pilot.pendingPerkChoices > 0) {

@@ -68,6 +68,7 @@ function dock(planet) {
     recordLedger(planet);
     generateMissionOffers(planet);
     generateBountyOffer(planet);
+    generateCrewOffers(planet);
     game.combatStreak = 0;
 
     // Populate trading interface
@@ -105,6 +106,9 @@ function updateTradingInterface(planet) {
 
     // Update mission board
     updateMissionBoardUI(planet);
+
+    // Update crew-for-hire section
+    updateCrewSectionUI(planet);
 
     // Update upgrades section
     updateUpgradesUI(planet);

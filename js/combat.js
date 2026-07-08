@@ -139,6 +139,30 @@ function fireLaser() {
         });
     }
 
+    // Tail Gunner crew covers your six with every other volley
+    if (crewHasRole('gunner')) {
+        game.gunnerToggle = !game.gunnerToggle;
+        if (game.gunnerToggle) {
+            const rearAngle = game.ship.angle + Math.PI;
+            game.projectiles.push({
+                type: 'laser',
+                x: game.ship.x + Math.cos(rearAngle) * 12,
+                y: game.ship.y + Math.sin(rearAngle) * 12,
+                velocity: {
+                    x: Math.cos(rearAngle) * 800 + game.ship.velocity.x * 60,
+                    y: Math.sin(rearAngle) * 800 + game.ship.velocity.y * 60
+                },
+                damage: Math.round(shotDamage * 0.7),
+                range: shotRange,
+                distanceTraveled: 0,
+                color: '#ff8866',
+                size: Math.max(2, shotSize - 1),
+                age: 0,
+                maxAge: 1500
+            });
+        }
+    }
+
     lasers.cooldown = spec.cooldown * (hasPerk('gunners_instinct') ? 0.85 : 1);
 
     // Muzzle flash + pew

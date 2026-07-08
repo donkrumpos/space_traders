@@ -130,6 +130,61 @@ VERIFY_SUITES.factions = (assert) => {
     updateFactionUI();
 };
 
+VERIFY_SUITES.crew = (assert) => {
+    const pilot = game.pilot;
+    pilot.crew = [];
+
+    // Berths gate on rank
+    pilot.rank = 0;
+    assert('no berths below Pilot rank', crewSlots() === 0);
+    pilot.rank = 2;
+    assert('one berth at Pilot', crewSlots() === 1);
+    pilot.rank = 5;
+    assert('two berths at Captain', crewSlots() === 2);
+
+    // Hiring through a station offer
+    const planet = game.planets[0];
+    planet.crewOffers = [{ id: 'crew-test-1', name: 'Sparks', quirk: 'test', role: 'engineer', cost: 900 }];
+    game.currentPlanet = planet;
+    const credits = game.ship.credits = 2000;
+    hireCrew('crew-test-1');
+    assert('hire deducts cost and signs crew',
+        game.ship.credits === credits - 900 && crewHasRole('engineer'));
+    assert('crew persists in save',
+        JSON.parse(characterManager.exportCharacter()).pilot.crew.some(c => c.name === 'Sparks'));
+    assert('crew panel lists the hire',
+        document.getElementById('crewPanel').style.display === 'block' &&
+        document.getElementById('crewList').textContent.includes('Sparks'));
+
+    // Engineer auto-repairs after 10 uninterrupted seconds
+    game.ship.systems.engines = 'damaged';
+    game.crewRepairTimer = 0;
+    updateCrew(9);
+    assert('engineer still working at 9s', game.ship.systems.engines === 'damaged');
+    updateCrew(1.5);
+    assert('engineer fixes at 10s', game.ship.systems.engines === 'ok');
+
+    // Tail gunner fires a rear bolt every other volley
+    pilot.crew.push({ name: 'Moth', role: 'gunner', quirk: 'test' });
+    game.projectiles = [];
+    game.gunnerToggle = false;
+    game.ship.weapons.lasers.cooldown = 0;
+    game.ship.weapons.lasers.heat = 0;
+    game.ship.weapons.lasers.overheated = false;
+    fireLaser();
+    const withRear = game.projectiles.length;
+    game.projectiles = [];
+    game.ship.weapons.lasers.cooldown = 0;
+    fireLaser();
+    assert('gunner alternates rear bolts', withRear === game.projectiles.length + 1);
+
+    // Dismissal frees the berth
+    dismissCrew(0);
+    assert('dismiss frees the role', !crewHasRole('engineer'));
+    pilot.crew = [];
+    game.currentPlanet = null;
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

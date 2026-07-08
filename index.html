@@ -47,6 +47,11 @@
                 </div>
             </div>
 
+            <div class="panel" id="crewPanel" style="display: none;">
+                <h3>Crew</h3>
+                <div id="crewList"></div>
+            </div>
+
             <div class="panel" id="factionPanel" style="display: none;">
                 <h3>Reputation</h3>
                 <div id="factionList"></div>
@@ -97,6 +102,11 @@
                     <strong style="color: #00ffff;">Mission Board:</strong>
                 </div>
                 <div id="missionBoard"></div>
+
+                <div style="margin: 15px 0;">
+                    <strong style="color: #00ffff;">Crew for Hire:</strong>
+                </div>
+                <div id="crewSection"></div>
 
                 <div style="margin: 15px 0;">
                     <strong style="color: #00ffff;">Station Services:</strong>
@@ -187,6 +197,7 @@
     <script src="js/effects.js"></script>
     <script src="js/combat.js"></script>
     <script src="js/pilot.js"></script>
+    <script src="js/crew.js"></script>
     <script src="js/character.js"></script>
     <script src="js/verify.js"></script>
     <script>
