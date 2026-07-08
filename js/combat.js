@@ -449,16 +449,25 @@ function updateEnemies(deltaTime) {
             enemy.ai.evasionCooldown -= deltaTime * 1000;
         }
 
-        // Calculate distance to player
-        const distanceToPlayer = Math.sqrt(
-            Math.pow(enemy.x - game.ship.x, 2) +
-            Math.pow(enemy.y - game.ship.y, 2)
-        );
+        // Pick prey: raid bands and bounty bosses came for YOU; common pirates
+        // chase whichever target is closer — the player or a hauling freighter
+        let prey = game.ship;
+        if (!enemy.bandId && !enemy.isBoss && game.traders) {
+            let bestSq = Math.pow(enemy.x - prey.x, 2) + Math.pow(enemy.y - prey.y, 2);
+            game.traders.forEach(t => {
+                if (t.state !== 'traveling') return; // berthed freighters are safe in port
+                const dSq = Math.pow(enemy.x - t.x, 2) + Math.pow(enemy.y - t.y, 2);
+                if (dSq < bestSq) { bestSq = dSq; prey = t; }
+            });
+        }
 
-        // Calculate angle to player
+        const distanceToPlayer = Math.sqrt(
+            Math.pow(enemy.x - prey.x, 2) +
+            Math.pow(enemy.y - prey.y, 2)
+        );
         const angleToPlayer = Math.atan2(
-            game.ship.y - enemy.y,
-            game.ship.x - enemy.x
+            prey.y - enemy.y,
+            prey.x - enemy.x
         );
 
         // Check if enemy took damage and trigger evasion
@@ -831,6 +840,25 @@ function checkProjectileCollisions() {
                 // Remove projectile
                 game.projectiles.splice(i, 1);
                 hitSomething = true;
+            }
+        }
+
+        // Enemy fire can gun down freighters too
+        if (!hitSomething && projectile.source === 'enemy' && game.traders) {
+            for (let j = game.traders.length - 1; j >= 0; j--) {
+                const t = game.traders[j];
+                if (t.state !== 'traveling') continue;
+                const distance = pointToSegmentDistance(
+                    t.x, t.y, prevX, prevY, projectile.x, projectile.y
+                );
+                if (distance < t.size + projectile.size) {
+                    t.hull -= projectile.damage;
+                    spawnHitSparks(projectile.x, projectile.y, t.color);
+                    game.projectiles.splice(i, 1);
+                    hitSomething = true;
+                    if (t.hull <= 0) destroyTrader(j);
+                    break;
+                }
             }
         }
     }

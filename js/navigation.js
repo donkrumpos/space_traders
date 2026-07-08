@@ -80,13 +80,13 @@ function updateMiniMap() {
         });
     }
 
-    // Cargo drops: blips in their good's color
+    // Cargo drops: blips in their good's color (powerups glow their own color)
     if (game.drops) {
         game.drops.forEach(d => {
             const dx = d.x - game.ship.x;
             const dy = d.y - game.ship.y;
             if (dx * dx + dy * dy > range * range) return;
-            ctx.fillStyle = goods[d.goodType].color;
+            ctx.fillStyle = d.kind === 'powerup' ? POWERUPS[d.powerType].color : goods[d.goodType].color;
             ctx.fillRect(centerX + dx * scale - 1, centerY + dy * scale - 1, 2, 2);
         });
     }
@@ -108,6 +108,17 @@ function updateMiniMap() {
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
+        });
+    }
+
+    // Freighter traffic: green blips
+    if (game.traders) {
+        game.traders.forEach(t => {
+            const dx = t.x - game.ship.x;
+            const dy = t.y - game.ship.y;
+            if (dx * dx + dy * dy > range * range) return;
+            ctx.fillStyle = '#66cc66';
+            ctx.fillRect(centerX + dx * scale - 1.5, centerY + dy * scale - 1.5, 3, 3);
         });
     }
 
@@ -334,6 +345,16 @@ function updateFullMap() {
                 ctx.textAlign = 'center';
                 ctx.fillText('☠ ' + e.tierName, ex, ey - 10);
             }
+        });
+    }
+
+    // Freighter traffic
+    if (game.traders) {
+        game.traders.forEach(t => {
+            ctx.fillStyle = '#66cc66';
+            ctx.beginPath();
+            ctx.arc(t.x * scale + offsetX, t.y * scale + offsetY, 3, 0, Math.PI * 2);
+            ctx.fill();
         });
     }
 

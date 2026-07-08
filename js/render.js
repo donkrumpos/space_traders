@@ -147,6 +147,9 @@ function render() {
     renderAsteroids(ctx, game.camera);
     renderDrops(ctx, game.camera);
 
+    // Draw NPC freighter traffic
+    renderTraders(ctx, game.camera);
+
     // Draw enemies
     renderEnemies(ctx, game.camera);
 

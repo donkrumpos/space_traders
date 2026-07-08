@@ -116,6 +116,7 @@ function update() {
     updateAsteroids(deltaTime);
     updateDrops(deltaTime);
     updatePowerup(deltaTime);
+    updateTraffic(deltaTime);
 
     updateUI();
     updateMaps();
