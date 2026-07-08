@@ -1,3 +1,39 @@
+function showHudFeedback(message, type = 'info', duration = 3000) {
+    const feedbackEl = document.getElementById('hudFeedback');
+    if (!feedbackEl) return;
+
+    feedbackEl.textContent = message;
+    feedbackEl.style.display = 'block';
+
+    switch(type) {
+        case 'error':
+            feedbackEl.style.backgroundColor = '#ff4444';
+            feedbackEl.style.color = '#ffffff';
+            break;
+        case 'warning':
+            feedbackEl.style.backgroundColor = '#ffaa00';
+            feedbackEl.style.color = '#000000';
+            break;
+        case 'success':
+            feedbackEl.style.backgroundColor = '#00ff00';
+            feedbackEl.style.color = '#000000';
+            break;
+        case 'info':
+        default:
+            feedbackEl.style.backgroundColor = '#00aaff';
+            feedbackEl.style.color = '#ffffff';
+            break;
+    }
+
+    if (game.hudFeedbackTimeout) {
+        clearTimeout(game.hudFeedbackTimeout);
+    }
+
+    game.hudFeedbackTimeout = setTimeout(() => {
+        feedbackEl.style.display = 'none';
+    }, duration);
+}
+
 function updateUI() {
     document.getElementById('credits').textContent = game.ship.credits;
     const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;

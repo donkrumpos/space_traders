@@ -197,7 +197,7 @@ function updateMissileCost() {
 
 function buyUpgrade(upgradeType, cost) {
     if (game.ship.credits < cost) {
-        alert(`Insufficient credits! Need $${cost} for this upgrade.`);
+        showHudFeedback(`Insufficient credits! Need $${cost} for this upgrade.`, 'error');
         return;
     }
 
@@ -245,7 +245,7 @@ function applyUpgradeEffects(upgradeType) {
 function buyFuel() {
     const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
     if (fuelNeeded === 0) {
-        alert('Fuel tank is already full!');
+        showHudFeedback('Fuel tank is already full!', 'info');
         return;
     }
 
@@ -273,10 +273,10 @@ function buyFuel() {
         }
 
         console.log(`Partial refuel: +${actualFuelToBuy} fuel for $${actualCost}`);
-        alert(`Partial refuel: Added ${actualFuelToBuy} fuel units for $${actualCost}`);
+        showHudFeedback(`Partial refuel: Added ${actualFuelToBuy} fuel units for $${actualCost}`, 'success');
     } else {
         // Can't afford any fuel
-        alert('Insufficient credits! Need at least $2 for 1 fuel unit.');
+        showHudFeedback('Insufficient credits! Need at least $2 for 1 fuel unit.', 'error');
         return;
     }
 
@@ -288,7 +288,7 @@ function buyFuel() {
 function buyMissiles() {
     const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
     if (missilesNeeded === 0) {
-        alert('Missile bay is already full!');
+        showHudFeedback('Missile bay is already full!', 'info');
         return;
     }
 
@@ -309,9 +309,9 @@ function buyMissiles() {
         game.ship.weapons.missiles.ammo += actualMissilesToBuy;
 
         console.log(`Partial rearm: +${actualMissilesToBuy} missiles for $${actualCost}`);
-        alert(`Partial rearm: Added ${actualMissilesToBuy} missiles for $${actualCost}`);
+        showHudFeedback(`Partial rearm: Added ${actualMissilesToBuy} missiles for $${actualCost}`, 'success');
     } else {
-        alert('Insufficient credits! Need at least $50 for 1 missile.');
+        showHudFeedback('Insufficient credits! Need at least $50 for 1 missile.', 'error');
         return;
     }
 
@@ -323,12 +323,12 @@ function buyGood(goodType, price) {
     const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
 
     if (cargoUsed >= game.ship.cargoMax) {
-        alert('Cargo hold is full!');
+        showHudFeedback('Cargo hold is full!', 'error');
         return;
     }
 
     if (game.ship.credits < price) {
-        alert('Insufficient credits!');
+        showHudFeedback('Insufficient credits!', 'error');
         return;
     }
 
@@ -346,7 +346,7 @@ function buyGood(goodType, price) {
 
 function sellGood(goodType, price) {
     if ((game.ship.cargo[goodType] || 0) === 0) {
-        alert('You don\'t have any ' + goods[goodType].name + '!');
+        showHudFeedback('You don\'t have any ' + goods[goodType].name + '!', 'error');
         return;
     }
 
