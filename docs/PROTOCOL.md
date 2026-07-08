@@ -119,16 +119,103 @@ distinct color, minimap blip. Ghosts are NOT collidable (friendly fire off).
 
 | t | dir | payload |
 |---|-----|---------|
-| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges }` — sent in `welcome` and on demand |
+| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges }` — sent as its own message immediately AFTER `welcome` (welcome stays M1-shaped, no snapshot field), and on `debug.snapshot` |
 | `trade` | c→s | `{ reqId, planet, good, side:'buy'\|'sell', qty }` |
 | `trade.result` | s→c | `{ reqId, ok, prices: {buy,sell} }` — client applies credits/cargo locally on ok |
 | `market.update` | s→c *broadcast* | `{ planet, market }` after any trade/drift/event |
 | `market.event` | s→c *broadcast* | `{ marketEvent }` (or `{ marketEvent: null }` when it expires) |
 | `dock` | c→s | `{ planet }` — server runs drift for that planet, returns/broadcasts `market.update`; also triggers char.push |
 | `mission.take` | c→s | `{ planet, missionId }` → `mission.taken { ok, mission }`; boards regenerate server-side |
+| `board.update` | s→c *broadcast* | `{ planet, offers }` after any mission.take or board regen |
+| `debug.*` | c→s | verify-only hooks, accepted ONLY when server env `VERIFY_DEBUG=1`: `debug.marketEvent {planetName?, goodType?, side?, multiplier?}` forces a market event now; `debug.snapshot` → server replies `world.snapshot`. Never set in prod. |
 
 Accepted missions live in the pilot's char doc (per-pilot); the mission BOARD
 per planet is server state. Ledger stays per-pilot (it's personal knowledge).
+Escort missions stay CLIENT-LOCAL in M3 (they touch game.traders — M4
+territory): server boards carry delivery + bounty offers only; client-local
+escort offers merge into the board UI unchanged.
+
+**Server world authority details (locked at M3 build, 2026-07-08):**
+
+- `missionBoards[planet]` is ONE `offers[]` array: delivery offers plus, when
+  the roll produced one, the bounty entry (`type:'bounty'`) inline. One
+  `generateMissionOffers` roll per board seeds both.
+- `mission.take` restocks like-for-like from a fresh core roll: a taken
+  delivery is replaced by the fresh roll's first delivery offer; a taken
+  bounty by the fresh roll's `bountyOffer` (i.e. refills at the core's own
+  40% odds, so posters stay intermittent). Player-state gates (log full,
+  one-hunt-at-a-time) stay client-side per the caller-owns-gates rule.
+- `trade.result.prices` = the traded good's **pre-impact** base prices
+  `{ buy, sell }` (either side absent when the planet doesn't trade that side)
+  — matches solo, where the price is read before `applyTradeImpact`. `ok:false`
+  (unknown planet/good/side, qty ≤ 0) carries `prices: null`.
+- `dock` drifts ONLY that planet's market (the M3 table's wording is literal;
+  solo drifted all markets on dock — server-side that would let one pilot's
+  docking churn the whole galaxy).
+- Server market events run the solo cadence: first event at 75s after boot,
+  180s duration, 90–210s cooldown, 20s retry on a null roll. The server adds
+  an `endsAt` wall-clock field to the event object (persisted, so a restart
+  resumes the event with its remaining time); clients ignore unknown fields.
+- World persistence: SQLite `world` row, JSON of
+  `{ markets, marketEvent, missionBoards, grudges }` — saved debounced 5s
+  after any change, every 60s when dirty, and on SIGTERM/SIGINT. Restore
+  merges per planet (a roster change gets fresh markets/boards for new
+  planets). `grudges` rides along empty until M4.
+
+**Perk pricing rule (M3):** the wire carries BASE prices only.
+`trade.result.prices` and `market.update` are perk-free; each client applies
+its own pilot's haggling perks (`market_savvy`, `silver_tongue`) at
+read/display time exactly as today. Credits are own-ship state
+(client-authoritative): the client computes its credit delta locally from
+base price × its perk multiplier.
+
+**M3 client notes (locked at client build, 2026-07-08):**
+
+- The client sends a `reqId` on `mission.take` too (unknown fields are
+  ignored) and matches `mission.taken` by `reqId` when the reply carries one,
+  falling back to the oldest pending mission request when it doesn't. Pending
+  trade/mission requests reject after 5s or on disconnect; on `ok:false`,
+  rejection, or timeout the client shows the existing error feedback and
+  mutates nothing.
+- The client splits the inline `type:'bounty'` entry out of a board's
+  `offers[]` (snapshot boards + `board.update`) because the board UI renders
+  bounties and deliveries from different planet fields; escort/crew/mod
+  offers remain client-local and merge into the board UI unchanged.
+- When online the client suppresses its own economy authority: no local
+  market-event rolls (the server's `market.event` sets/clears the singleton),
+  no `driftMarkets()` or board generation on dock (it sends `dock` and
+  applies the stashed server board instead), and no local `applyTradeImpact`
+  on trades (the server's `market.update` broadcast carries the impact).
+  Everything stays byte-identical offline.
+- A `market.update` for the planet the client is currently docked at
+  re-records the trade ledger (berthed = those are the prices you saw) and
+  refreshes the open trade UI.
+- Console hook for the harness: `window.netWorld()` →
+  `{ marketFor(planetName), marketEvent, boardFor(planetName) }` where a
+  board is `{ offers, bountyOffer }` post-split.
+
+**Economy sim extraction (M3 refactor):** pure logic moves to
+`js/sim/planets.js` (`globalThis.SIM_PLANETS` — name/x/y/produces/demands
+meta) and `js/sim/economy-core.js` (`globalThis.EconomyCore` — clampPrice,
+makeMarket(meta), drift(market, meta), tradeImpact(market, meta, good, side,
+qty), eventMultiplier(marketEvent, planetName, good, side),
+rollMarketEvent(planetMetas), generateMissionOffers(meta, allMetas)). Both
+files are side-effect scripts setting globals (script tags in the browser
+loaded BEFORE game.js, `await import()` on the server — same files, no fork).
+Browser economy.js delegates to EconomyCore; solo behavior must stay
+identical (`?verify` 92/92 is the proof).
+
+Return shapes (locked at extraction, 2026-07-08): `makeMarket` returns
+`{ buy: {good: price}, sell: {good: price} }`; `drift`/`tradeImpact` mutate
+that market in place (and return it). `rollMarketEvent` returns
+`{ planetName, goodType, side, multiplier, timeLeft: 180, label }` or `null`
+when the picked planet had nothing to disrupt (caller owns retry cadence —
+the client retries in 20s). `generateMissionOffers` returns
+`{ offers: [{ id, from, dest, goodType, qty, reward }],
+bountyOffer: { id, type:'bounty', name, nearPlanet, reward } | null }` —
+one board roll covering both; bountyOffer already includes its 40%
+appearance odds. Player-state gates (mission log full, one-hunt-at-a-time)
+belong to the caller, not the core.
 
 ### M4 — shared combat (server sim: enemies, raid bands, traffic, drops)
 
@@ -152,7 +239,9 @@ count per the locked answer.
 Node script at repo root. Uses `puppeteer-core` with
 `executablePath` = newest `~/.cache/puppeteer/chrome-headless-shell/*/chrome-headless-shell-mac-arm64/chrome-headless-shell`.
 Spawns `server/server.mjs` with `PORT=<scratch>`, `DB_PATH=<tmp>`,
-`STATIC_DIR=<repo>`, `FAMILY_SECRET=verify`. Opens two pages
+`STATIC_DIR=<repo>`, `FAMILY_SECRET=verify`, `VERIFY_DEBUG=1` (enables the
+M3 `debug.*` hooks; the [world] persistence test kills and respawns the same
+port+DB to prove the SQLite world snapshot survives). Opens two pages
 (`?pilot=VerifyA&ws=ws://127.0.0.1:<port>` etc. — the secret is preseeded into
 `localStorage.space_trader_secret` via `evaluateOnNewDocument`, NOT passed as
 `?secret=verify`, because js/verify.js runs the state-mutating solo suite on

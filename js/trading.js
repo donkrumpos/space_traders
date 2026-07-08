@@ -63,12 +63,25 @@ function dock(planet) {
     }
 
     // Economy: markets drift while you fly, this station's prices get recorded,
-    // deliveries pay out, fresh contracts are posted, and your bounty streak ends
-    driftMarkets();
+    // deliveries pay out, fresh contracts are posted, and your bounty streak ends.
+    // Online (M3): the server owns markets and mission boards — it runs the
+    // drift on our `dock` message and answers with a market.update broadcast;
+    // the board comes from the last world.snapshot/board.update. Escort, crew
+    // and mod offers stay client-local per PROTOCOL. Offline: exactly as before.
+    const netLive = typeof net !== 'undefined' && net.online;
+    if (netLive) {
+        net.dockAt(planet);
+    } else {
+        driftMarkets();
+    }
     completeMissionsAt(planet);
     recordLedger(planet);
-    generateMissionOffers(planet);
-    generateBountyOffer(planet);
+    if (netLive) {
+        net.applyBoard(planet);
+    } else {
+        generateMissionOffers(planet);
+        generateBountyOffer(planet);
+    }
     generateEscortOffer(planet);
     generateCrewOffers(planet);
     generateModOffers(planet);
@@ -430,6 +443,14 @@ function buyGood(goodType, qty = 1) {
 
     const wanted = qty === 'max' ? Infinity : qty;
     const amount = Math.min(wanted, spaceLeft, affordable);
+
+    // Online (M3): the trade routes through the server; deltas apply when
+    // trade.result comes back. Offline: exactly the same flow as always.
+    if (typeof net !== 'undefined' && net.online) {
+        netTradeBuy(planet, goodType, qty, amount);
+        return;
+    }
+
     const totalCost = amount * price;
 
     game.ship.credits -= totalCost;
@@ -467,6 +488,13 @@ function sellGood(goodType, qty = 1) {
     }
 
     const amount = qty === 'all' ? playerHas : Math.min(qty, playerHas);
+
+    // Online (M3): route through the server, apply on trade.result
+    if (typeof net !== 'undefined' && net.online) {
+        netTradeSell(planet, goodType, amount);
+        return;
+    }
+
     const totalEarned = amount * price;
 
     game.ship.credits += totalEarned;
@@ -493,6 +521,82 @@ function sellGood(goodType, qty = 1) {
 
     // Auto-save on trade
     autoSave('trade');
+}
+
+// --- M3 online trades --------------------------------------------------------
+// The wire carries BASE prices only (PROTOCOL perk pricing rule). On ok we
+// run the returned base through the SAME read path as getBuyPrice/getSellPrice
+// — event multiplier × this pilot's haggling perk — so solo and online price
+// identically and no multiplier is ever applied twice. On rejection or
+// timeout: existing error feedback, nothing mutated. The server applies the
+// trade impact itself and broadcasts market.update, so no local
+// applyTradeImpact here.
+
+function netTradeBuy(planet, goodType, qty, amount) {
+    net.trade({ planet: planet.name, good: goodType, side: 'buy', qty: amount }).then(res => {
+        if (!res || !res.ok) { showHudFeedback('Trade rejected by station', 'error'); return; }
+        const base = res.prices && typeof res.prices.buy === 'number'
+            ? res.prices.buy : planet.market.buy[goodType];
+        const haggle = hasPerk('market_savvy') ? 0.95 : 1;
+        const price = Math.max(1, Math.round(base * marketEventMultiplier(planet, goodType, 'buy') * haggle));
+
+        // Re-clamp against live state — the reply arrived async
+        const cargoUsed = Object.values(game.ship.cargo).reduce((a, b) => a + b, 0);
+        const final = Math.min(amount, game.ship.cargoMax - cargoUsed, Math.floor(game.ship.credits / price));
+        if (final <= 0) { showHudFeedback('Insufficient credits!', 'error'); return; }
+        const totalCost = final * price;
+
+        game.ship.credits -= totalCost;
+        game.ship.cargo[goodType] = (game.ship.cargo[goodType] || 0) + final;
+
+        if (final > 1) {
+            showHudFeedback(`Bought ${final} ${goods[goodType].name} for $${totalCost}`, 'success');
+        } else if (qty !== 1 && final === 1) {
+            showHudFeedback(`Only room/credits for 1 ${goods[goodType].name} ($${totalCost})`, 'warning');
+        }
+
+        updateUI();
+        updateBuyingSectionUI();
+        updateSellingSectionUI();
+        updateMissionsUI();
+        updateFuelCost();
+        updateFuelButton();
+        autoSave('trade');
+    }).catch(() => showHudFeedback('Trade failed — station link timed out', 'error'));
+}
+
+function netTradeSell(planet, goodType, amount) {
+    net.trade({ planet: planet.name, good: goodType, side: 'sell', qty: amount }).then(res => {
+        if (!res || !res.ok) { showHudFeedback('Trade rejected by station', 'error'); return; }
+        const base = res.prices && typeof res.prices.sell === 'number'
+            ? res.prices.sell : planet.market.sell[goodType];
+        const haggle = hasPerk('silver_tongue') ? 1.05 : 1;
+        const price = Math.max(1, Math.round(base * marketEventMultiplier(planet, goodType, 'sell') * haggle));
+
+        const final = Math.min(amount, game.ship.cargo[goodType] || 0);
+        if (final <= 0) { showHudFeedback('You don\'t have any ' + goods[goodType].name + '!', 'error'); return; }
+        const totalEarned = final * price;
+
+        game.ship.credits += totalEarned;
+        game.ship.cargo[goodType] -= final;
+        if (game.ship.cargo[goodType] === 0) {
+            delete game.ship.cargo[goodType];
+        }
+
+        if (final > 1) {
+            showHudFeedback(`Sold ${final} ${goods[goodType].name} for $${totalEarned}`, 'success');
+        }
+        flashCredits();
+        addXP(totalEarned / 50, 'trade');
+
+        updateUI();
+        updateBuyingSectionUI();
+        updateSellingSectionUI();
+        updateMissionsUI();
+        updateFuelCost();
+        updateFuelButton();
+        autoSave('trade');
+    }).catch(() => showHudFeedback('Trade failed — station link timed out', 'error'));
 }
 
 const WEAPON_SYSTEM_PRICES = { double: 1200, spread: 2600, seeker: 4200 };

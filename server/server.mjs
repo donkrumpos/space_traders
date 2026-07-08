@@ -1,4 +1,5 @@
-// M1+M2 multiplayer server: handshake + shared saves + ghost relay (docs/PROTOCOL.md).
+// M1+M2+M3 multiplayer server: handshake + shared saves + ghost relay +
+// world authority (markets/events/mission boards) per docs/PROTOCOL.md.
 // ws over plain node:http, bound to 127.0.0.1 (Apache proxies in prod).
 // Optional static serving when STATIC_DIR is set (dev + verify-net).
 import http from 'node:http';
@@ -7,6 +8,7 @@ import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { getPilot, savePilot, closeDb } from './db.mjs';
 import config from './config.mjs';
+import { startWorld, worldSnapshotMessage, handleWorldMessage, flushWorld } from './world.mjs';
 
 const PORT = Number(process.env.PORT) || 8378;
 const FAMILY_SECRET = process.env.FAMILY_SECRET || 'dev-secret';
@@ -60,6 +62,12 @@ function broadcastToOthers(exceptPilot, obj) {
     }
 }
 
+// World messages (market.update / market.event / board.update) go to everyone
+// — the sender needs the post-trade market too.
+function broadcastAll(obj) {
+    for (const ws of pilots.values()) send(ws, obj);
+}
+
 wss.on('connection', (ws) => {
     ws.pilot = null;
 
@@ -97,6 +105,9 @@ wss.on('connection', (ws) => {
                 peers: [...pilots.keys()].filter(p => p !== name),
                 config
             });
+            // World state follows immediately as its own message (documented
+            // choice in PROTOCOL.md — welcome itself stays M1-shaped).
+            send(ws, worldSnapshotMessage());
             broadcastToOthers(name, { t: 'peer.join', pilot: name });
             log(`connect: ${name} (${pilots.size} online)`);
             return;
@@ -128,7 +139,10 @@ wss.on('connection', (ws) => {
             return;
         }
 
-        // Unknown t: ignore (forward compatibility with M3-M4)
+        // M3: trade / dock / mission.take / debug.* (VERIFY_DEBUG-gated)
+        if (handleWorldMessage(ws, msg, send)) return;
+
+        // Unknown t: ignore (forward compatibility with M4)
     });
 
     ws.on('close', () => {
@@ -142,6 +156,8 @@ wss.on('connection', (ws) => {
     ws.on('error', () => {}); // close handler does the cleanup
 });
 
+startWorld(broadcastAll);
+
 httpServer.listen(PORT, '127.0.0.1', () => {
     log(`space-traders server on ws://127.0.0.1:${PORT}${STATIC_DIR ? ` (static: ${STATIC_DIR})` : ''}`);
 });
@@ -151,6 +167,7 @@ function shutdown() {
     for (const ws of pilots.values()) ws.close();
     wss.close();
     httpServer.close();
+    flushWorld();
     closeDb();
     process.exit(0);
 }

@@ -1,5 +1,12 @@
 // Living economy: drifting prices, player market impact, market events,
 // a trade ledger of visited stations, and station mission boards.
+//
+// M3 split (docs/PROTOCOL.md "Economy sim extraction"): the pure market/
+// mission math lives in js/sim/economy-core.js (globalThis.EconomyCore).
+// This file is the browser adapter — same public function names/signatures
+// as before, delegating the math to EconomyCore while owning cadence,
+// cooldowns, game state, and DOM. Escort offers stay fully client-local
+// (they touch game.traders — M4 territory).
 
 const economy = {
     marketEvent: null,   // { planetName, goodType, side, multiplier, timeLeft, label }
@@ -9,37 +16,26 @@ const economy = {
 
 function initEconomy() {
     game.planets.forEach(planet => {
-        // Live market prices start at the static base values in planetData
-        planet.market = { buy: {}, sell: {} };
-        Object.keys(planet.produces).forEach(g => { planet.market.buy[g] = planet.produces[g]; });
-        Object.keys(planet.demands).forEach(g => { planet.market.sell[g] = planet.demands[g]; });
+        // Live market prices start at the static base values in the planet meta
+        planet.market = EconomyCore.makeMarket(planet);
     });
     game.missions = []; // active delivery contracts (max 3)
     game.combatStreak = 0;
 }
 
 function clampPrice(value, base) {
-    return Math.min(base * 2.0, Math.max(base * 0.4, value));
+    return EconomyCore.clampPrice(value, base);
 }
 
 // Every docking, all markets wander a little — the galaxy trades while you fly
 function driftMarkets() {
     game.planets.forEach(planet => {
-        Object.keys(planet.market.buy).forEach(g => {
-            planet.market.buy[g] = clampPrice(planet.market.buy[g] * (0.92 + Math.random() * 0.16), planet.produces[g]);
-        });
-        Object.keys(planet.market.sell).forEach(g => {
-            planet.market.sell[g] = clampPrice(planet.market.sell[g] * (0.92 + Math.random() * 0.16), planet.demands[g]);
-        });
+        EconomyCore.drift(planet.market, planet);
     });
 }
 
 function marketEventMultiplier(planet, goodType, side) {
-    const ev = economy.marketEvent;
-    if (ev && ev.planetName === planet.name && ev.goodType === goodType && ev.side === side) {
-        return ev.multiplier;
-    }
-    return 1;
+    return EconomyCore.eventMultiplier(economy.marketEvent, planet.name, goodType, side);
 }
 
 function getBuyPrice(planet, goodType) {
@@ -54,19 +50,10 @@ function getSellPrice(planet, goodType) {
 
 // Your own trades move the market: buying drives the price up, flooding drives it down
 function applyTradeImpact(planet, goodType, side, amount) {
-    if (side === 'buy') {
-        planet.market.buy[goodType] = clampPrice(planet.market.buy[goodType] * (1 + 0.02 * amount), planet.produces[goodType]);
-    } else {
-        planet.market.sell[goodType] = clampPrice(planet.market.sell[goodType] * (1 - 0.02 * amount), planet.demands[goodType]);
-    }
+    EconomyCore.tradeImpact(planet.market, planet, goodType, side, amount);
 }
 
 // --- Market events (shortages and gluts) ---
-
-const MARKET_EVENT_FLAVORS = {
-    sell: { food: 'Famine', technology: 'Tech crisis', materials: 'Mining strike', luxury: 'Luxury craze' },
-    buy: { food: 'Bumper harvest', technology: 'Factory overrun', materials: 'Ore glut', luxury: 'Warehouse overstock' }
-};
 
 function updateEconomy(deltaTime) {
     const ev = economy.marketEvent;
@@ -88,24 +75,18 @@ function updateEconomy(deltaTime) {
 }
 
 function startMarketEvent() {
-    const planet = game.planets[Math.floor(Math.random() * game.planets.length)];
-    const side = Math.random() < 0.65 ? 'sell' : 'buy'; // shortages are more fun than gluts
-    const pool = Object.keys(side === 'sell' ? planet.demands : planet.produces);
-    if (pool.length === 0) {
-        economy.eventCooldown = 20; // this planet had nothing to disrupt; try again soon
+    const ev = EconomyCore.rollMarketEvent(game.planets);
+    if (!ev) {
+        economy.eventCooldown = 20; // that planet had nothing to disrupt; try again soon
         return;
     }
-    const goodType = pool[Math.floor(Math.random() * pool.length)];
-    const multiplier = side === 'sell' ? 2 + Math.random() : 0.4 + Math.random() * 0.2;
-    const label = `${MARKET_EVENT_FLAVORS[side][goodType]} at ${planet.name}`;
+    economy.marketEvent = ev;
 
-    economy.marketEvent = { planetName: planet.name, goodType, side, multiplier, timeLeft: 180, label };
-
-    const goodName = goods[goodType].name;
-    if (side === 'sell') {
-        showHudFeedback(`⚡ ${label} — ${goodName} sells at ${multiplier.toFixed(1)}× for 3 min!`, 'warning', 6000);
+    const goodName = goods[ev.goodType].name;
+    if (ev.side === 'sell') {
+        showHudFeedback(`⚡ ${ev.label} — ${goodName} sells at ${ev.multiplier.toFixed(1)}× for 3 min!`, 'warning', 6000);
     } else {
-        showHudFeedback(`⚡ ${label} — ${goodName} is dirt cheap for 3 min!`, 'warning', 6000);
+        showHudFeedback(`⚡ ${ev.label} — ${goodName} is dirt cheap for 3 min!`, 'warning', 6000);
     }
     updateLedgerUI();
     refreshDockedTradeUI();
@@ -154,32 +135,10 @@ function updateLedgerUI() {
 
 // --- Mission board (delivery contracts) ---
 
-function averageDemandPrice(goodType) {
-    const prices = game.planets.filter(p => p.demands[goodType] !== undefined).map(p => p.demands[goodType]);
-    if (prices.length === 0) return 100;
-    return prices.reduce((a, b) => a + b, 0) / prices.length;
-}
-
 function generateMissionOffers(planet) {
-    const offers = [];
-    // No station posts contraband runs on its public board
-    const produced = Object.keys(planet.produces).filter(g => g !== 'contraband');
-    const legalGoods = Object.keys(goods).filter(g => g !== 'contraband');
-    const count = 2 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < count; i++) {
-        // Mostly ship what this station produces (buy here, haul there)
-        const goodType = produced.length > 0 && Math.random() < 0.7
-            ? produced[Math.floor(Math.random() * produced.length)]
-            : legalGoods[Math.floor(Math.random() * legalGoods.length)];
-        const destinations = game.planets.filter(p => p !== planet && p.demands[goodType] !== undefined);
-        if (destinations.length === 0) continue;
-        const dest = destinations[Math.floor(Math.random() * destinations.length)];
-        const qty = 4 + Math.floor(Math.random() * 8);
-        // Pays a premium over the average open-market sell price — the price of a fixed route
-        const reward = Math.round(qty * averageDemandPrice(goodType) * 1.25 / 10) * 10;
-        offers.push({ id: `${planet.name}-${Date.now()}-${i}`, from: planet.name, dest: dest.name, goodType, qty, reward });
-    }
-    planet.missionOffers = offers;
+    // Delivery contracts come from the shared board roll; the bounty half of
+    // the roll is discarded here (generateBountyOffer does its own roll)
+    planet.missionOffers = EconomyCore.generateMissionOffers(planet, game.planets).offers;
 }
 
 function acceptMission(offerId) {
@@ -324,25 +283,13 @@ function restoreActiveEscorts() {
 
 // --- Wanted posters (named Warlord hunts) ---
 
-const BOUNTY_FIRST_NAMES = ['Crimson', 'Void', 'Iron', 'Silent', 'Black', 'Rust', 'Grim', 'Howling'];
-const BOUNTY_LAST_NAMES = ['Vex', 'Harrow', 'Kane', 'Sable', 'Talon', 'Mordant', 'Grin', 'Locke'];
-
 function generateBountyOffer(planet) {
     planet.bountyOffer = null;
-    // One hunt at a time, and posters only show up sometimes
+    // One hunt at a time is player state — gated here, not in the core.
+    // The core's roll includes the "posters only show up sometimes" odds.
     const alreadyHunting = game.missions.some(m => m.type === 'bounty');
-    if (alreadyHunting || Math.random() > 0.4) return;
-
-    const target = game.planets[Math.floor(Math.random() * game.planets.length)];
-    const name = BOUNTY_FIRST_NAMES[Math.floor(Math.random() * BOUNTY_FIRST_NAMES.length)] + ' ' +
-                 BOUNTY_LAST_NAMES[Math.floor(Math.random() * BOUNTY_LAST_NAMES.length)];
-    planet.bountyOffer = {
-        id: `bounty-${Date.now()}`,
-        type: 'bounty',
-        name,
-        nearPlanet: target.name,
-        reward: 1500 + Math.round(Math.random() * 150) * 10
-    };
+    if (alreadyHunting) return;
+    planet.bountyOffer = EconomyCore.generateMissionOffers(planet, game.planets).bountyOffer;
 }
 
 function acceptBounty() {

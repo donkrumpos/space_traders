@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// verify-net.mjs — M1 two-client convergence harness. Contract: docs/PROTOCOL.md.
+// verify-net.mjs — M1–M3 two-client convergence harness. Contract: docs/PROTOCOL.md.
 // Spawns server/server.mjs on a scratch port with a temp SQLite DB, drives
 // chrome-headless-shell pages via puppeteer-core, asserts PASS/FAIL lines,
 // prints VERIFY-NET-PASS n/n (exit 0) or VERIFY-NET-FAIL (exit 1).
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_MJS = path.join(ROOT, 'server', 'server.mjs');
 const SECRET = 'verify';
-const RUN_TIMEOUT_MS = 120000;
+const RUN_TIMEOUT_MS = 240000;
 
 const results = [];
 const S = {}; // shared cross-suite state (pages, port, expected xp)
@@ -79,7 +79,10 @@ function chromePath() {
 }
 
 // Fresh isolated context (own localStorage) + page with identity preseeded.
-async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = true } = {}) {
+// `charDoc` extends the localStorage seeding pattern: a full character doc
+// (see seedCharDoc) written before any script runs, so the game boots with
+// seeded cargo/position instead of a blank default character.
+async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = true, charDoc = null } = {}) {
     const context = await (browser.createBrowserContext
         ? browser.createBrowserContext()
         : browser.createIncognitoBrowserContext());
@@ -91,6 +94,11 @@ async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = t
             localStorage.setItem('space_trader_pilot', p);
             localStorage.setItem('space_trader_secret', s);
         }, pilot, SECRET);
+    }
+    if (charDoc) {
+        await page.evaluateOnNewDocument(doc => {
+            localStorage.setItem('space_trader_character', JSON.stringify(doc));
+        }, charDoc);
     }
     // Headless safety net: never block on a native dialog.
     await page.evaluateOnNewDocument(() => { window.prompt = () => null; });
@@ -108,6 +116,72 @@ async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = t
         });
     });
     return { context, page, errors };
+}
+
+// Character doc for localStorage preseeding — mirrors character.js
+// createDefaultCharacter (version "1.0"). Ship comes NAMED (no christening
+// modal) with 0 XP (dock +25 and a small sale stay under the 60-XP perk modal).
+function seedCharDoc({ shipName, x, y, cargo = {}, credits = 1000 }) {
+    return {
+        version: '1.0',
+        id: 'char_seed_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        created: Date.now(),
+        lastPlayed: Date.now(),
+        ship: {
+            x, y, angle: 0, velocity: { x: 0, y: 0 },
+            fuel: 500, fuelMax: 500, emergencyFuel: 25, emergencyFuelMax: 25,
+            hull: 100, hullMax: 100, shield: 20, shieldMax: 20,
+            credits, cargo, cargoMax: 10, hullId: 'skiff',
+            name: shipName, mods: [], log: [],
+            upgrades: { cargo: 1, engine: 1, shields: 1, fuel_tank: 1, hull: 1, weapons: 1 },
+            weapons: {
+                lasers: { cooldown: 0, maxCooldown: 500 },
+                missiles: { cooldown: 0, maxCooldown: 2000, ammo: 5, maxAmmo: 5 }
+            },
+            systems: { lasers: 'ok', engines: 'ok', lifeSupport: 'ok' }
+        },
+        pilot: { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [] },
+        progress: {
+            planetsVisited: [], eventsCompleted: [], enemiesDestroyed: 0,
+            totalCreditsEarned: 0, distanceTraveled: 0, playtimeMinutes: 0
+        },
+        gameState: {
+            isDocked: false, currentPlanet: null, isEngaged: false,
+            currentEvent: null, lastPosition: { x, y }
+        }
+    };
+}
+
+// Key-order-independent equality for market/board objects that round-trip
+// through different serializers (server snapshot vs client rebuild).
+function stableStringify(v) {
+    if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+    if (v && typeof v === 'object') {
+        return '{' + Object.keys(v).sort()
+            .map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+    }
+    return JSON.stringify(v);
+}
+
+// netWorld() console-hook readers (M3). Both tolerate the hook not existing
+// yet so `until` can poll through page boot.
+function marketFor(page, planetName) {
+    return page.evaluate(p => {
+        if (typeof netWorld !== 'function') return null;
+        const w = netWorld();
+        return (w && typeof w.marketFor === 'function' && w.marketFor(p)) || null;
+    }, planetName);
+}
+
+function boardOffers(page, planetName) {
+    return page.evaluate(p => {
+        if (typeof netWorld !== 'function') return null;
+        const w = netWorld();
+        if (!w || typeof w.boardFor !== 'function') return null;
+        const b = w.boardFor(p);
+        if (!b) return null;
+        return Array.isArray(b) ? b : (b.offers || []);
+    }, planetName);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +395,172 @@ async function ghostSuite(t) {
     t('no ghost leaked into enemies/traders', leaked === 0, `${leaked} sim entries carry a pilot field`);
 }
 
+// Suite — M3 shared world (docs/PROTOCOL.md M3): server-authoritative markets,
+// market events, mission boards. Runs on FRESH pilots C and D (ghostSuite
+// destroyed A/A2). Reads go through the netWorld() console hook; writes go
+// through the REAL game paths (dock/sellGood/acceptMission) so the net wiring
+// itself is what's under test. Requires the server spawned with VERIFY_DEBUG=1
+// for the debug.* hooks.
+async function worldSuite(t, { browser, base, wsUrl, restartServer }) {
+    const AGRICON = 'Agricon Prime';   // demands technology — C's seeded cargo
+    const MERIDIAN = 'Meridian Deep';  // untouched planet for the drift test
+    const OSSUARY = 'Ossuary Drift';   // untouched planet for the event test
+
+    // C boots pre-seeded with cargo Agricon buys, parked beside it.
+    S.C = await newGamePage(browser, 'VerifyC', {
+        charDoc: seedCharDoc({ shipName: 'Verify Lugger', x: 1000, y: 830, cargo: { technology: 4 } })
+    });
+    S.D = await newGamePage(browser, 'VerifyD');
+    await S.C.page.goto(`${base}/index.html?pilot=VerifyC&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.D.page.goto(`${base}/index.html?pilot=VerifyD&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('C online', !!(await until(() => S.C.page.evaluate(() => netStatus().online === true))));
+    t('D online', !!(await until(() => S.D.page.evaluate(() => netStatus().online === true))));
+
+    const hook = await S.C.page.evaluate(() => typeof netWorld === 'function'
+        && typeof netWorld().marketFor === 'function'
+        && typeof netWorld().boardFor === 'function');
+    t('netWorld console hook present', hook, 'client missing netWorld().{marketFor,marketEvent,boardFor}');
+    if (!hook) return;
+
+    // 1. convergence: two fresh clients read the same server market snapshot.
+    const converged = await until(async () => {
+        const c = await marketFor(S.C.page, AGRICON);
+        const d = await marketFor(S.D.page, AGRICON);
+        return (!!c && !!d && stableStringify(c) === stableStringify(d)) ? c : false;
+    }, { timeout: 15000 });
+    t('C and D converge on the same Agricon market', !!converged);
+
+    // 2. trade moves the shared price: C docks and sells via the real paths.
+    const docked = await S.C.page.evaluate(pn => {
+        const planet = game.planets.find(p => p.name === pn);
+        if (!planet) return false;
+        game.ship.x = planet.x;
+        game.ship.y = planet.y + 30;
+        dock(planet);
+        return game.isDocked === true;
+    }, AGRICON);
+    t('C docked at Agricon (real dock path)', docked);
+
+    // C's dock drifts that planet server-side — settle on the post-dock market
+    // before recording the pre-TRADE baseline.
+    const pre = await until(async () => {
+        const c = await marketFor(S.C.page, AGRICON);
+        const d = await marketFor(S.D.page, AGRICON);
+        return (!!c && !!d && stableStringify(c) === stableStringify(d)) ? c : false;
+    }, { timeout: 15000 });
+    t('post-dock baseline converged', !!pre);
+    if (!pre) return;
+
+    const creditsBefore = await S.C.page.evaluate(() => game.ship.credits);
+    await S.C.page.evaluate(() => sellGood('technology', 2));
+    const paid = await until(() => S.C.page.evaluate(b => game.ship.credits > b, creditsBefore));
+    t('C sale resolved (credits rose)', !!paid,
+        `credits stuck at ${await S.C.page.evaluate(() => game.ship.credits)}`);
+
+    const moved = await until(async () => {
+        const c = await marketFor(S.C.page, AGRICON);
+        const d = await marketFor(S.D.page, AGRICON);
+        return (!!c && !!d
+            && c.sell.technology !== pre.sell.technology
+            && d.sell.technology === c.sell.technology) ? d.sell.technology : false;
+    });
+    t('D reads the price C moved', moved !== false,
+        `pre=${pre.sell.technology} D=${JSON.stringify(await marketFor(S.D.page, AGRICON))}`);
+
+    // 3. dock drift: D's dock makes the server drift that planet and broadcast
+    // market.update — C's copy changes. Drift is random and could no-op, so a
+    // genuinely-unchanged market after the timeout gets asserted via re-docks.
+    const cPreDock = await marketFor(S.C.page, MERIDIAN);
+    let drifted = false;
+    for (let attempt = 0; attempt < 3 && !drifted; attempt++) {
+        await S.D.page.evaluate(pn => {
+            const planet = game.planets.find(p => p.name === pn);
+            game.ship.x = planet.x;
+            game.ship.y = planet.y + 30;
+            if (game.isDocked) undock();
+            dock(planet);
+        }, MERIDIAN);
+        drifted = !!(await until(async () => {
+            const c = await marketFor(S.C.page, MERIDIAN);
+            return !!c && stableStringify(c) !== stableStringify(cPreDock);
+        }, { timeout: 6000 }));
+    }
+    t("C received market.update from D's dock (drift)", drifted,
+        'Meridian market never changed on C across 3 docks by D');
+
+    // 4. market event: forced via the debug hook (VERIFY_DEBUG=1), broadcast
+    // to both, and the affected side's READ price reflects the multiplier.
+    await S.C.page.evaluate((pn, g) =>
+        net.send({ t: 'debug.marketEvent', planetName: pn, goodType: g, side: 'sell', multiplier: 2 }),
+        OSSUARY, 'medicine');
+    const cEv = await until(() => S.C.page.evaluate(pn => {
+        const ev = netWorld().marketEvent;
+        return !!ev && ev.planetName === pn;
+    }, OSSUARY));
+    const dEv = await until(() => S.D.page.evaluate(pn => {
+        const ev = netWorld().marketEvent;
+        return !!ev && ev.planetName === pn;
+    }, OSSUARY));
+    t('C sees the forced market event', !!cEv);
+    t('D sees the forced market event', !!dEv);
+    const evCheck = await S.C.page.evaluate((pn, g) => {
+        const base2 = netWorld().marketFor(pn).sell[g];
+        const read = getSellPrice(game.planets.find(p => p.name === pn), g);
+        return { base: base2, read };
+    }, OSSUARY, 'medicine');
+    t('sell-shortage raises the read price above base', !!evCheck && evCheck.read >= evCheck.base * 1.5,
+        `base=${evCheck && evCheck.base} read=${evCheck && evCheck.read}`);
+
+    // 5. mission board: C (docked at Agricon) takes a delivery via the real
+    // path; D's board drops that id and still shows offers (regen).
+    const offers = await until(async () => {
+        const o = await boardOffers(S.C.page, AGRICON);
+        const deliveries = (o || []).filter(x => x && x.goodType);
+        return deliveries.length > 0 ? deliveries : false;
+    });
+    t('Agricon board has delivery offers', !!offers);
+    if (!offers) return;
+    const missionId = offers[0].id;
+    await S.C.page.evaluate(id => acceptMission(id), missionId);
+    const taken = await until(() => S.C.page.evaluate(id =>
+        (game.missions || []).some(m => m.id === id), missionId));
+    t("mission landed in C's game.missions (real acceptMission path)", !!taken);
+    const regen = await until(async () => {
+        const o = await boardOffers(S.D.page, AGRICON);
+        if (!o) return false;
+        return !o.some(x => x && x.id === missionId)
+            && o.filter(x => x && x.goodType).length >= 1;
+    });
+    t("D's board dropped the taken mission and still has ≥1 offer", !!regen);
+
+    // 6. persistence: moved prices survive a server restart (same port + DB).
+    await S.C.page.evaluate(() => net.send({ t: 'debug.snapshot' }));
+    await sleep(500); // let the snapshot reply land
+    const recA = await marketFor(S.C.page, AGRICON);
+    const recM = await marketFor(S.C.page, MERIDIAN);
+    t('recorded moved prices via debug.snapshot', !!recA && !!recM);
+    const up = await restartServer();
+    t('server restarted on same port/db', !!up);
+    if (!up) return;
+    await S.C.page.evaluate(() => netConnect()); // skip the 30s retry wait
+    await S.D.page.evaluate(() => netConnect());
+    t('C back online after restart', !!(await until(() => S.C.page.evaluate(() => netStatus().online === true))));
+    t('D back online after restart', !!(await until(() => S.D.page.evaluate(() => netStatus().online === true))));
+    const survived = await until(async () => {
+        const a = await marketFor(S.C.page, AGRICON);
+        const m = await marketFor(S.C.page, MERIDIAN);
+        return !!a && !!m
+            && stableStringify(a) === stableStringify(recA)
+            && stableStringify(m) === stableStringify(recM);
+    }, { timeout: 15000 });
+    t('markets survived the restart (SQLite snapshot)', !!survived);
+    const dSurvived = await until(async () => {
+        const a = await marketFor(S.D.page, AGRICON);
+        return !!a && stableStringify(a) === stableStringify(recA);
+    });
+    t("D's post-restart view matches too", !!dSurvived);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -329,11 +569,32 @@ const SUITES = [
     ['reconnect', reconnectSuite],
     ['offline', offlineSuite],
     ['ghosts', ghostSuite],
-    // M3: ['market', marketSuite],
+    ['world', worldSuite],
     // M4: ['combat', combatSuite],
 ];
 
 // ---------------------------------------------------------------------------
+
+// Server child spawner — reused by the [world] persistence test, which kills
+// and respawns the SAME port + DB_PATH to prove the SQLite snapshot survives.
+// VERIFY_DEBUG=1 enables the debug.* hooks (PROTOCOL M3); harness-only, never prod.
+function spawnServer(port, dbPath, serverLog) {
+    const proc = spawn(process.execPath, [SERVER_MJS], {
+        env: {
+            ...process.env,
+            PORT: String(port),
+            DB_PATH: dbPath,
+            STATIC_DIR: ROOT,
+            FAMILY_SECRET: SECRET,
+            VERIFY_DEBUG: '1',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    proc.stdout.on('data', d => serverLog.push(String(d)));
+    proc.stderr.on('data', d => serverLog.push(String(d)));
+    proc.on('exit', code => serverLog.push(`[server exited code=${code}]`));
+    return proc;
+}
 
 async function main() {
     if (!fs.existsSync(SERVER_MJS)) {
@@ -356,31 +617,19 @@ async function main() {
     const port = await freePort();
     const dbPath = path.join(os.tmpdir(), `space-traders-verify-${process.pid}-${Date.now()}.db`);
     const serverLog = [];
-    let server = null;
+    const srv = { proc: null }; // holder — restartServer swaps the child in place
     let browser = null;
     let exitCode = 1;
 
     const watchdog = setTimeout(() => {
         console.error(`VERIFY-NET-FAIL (run exceeded ${RUN_TIMEOUT_MS / 1000}s)`);
-        try { if (server) server.kill('SIGKILL'); } catch {}
+        try { if (srv.proc) srv.proc.kill('SIGKILL'); } catch {}
         if (browser) browser.close().catch(() => {}).finally(() => process.exit(1));
         else process.exit(1);
     }, RUN_TIMEOUT_MS);
 
     try {
-        server = spawn(process.execPath, [SERVER_MJS], {
-            env: {
-                ...process.env,
-                PORT: String(port),
-                DB_PATH: dbPath,
-                STATIC_DIR: ROOT,
-                FAMILY_SECRET: SECRET,
-            },
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        server.stdout.on('data', d => serverLog.push(String(d)));
-        server.stderr.on('data', d => serverLog.push(String(d)));
-        server.on('exit', code => serverLog.push(`[server exited code=${code}]`));
+        srv.proc = spawnServer(port, dbPath, serverLog);
 
         const up = await until(() => portAccepts(port), { timeout: 10000, every: 200 });
         if (!up) {
@@ -400,6 +649,20 @@ async function main() {
             port,
             base: `http://127.0.0.1:${port}`,
             wsUrl: `ws://127.0.0.1:${port}`,
+            // Kill + respawn the server child on the SAME port/DB ([world]
+            // persistence). SIGTERM first so its shutdown path flushes SQLite.
+            restartServer: async () => {
+                const old = srv.proc;
+                old.kill('SIGTERM');
+                await until(() => old.exitCode !== null, { timeout: 5000, every: 100 });
+                if (old.exitCode === null) {
+                    old.kill('SIGKILL');
+                    await until(() => old.exitCode !== null, { timeout: 3000, every: 100 });
+                }
+                await until(async () => !(await portAccepts(port)), { timeout: 5000, every: 100 });
+                srv.proc = spawnServer(port, dbPath, serverLog);
+                return await until(() => portAccepts(port), { timeout: 10000, every: 200 });
+            },
         };
 
         for (const [suite, fn] of SUITES) {
@@ -423,10 +686,10 @@ async function main() {
     } finally {
         clearTimeout(watchdog);
         if (browser) await browser.close().catch(() => {});
-        if (server && server.exitCode === null) {
-            server.kill('SIGTERM');
+        if (srv.proc && srv.proc.exitCode === null) {
+            srv.proc.kill('SIGTERM');
             await sleep(300);
-            if (server.exitCode === null) server.kill('SIGKILL');
+            if (srv.proc.exitCode === null) srv.proc.kill('SIGKILL');
         }
         for (const suffix of ['', '-wal', '-shm']) {
             try { fs.unlinkSync(dbPath + suffix); } catch {}

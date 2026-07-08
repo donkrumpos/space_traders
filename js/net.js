@@ -1,5 +1,6 @@
-// Client net layer (M1+M2) — pilot handshake, shared saves, offline
-// fallback, ghost presence (send own ship state, track peers' ghosts).
+// Client net layer (M1+M2+M3) — pilot handshake, shared saves, offline
+// fallback, ghost presence (send own ship state, track peers' ghosts),
+// shared world (server-authoritative markets, market events, mission boards).
 // Contract: docs/PROTOCOL.md. Loads after character.js, before verify.js.
 // Solo boot must NEVER block on the network: under ?verify (no ?ws=) this
 // file installs its hooks but never prompts, polls, or opens a socket.
@@ -81,6 +82,35 @@ const net = {
             });
         }
         return out;
+    },
+    // M3 request/response interface. Each returns a Promise that resolves
+    // with the server reply message and rejects on timeout/disconnect.
+    // Perk pricing rule: replies carry BASE prices; callers apply their own
+    // pilot's perk + event multipliers at apply time.
+    trade({ planet, good, side, qty }) {
+        const name = planet && planet.name ? planet.name : planet;
+        return netRequest('trade', { planet: name, good, side, qty }, 'trade');
+    },
+    takeMission(planet, missionId) {
+        const name = planet && planet.name ? planet.name : planet;
+        return netRequest('mission.take', { planet: name, missionId }, 'mission');
+    },
+    dockAt(planet) {
+        // Fire-and-forget: server runs drift for that planet and answers
+        // with a market.update broadcast (handled below).
+        const name = planet && planet.name ? planet.name : planet;
+        net.send({ t: 'dock', planet: name });
+    },
+    // Apply the stashed server board for a planet onto the planet object the
+    // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
+    // offers stay client-local (M3) and are untouched here, so the existing
+    // updateMissionBoardUI merges them naturally. The one-hunt-at-a-time
+    // gate is player state and belongs to this caller side, not the server.
+    applyBoard(planet) {
+        const board = netBoards.get(planet.name);
+        planet.missionOffers = board ? (board.offers || []).slice() : [];
+        const alreadyHunting = (game.missions || []).some(m => m.type === 'bounty');
+        planet.bountyOffer = (!alreadyHunting && board) ? (board.bountyOffer || null) : null;
     }
 };
 window.net = net;
@@ -107,6 +137,12 @@ const netGhostMap = new Map();         // pilot -> last peer.state + at timestam
 let netSendTimer = null;
 let netLastSent = null;
 let netLastSentAt = 0;
+
+// M3 shared world
+const NET_REQ_TIMEOUT_MS = 5000;       // pending trade/mission requests
+const netPending = new Map();          // reqId -> { resolve, reject, timer, kind }
+const netBoards = new Map();           // planetName -> { offers, bountyOffer }
+let netReqSeq = 0;
 
 function netLocalLastPlayed() {
     // First handshake compares against the pre-boot disk value; after we've
@@ -154,6 +190,7 @@ function netGoOffline() {
     net.peers = [];
     netStopSender();
     netGhostMap.clear();
+    netRejectAllPending('offline');
     if (net.status !== 'rejected') net.status = 'offline';
     netScheduleRetry();
 }
@@ -175,6 +212,11 @@ function netHandleMessage(msg) {
             netApplySyncRule(msg.doc);
             netSyncedOnce = true;
             netStartSender();
+            // world.snapshot is "sent in welcome" — tolerate either an
+            // embedded snapshot field or a standalone world.snapshot message
+            // right after (handled below). Applied AFTER the sync rule so an
+            // adopted char doc's stale world section can't clobber it.
+            if (msg.snapshot) netApplySnapshot(msg.snapshot);
             break;
         }
         case 'reject': {
@@ -222,7 +264,26 @@ function netHandleMessage(msg) {
             });
             break;
         }
-        // Unknown t: ignored (forward compatibility with M3-M4)
+        // --- M3: shared world -------------------------------------------
+        case 'world.snapshot':
+            netApplySnapshot(msg);
+            break;
+        case 'market.update':
+            netApplyMarket(msg.planet, msg.market);
+            break;
+        case 'market.event':
+            netApplyMarketEvent(msg.marketEvent || null, true);
+            break;
+        case 'trade.result':
+            netResolvePending(msg, 'trade');
+            break;
+        case 'mission.taken':
+            netResolvePending(msg, 'mission');
+            break;
+        case 'board.update':
+            netApplyBoardUpdate(msg);
+            break;
+        // Unknown t: ignored (forward compatibility with M4)
     }
 }
 
@@ -323,6 +384,205 @@ function netStopSender() {
     netLastSent = null;
 }
 
+// --- M3: shared world (markets, market events, mission boards) --------------
+// Server is authoritative for planet markets, the market-event singleton, and
+// per-planet mission boards (delivery + bounty). The wire carries BASE prices
+// only (perk pricing rule); each client applies its own perk + event
+// multipliers at read/apply time. Escort offers stay client-local. Credits
+// and cargo are own-ship state: the client mutates them itself on trade.result.
+
+function netRequest(t, payload, kind) {
+    if (!net.online || !netSocket || netSocket.readyState !== 1) {
+        return Promise.reject(new Error('offline'));
+    }
+    const reqId = `${netIdentity.pilot}-${++netReqSeq}`;
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            netPending.delete(reqId);
+            reject(new Error('timeout'));
+        }, NET_REQ_TIMEOUT_MS);
+        netPending.set(reqId, { resolve, reject, timer, kind });
+        net.send({ t, reqId, ...payload });
+    });
+}
+
+// PROTOCOL's mission.taken payload carries no reqId; we send one anyway
+// (unknown fields are ignored) and fall back to the oldest pending request
+// of the right kind when the reply omits it.
+function netResolvePending(msg, kind) {
+    let reqId = msg.reqId;
+    if (!reqId || !netPending.has(reqId)) {
+        reqId = null;
+        for (const [id, p] of netPending) {
+            if (p.kind === kind) { reqId = id; break; }
+        }
+    }
+    if (!reqId) return;
+    const p = netPending.get(reqId);
+    netPending.delete(reqId);
+    clearTimeout(p.timer);
+    p.resolve(msg);
+}
+
+function netRejectAllPending(reason) {
+    for (const [, p] of netPending) {
+        clearTimeout(p.timer);
+        p.reject(new Error(reason));
+    }
+    netPending.clear();
+}
+
+// markets/missionBoards arrive either keyed by planet name or as arrays of
+// { name|planet, ... } — normalize both (char docs use the array form).
+function netEntryFor(collection, planetName) {
+    if (!collection) return null;
+    if (Array.isArray(collection)) {
+        return collection.find(e => e && (e.name === planetName || e.planet === planetName)) || null;
+    }
+    return collection[planetName] || null;
+}
+
+function netApplySnapshot(snap) {
+    if (typeof game === 'undefined' || !game.planets) return;
+    if (snap.markets) {
+        game.planets.forEach(planet => {
+            const m = netEntryFor(snap.markets, planet.name);
+            if (m && m.buy && m.sell) netApplyMarket(planet.name, m);
+        });
+    }
+    if ('marketEvent' in snap) netApplyMarketEvent(snap.marketEvent || null, false);
+    if (snap.missionBoards) {
+        game.planets.forEach(planet => {
+            const b = netEntryFor(snap.missionBoards, planet.name);
+            if (b) netStashBoard(planet.name, b);
+        });
+    }
+    if (snap.grudges) net.grudges = snap.grudges; // stashed; applied in M4
+}
+
+function netApplyMarket(planetName, market) {
+    if (typeof game === 'undefined' || !game.planets || !market) return;
+    const planet = game.planets.find(p => p.name === planetName);
+    if (!planet || !planet.market) return;
+    // Merge over defaults so goods the server doesn't know keep fresh prices
+    planet.market = {
+        buy: { ...planet.market.buy, ...(market.buy || {}) },
+        sell: { ...planet.market.sell, ...(market.sell || {}) }
+    };
+    if (game.isDocked && game.currentPlanet === planet) {
+        recordLedger(planet);       // berthed here = these are the prices you saw
+        refreshDockedTradeUI();
+    }
+}
+
+// Set/clear the market-event singleton. announce=true reuses the exact HUD
+// announcement wording from economy.js startMarketEvent / updateEconomy.
+function netApplyMarketEvent(ev, announce) {
+    if (typeof economy === 'undefined') return;
+    const prev = economy.marketEvent;
+    economy.marketEvent = ev;
+    if (announce && typeof showHudFeedback === 'function') {
+        if (ev && !(prev && prev.label === ev.label && prev.planetName === ev.planetName)) {
+            const goodName = goods[ev.goodType] ? goods[ev.goodType].name : ev.goodType;
+            if (ev.side === 'sell') {
+                showHudFeedback(`⚡ ${ev.label} — ${goodName} sells at ${ev.multiplier.toFixed(1)}× for 3 min!`, 'warning', 6000);
+            } else {
+                showHudFeedback(`⚡ ${ev.label} — ${goodName} is dirt cheap for 3 min!`, 'warning', 6000);
+            }
+        } else if (!ev && prev) {
+            showHudFeedback(`Markets normalize — ${prev.label} is over`, 'info');
+        }
+    }
+    if (typeof updateLedgerUI === 'function') updateLedgerUI();
+    if (typeof refreshDockedTradeUI === 'function') refreshDockedTradeUI();
+}
+
+// Server boards are ONE offers[] array with the bounty entry (type:'bounty')
+// inline when the roll produced one (locked server-authority details). The
+// board UI renders bounty and deliveries from different planet fields, so
+// split the inline bounty out here. Also tolerates a { offers, bountyOffer }
+// object shape (the core's return shape) in case a board ever arrives split.
+function netStashBoard(planetName, board) {
+    let offers = Array.isArray(board) ? board : (board.offers || []);
+    let bountyOffer = (!Array.isArray(board) && board.bountyOffer) || null;
+    const inline = offers.find(o => o && o.type === 'bounty');
+    offers = offers.filter(o => o && o.type !== 'bounty');
+    netBoards.set(planetName, { offers, bountyOffer: bountyOffer || inline || null });
+}
+
+function netApplyBoardUpdate(msg) {
+    if (!msg.planet) return;
+    netStashBoard(msg.planet, msg);
+    if (typeof game !== 'undefined' && game.isDocked && game.currentPlanet
+        && game.currentPlanet.name === msg.planet) {
+        net.applyBoard(game.currentPlanet);
+        if (typeof updateMissionBoardUI === 'function') updateMissionBoardUI(game.currentPlanet);
+    }
+}
+
+// When online the server owns the market-event cadence — the local roll in
+// economy.js updateEconomy() must not invent client-only events (prices would
+// diverge from trade.result bases). Same instance-shadow pattern as the
+// saveCharacter wrapper: economy.js itself is not edited.
+const netOrigStartMarketEvent = startMarketEvent;
+startMarketEvent = function() {
+    if (net.online) { economy.eventCooldown = 30; return; } // server's call
+    netOrigStartMarketEvent();
+};
+
+// Accepting a delivery/bounty offer while online routes through the server
+// (mission.take) so the board regenerates for everyone. The mission-log-full
+// and one-hunt gates are player state and stay caller-side per PROTOCOL.
+// Offline path calls straight through to the original functions.
+const netOrigAcceptMission = acceptMission;
+acceptMission = function(offerId) {
+    if (!net.online) return netOrigAcceptMission(offerId);
+    const planet = game.currentPlanet;
+    if (!planet || !planet.missionOffers) return;
+    if (game.missions.length >= 3) {
+        showHudFeedback('Mission log full (3 contracts max)', 'error');
+        return;
+    }
+    const offer = planet.missionOffers.find(o => o.id === offerId);
+    if (!offer) return;
+    net.takeMission(planet, offerId).then(res => {
+        if (!res || !res.ok) { showHudFeedback('Contract no longer available', 'error'); return; }
+        if (game.missions.length >= 3) return; // re-check: reply came back async
+        game.missions.push(res.mission || offer);
+        planet.missionOffers = planet.missionOffers.filter(o => o.id !== offerId);
+        const b = netBoards.get(planet.name);
+        if (b) b.offers = (b.offers || []).filter(o => o.id !== offerId);
+        showHudFeedback('Contract accepted', 'success');
+        if (game.isDocked && game.currentPlanet === planet) updateMissionBoardUI(planet);
+        updateMissionsUI();
+    }).catch(() => showHudFeedback('Contract no longer available', 'error'));
+};
+
+const netOrigAcceptBounty = acceptBounty;
+acceptBounty = function() {
+    if (!net.online) return netOrigAcceptBounty();
+    const planet = game.currentPlanet;
+    if (!planet || !planet.bountyOffer) return;
+    if (game.missions.length >= 3) {
+        showHudFeedback('Mission log full (3 contracts max)', 'error');
+        return;
+    }
+    const bounty = planet.bountyOffer;
+    net.takeMission(planet, bounty.id).then(res => {
+        if (!res || !res.ok) { showHudFeedback('Poster already claimed', 'error'); return; }
+        if (game.missions.length >= 3) return;
+        const mission = res.mission || bounty;
+        planet.bountyOffer = null;
+        const b = netBoards.get(planet.name);
+        if (b) b.bountyOffer = null;
+        game.missions.push(mission);
+        spawnNamedWarlord(mission); // the hunt target itself is local combat
+        showHudFeedback(`Hunt accepted: ${mission.name}, last seen near ${mission.nearPlanet}`, 'success', 4500);
+        if (game.isDocked && game.currentPlanet === planet) updateMissionBoardUI(planet);
+        updateMissionsUI();
+    }).catch(() => showHudFeedback('Poster already claimed', 'error'));
+};
+
 function netManualConnect() {
     netSuppressUntil = 0;
     netRejected = false;
@@ -340,6 +600,17 @@ window.netForceDisconnect = function(suppressMs = 5000) {
 };
 window.netConnect = function() { netManualConnect(); };
 window.netGhosts = function() { return net.getGhosts(); };
+window.netWorld = function() {
+    return {
+        marketFor(planetName) {
+            const p = (typeof game !== 'undefined' && game.planets)
+                ? game.planets.find(pl => pl.name === planetName) : null;
+            return p ? p.market : null;
+        },
+        marketEvent: (typeof economy !== 'undefined') ? economy.marketEvent : null,
+        boardFor(planetName) { return netBoards.get(planetName) || null; }
+    };
+};
 
 // Auto-connect once characterManager has a character (startGame() runs from
 // the inline script after this file; poll rather than editing character.js).
