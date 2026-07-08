@@ -78,7 +78,9 @@ function undock() {
 
 function updateTradingInterface(planet) {
     document.getElementById('tradingTitle').textContent = planet.name;
-    document.getElementById('stationInfo').textContent = `Type: ${planet.type} | Status: DOCKED`;
+    document.getElementById('stationInfo').innerHTML =
+        `Type: ${planet.type} | Status: DOCKED` +
+        (planet.blurb ? `<br><em style="color:#889988;">${planet.blurb}</em>` : '');
 
     // Update buying section (what the station sells)
     updateBuyingSectionUI();
@@ -91,6 +93,9 @@ function updateTradingInterface(planet) {
 
     // Update upgrades section
     updateUpgradesUI(planet);
+
+    // Update weapon systems shop
+    updateWeaponSystemsUI(planet);
 
     // Update fuel cost
     updateFuelCost();
@@ -454,6 +459,48 @@ function sellGood(goodType, qty = 1) {
 
     // Auto-save on trade
     autoSave('trade');
+}
+
+const WEAPON_SYSTEM_PRICES = { double: 1200, spread: 2600, seeker: 4200 };
+
+function updateWeaponSystemsUI(planet) {
+    const el = document.getElementById('weaponSystemsSection');
+    if (!el) return;
+    const systems = planet.weaponSystems || [];
+    if (systems.length === 0) {
+        el.innerHTML = '<div style="color:#666;">None sold here</div>';
+        return;
+    }
+    const owned = game.ship.weapons.lasers.owned || ['single'];
+    el.innerHTML = systems.map(mode => {
+        const spec = LASER_MODES[mode];
+        const cost = WEAPON_SYSTEM_PRICES[mode];
+        const has = owned.includes(mode);
+        return `<div class="trade-item">
+            <span>${spec.label} Lasers<br><small style="color:#888;">${spec.blurb}</small></span>
+            <span>$${cost}</span>
+            <button onclick="buyWeaponSystem('${mode}', ${cost})" ${has || game.ship.credits < cost ? 'disabled' : ''}>
+                ${has ? 'Owned' : 'Buy'}
+            </button>
+        </div>`;
+    }).join('');
+}
+
+function buyWeaponSystem(mode, cost) {
+    const lasers = game.ship.weapons.lasers;
+    if ((lasers.owned || []).includes(mode)) return;
+    if (game.ship.credits < cost) {
+        showHudFeedback(`Insufficient credits! Need $${cost}.`, 'error');
+        return;
+    }
+    game.ship.credits -= cost;
+    if (!lasers.owned) lasers.owned = ['single'];
+    lasers.owned.push(mode);
+    lasers.mode = mode; // Equip the new toy immediately
+    showHudFeedback(`${LASER_MODES[mode].label} lasers installed — Z to switch systems`, 'success', 3500);
+    updateUI();
+    updateWeaponSystemsUI(game.currentPlanet);
+    autoSave('upgrade');
 }
 
 function updateRepairCost() {

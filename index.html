@@ -18,6 +18,7 @@
                 <div>Shield: <span id="shieldVal" style="color: #44aaff;">20</span>/<span id="shieldMax">20</span></div>
                 <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
                 <div>Missiles: <span id="missiles">5</span>/<span id="missilesMax">5</span></div>
+                <div>Weapon: <span id="weaponMode">Single</span> <span id="laserHeat"></span></div>
                 <div id="streakLine" style="display: none; color: #ffcc00;"></div>
             </div>
 
@@ -77,6 +78,11 @@
                     <strong style="color: #00ffff;">Ship Upgrades:</strong>
                 </div>
                 <div id="upgradesSection"></div>
+
+                <div style="margin: 15px 0;">
+                    <strong style="color: #00ffff;">Weapon Systems:</strong>
+                </div>
+                <div id="weaponSystemsSection"></div>
 
                 <div style="margin: 15px 0;">
                     <strong style="color: #00ffff;">Mission Board:</strong>
@@ -154,7 +160,7 @@
 
     <div id="controls">
         Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | E for secondary interaction | M for map | ESC to undock<br>
-        Combat: X to fire lasers | C to fire missiles | 🌟 Random events occur during travel - make choices to earn rewards or avoid risks!<br>
+        Combat: X to fire lasers | Z to switch weapon systems | C to fire missiles | 🌟 Random events occur during travel - make choices to earn rewards or avoid risks!<br>
         <small>Auto-saves on major events | Console: exportCharacter(), importCharacter(), getCharacterStats(), resetCharacter()</small>
     </div>
 

@@ -70,6 +70,22 @@ function updateUI() {
     document.getElementById('missiles').textContent = game.ship.weapons.missiles.ammo;
     document.getElementById('missilesMax').textContent = game.ship.weapons.missiles.maxAmmo;
 
+    // Weapon system + laser heat
+    const lasers = game.ship.weapons.lasers;
+    const modeSpec = (typeof LASER_MODES !== 'undefined' && LASER_MODES[lasers.mode]) || { label: 'Single' };
+    document.getElementById('weaponMode').textContent = modeSpec.label;
+    const heatEl = document.getElementById('laserHeat');
+    const heat = Math.round(lasers.heat || 0);
+    if (lasers.overheated) {
+        heatEl.textContent = '· OVERHEATED';
+        heatEl.style.color = '#ff4444';
+    } else if (heat > 0) {
+        heatEl.textContent = `· heat ${heat}%`;
+        heatEl.style.color = heat > 75 ? '#ff8844' : heat > 40 ? '#ffcc44' : '#888888';
+    } else {
+        heatEl.textContent = '';
+    }
+
     // Bounty streak indicator (only shown mid-streak)
     const streakEl = document.getElementById('streakLine');
     if (streakEl) {

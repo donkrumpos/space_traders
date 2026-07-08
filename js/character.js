@@ -130,6 +130,13 @@ class CharacterManager {
             game.ship.shield = game.ship.shieldMax;
         }
 
+        // Legacy saves predate weapon systems and laser heat
+        const lasers = game.ship.weapons.lasers;
+        if (!lasers.owned) lasers.owned = ['single'];
+        if (!lasers.mode) lasers.mode = 'single';
+        if (typeof lasers.heat === 'undefined') lasers.heat = 0;
+        if (typeof lasers.overheated === 'undefined') lasers.overheated = false;
+
         // Apply game state
         game.isDocked = this.character.gameState.isDocked;
         game.currentPlanet = this.character.gameState.currentPlanet;
@@ -152,7 +159,11 @@ class CharacterManager {
             w.markets.forEach(saved => {
                 const planet = game.planets.find(p => p.name === saved.name);
                 if (planet) {
-                    planet.market = { buy: { ...saved.buy }, sell: { ...saved.sell } };
+                    // Merge over defaults so goods added after the save keep their fresh prices
+                    planet.market = {
+                        buy: { ...planet.market.buy, ...saved.buy },
+                        sell: { ...planet.market.sell, ...saved.sell }
+                    };
                 }
             });
         }

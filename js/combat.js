@@ -1,40 +1,97 @@
+// Gradius-style laser systems. Bought at stations, cycled with Z.
+const LASER_MODES = {
+    single: {
+        label: 'Single', blurb: 'Standard forward cannon',
+        heat: 14, damageMult: 1.0, cooldown: 500, range: 500, color: '#ff0000',
+        shots: [{ angleOffset: 0 }]
+    },
+    double: {
+        label: 'Twin', blurb: 'Two parallel barrels — wide hits, moderate heat',
+        heat: 18, damageMult: 0.75, cooldown: 500, range: 500, color: '#ff5533',
+        shots: [{ angleOffset: 0, side: -5 }, { angleOffset: 0, side: 5 }]
+    },
+    spread: {
+        label: 'Spread', blurb: 'Three-shot fan — crowd control, runs hot',
+        heat: 22, damageMult: 0.6, cooldown: 550, range: 450, color: '#ffaa22',
+        shots: [{ angleOffset: -0.18 }, { angleOffset: 0 }, { angleOffset: 0.18 }]
+    },
+    seeker: {
+        label: 'Seeker', blurb: 'Precursor guidance — shots curve toward pirates',
+        heat: 16, damageMult: 0.8, cooldown: 600, range: 600, color: '#66ffcc',
+        homing: true,
+        shots: [{ angleOffset: 0 }]
+    }
+};
+
 function fireLaser() {
-    if (game.ship.weapons.lasers.cooldown > 0) {
-        return; // Still cooling down
+    const lasers = game.ship.weapons.lasers;
+    if (lasers.cooldown > 0 || lasers.overheated) {
+        return; // Cooling down or locked out
+    }
+
+    const spec = LASER_MODES[lasers.mode] || LASER_MODES.single;
+
+    // Heat: sustained fire builds heat; hitting 100 locks the lasers until cooled
+    lasers.heat = Math.min(100, (lasers.heat || 0) + spec.heat);
+    if (lasers.heat >= 100) {
+        lasers.overheated = true;
+        showHudFeedback('LASERS OVERHEATED — cooling...', 'warning', 2000);
     }
 
     // Spawn at the ship's nose, not its center
     const muzzleX = game.ship.x + Math.cos(game.ship.angle) * 12;
     const muzzleY = game.ship.y + Math.sin(game.ship.angle) * 12;
+    const baseDamage = 20 + (game.ship.upgrades.weapons - 1) * 10; // More damage with upgrades
 
-    // Create laser projectile — inherits ship velocity (true Newtonian physics).
-    // Ship velocity is units/frame at 60fps; projectile velocity is units/second.
-    const laser = {
-        type: 'laser',
-        x: muzzleX,
-        y: muzzleY,
-        velocity: {
-            x: Math.cos(game.ship.angle) * 800 + game.ship.velocity.x * 60,
-            y: Math.sin(game.ship.angle) * 800 + game.ship.velocity.y * 60
-        },
-        damage: 20 + (game.ship.upgrades.weapons - 1) * 10, // More damage with upgrades
-        range: 500, // Maximum travel distance
-        distanceTraveled: 0,
-        color: '#ff0000',
-        size: 3,
-        age: 0,
-        maxAge: 1500 // Generous cap; range (distanceTraveled) is the real limiter
-    };
+    spec.shots.forEach(shot => {
+        const angle = game.ship.angle + shot.angleOffset;
+        // Perpendicular offset for parallel barrels (Twin)
+        const side = shot.side || 0;
+        const offX = -Math.sin(game.ship.angle) * side;
+        const offY = Math.cos(game.ship.angle) * side;
 
-    game.projectiles.push(laser);
-    game.ship.weapons.lasers.cooldown = game.ship.weapons.lasers.maxCooldown;
+        // Inherits ship velocity (true Newtonian physics).
+        // Ship velocity is units/frame at 60fps; projectile velocity is units/second.
+        game.projectiles.push({
+            type: 'laser',
+            x: muzzleX + offX,
+            y: muzzleY + offY,
+            velocity: {
+                x: Math.cos(angle) * 800 + game.ship.velocity.x * 60,
+                y: Math.sin(angle) * 800 + game.ship.velocity.y * 60
+            },
+            damage: Math.round(baseDamage * spec.damageMult),
+            homing: spec.homing || false,
+            range: spec.range,
+            distanceTraveled: 0,
+            color: spec.color,
+            size: 3,
+            age: 0,
+            maxAge: 1500 // Generous cap; range (distanceTraveled) is the real limiter
+        });
+    });
+
+    lasers.cooldown = spec.cooldown;
 
     // Muzzle flash + pew
     spawnParticles(muzzleX, muzzleY, {
-        count: 4, colors: ['#ff6666', '#ffaaaa'], speed: 80, life: 0.15, size: 1.5,
+        count: 4, colors: [spec.color, '#ffaaaa'], speed: 80, life: 0.15, size: 1.5,
         baseVx: game.ship.velocity.x * 60, baseVy: game.ship.velocity.y * 60
     });
     playLaserSound();
+}
+
+function cycleLaserMode() {
+    const lasers = game.ship.weapons.lasers;
+    const owned = lasers.owned || ['single'];
+    if (owned.length < 2) {
+        showHudFeedback('No other weapon systems installed — buy them at stations', 'info', 2000);
+        return;
+    }
+    const idx = owned.indexOf(lasers.mode);
+    lasers.mode = owned[(idx + 1) % owned.length];
+    showHudFeedback(`Weapon system: ${LASER_MODES[lasers.mode].label}`, 'info', 1500);
+    updateUI();
 }
 
 function fireMissile() {
@@ -720,6 +777,34 @@ function updateProjectiles(deltaTime) {
         projectile.prevX = projectile.x;
         projectile.prevY = projectile.y;
 
+        // Seeker shots curve toward the nearest pirate, preserving their speed
+        if (projectile.homing && game.enemies && game.enemies.length > 0) {
+            let nearest = null;
+            let nearestDistSq = Infinity;
+            game.enemies.forEach(e => {
+                const dSq = Math.pow(e.x - projectile.x, 2) + Math.pow(e.y - projectile.y, 2);
+                if (dSq < nearestDistSq) {
+                    nearestDistSq = dSq;
+                    nearest = e;
+                }
+            });
+            if (nearest) {
+                const speed = Math.sqrt(
+                    projectile.velocity.x * projectile.velocity.x +
+                    projectile.velocity.y * projectile.velocity.y
+                );
+                const currentAngle = Math.atan2(projectile.velocity.y, projectile.velocity.x);
+                const targetAngle = Math.atan2(nearest.y - projectile.y, nearest.x - projectile.x);
+                let diff = targetAngle - currentAngle;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                const turn = Math.sign(diff) * Math.min(Math.abs(diff), 3.5 * deltaTime);
+                const newAngle = currentAngle + turn;
+                projectile.velocity.x = Math.cos(newAngle) * speed;
+                projectile.velocity.y = Math.sin(newAngle) * speed;
+            }
+        }
+
         // Update position
         projectile.x += projectile.velocity.x * deltaTime;
         projectile.y += projectile.velocity.y * deltaTime;
@@ -756,6 +841,16 @@ function updateWeaponCooldowns(deltaTime) {
         game.ship.weapons.lasers.cooldown -= deltaTime * 1000;
         if (game.ship.weapons.lasers.cooldown < 0) {
             game.ship.weapons.lasers.cooldown = 0;
+        }
+    }
+
+    // Laser heat dissipates constantly; overheat lockout clears at 30
+    const lasers = game.ship.weapons.lasers;
+    if (lasers.heat > 0) {
+        lasers.heat = Math.max(0, lasers.heat - 20 * deltaTime);
+        if (lasers.overheated && lasers.heat <= 30) {
+            lasers.overheated = false;
+            showHudFeedback('Lasers back online', 'info', 1500);
         }
     }
 
