@@ -1,37 +1,60 @@
 # Next Session Roadmap
 
-State as of 2026-07-08 (evening): **Tier 3 multiplayer is BUILT and DEPLOYED.**
-M1 (shared saves) → M2 (ghosts) → M3 (shared world) → M4 (shared combat) each
-committed gate-green; M5 deployed to **https://siegeperilousstudio.com**
-(themisto VPS, Apache + wss + systemd; see docs/RUNBOOK.md). verify-net:
-93/93 across M1–M4 suites; solo ?verify: 92/92. Family secret + first-visit
-setup: RUNBOOK.md (secret itself lives only in the systemd unit on themisto).
+State as of 2026-07-08 (late night): **First real two-machine playtest DONE —
+and it worked.** Dad + Arthur flew together on https://siegeperilousstudio.com;
+the session produced a stream of live fixes, all deployed (themisto VPS,
+Apache + wss + systemd; see docs/RUNBOOK.md). verify-net: 93/93; solo
+?verify: **102/102**. Family secret + first-visit setup: RUNBOOK.md.
 
-## THE acceptance test (do this first): two-machine playtest with Arthur
+## What the playtest shipped (2026-07-08, commits bcf26ee → b86f86b)
 
-This is both the M5 acceptance test AND the ship-progression playtest that
-was consciously jump-gated for the multiplayer build. Two birds, one sitting:
+- **Snapshot interpolation** for server enemies/traders (was extrapolate-and-
+  snap → jerky). Docs said "interpolate"; now the code does.
+- **Bad-secret reject is visible + self-heals** (Arthur typed the secret wrong
+  and silently played offline solo — that was the "can't see Arthur" mystery;
+  the server log's `reject: bad secret for pilot "arthur"` is the tell).
+- **UI batch:** minimap anchored to the play area (was covering Ship Status),
+  toast stack (cap 4, reading-time floor, ×N duplicate collapse), perk choice
+  no longer force-pauses — pulsing ⭐ Training chip + dock prompt +
+  "train later" dismiss. Pause is solo-only.
+- **Solar-sail crawl:** dry tanks = 5% thrust floor, burns nothing, pale-blue
+  flame, `0 (SAIL)` readout. The stranded softlock is gone.
+- **Ballistic compensation** — THE fix of the night. Enemy bolts inherit
+  shooter velocity; orbiting pirates smeared every shot ~150u sideways and
+  could not hit even a PARKED ship (sim: 221 shots/60s → 0 hits). Gunners now
+  solve barrel direction so total bolt velocity rides the aim line, plus
+  per-tier intercept lead (scout .35 / raider .65 / warlord .9). Parked in a
+  6-pack: 0 → ~48 DPS. Full-burn escape still works. 2 scouts vs parked
+  beginner: 0.8 DPS (teaches, never kills).
+- **Death is a moment:** 4s wreck pause (shatter explosions, SHIP DESTROYED
+  banner + countdown + credit tax), cargo scatters as pods (`cargo.scatter`,
+  owner-locked 8s server-side so nobody vacuums a wreck mid-respawn), corpse
+  run to recover. **Reliquary Hold** (9th mod, $7500): cargo survives the
+  wreck. verify-net harness ships now carry `game.testInvulnerable` plot
+  armor (real gunnery was killing parked test pilots mid-suite).
 
-- Each machine: open the URL, pilot names Dad / Arthur, secret from the unit
-  file. Arthur's existing save should upload and retro-commission into its hull.
-- **Christening moment:** does the naming modal land as a moment for Arthur?
-  (It queues before perk modals.)
-- **The ghost moment:** does Arthur SEE "Dad — <ship>" flying next to him?
-  Does he chase you? Does the minimap blip read?
-- **Shared fight:** spawn trouble (fly rich, or console spawnRaidBand()),
-  fight the same band. Does "we're fighting them together" land? Does the
-  family vendetta (shared grudge) get retold afterward?
-- **One ledger:** sell at the same station — does Arthur notice Dad's selling
-  moved his price?
-- Ship-layer checklist (carried from the jump-gated arc): shipyard catalog
-  dreaming, trade-in math readability, skiff berth-lock feel, mechanic's
-  bench quirks at Arthur's reading level, freighter-vs-gunship feel, "The
-  Ship" panel glances.
+## Next playtest watchlist
+
+- **Deaths are real now.** Does the warlord tier feel earned or cheap for
+  Arthur at high wealth? Knobs: per-tier `leadFactor`, 0.2 rad fire gate.
+- Does the corpse run land as fun? Pod lock 8s / expiry 90s tunable.
+- Scout fire rate is low (orbit speed vs turn speed — they chase their own
+  aim). Fine for beginners; revisit if scouts feel decorative.
+- Economy: bounty income vs trading is closer now that combat has risk, but
+  the streak ×3 multiplier deserves a look with real death risk priced in.
+- Foggy's ledger insight: his home 4-planet circuit is price-depressed from
+  grinding (markets remember, shared server-wide); Mining 7 / Meridian /
+  Frontier untouched. Watch whether drift recovers the depressed markets or
+  they need a homeostasis nudge.
+- Reliquary Hold as bench mod is v1 — Foggy wants it quest-shaped eventually
+  (Ossuary Drift dig-quest is the natural home when a quest system exists).
 
 ## Known v1 gaps (documented in PROTOCOL.md; post-playtest candidates)
 
 - Online NPC freighters are indestructible (no server projectile sim).
 - Named bounty warlords stay client-local online.
+- Peers don't see your death (no death broadcast — your ghost just sits
+  still for 4s, then teleports home). Candidate: broadcast + explosion FX.
 - No `www.` DNS record / cert (bare domain only).
 - backups table in world.db grows unpruned (fine for years at n=2).
 
@@ -44,8 +67,9 @@ was consciously jump-gated for the multiplayer build. Two birds, one sitting:
 ## Workflow that works
 
 Same as always, now with a net gate: one-sentence playtest note → diagnose →
-build → verify (`?verify` 92/92 solo AND `node verify-net.mjs` 93/93) →
+build → verify (`?verify` 102/102 solo AND `node verify-net.mjs` 93/93) →
 commit → `ssh themisto '...'` update line from RUNBOOK.md. Serve local:
 python3 -m http.server 8377. Console: grantXP(n), nameShip('...'),
 spawnRaidBand(), exportCharacter(), netStatus(), netGhosts(), netWorld(),
-netCombat().
+netCombat(). For balance questions, simulate first: /tmp-style node harness
+importing js/sim/combat-core.js settled the "can't die" bug empirically.
