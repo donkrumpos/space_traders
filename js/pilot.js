@@ -129,17 +129,20 @@ function availablePerkChoices() {
     }).filter(Boolean);
 }
 
+// Promotions no longer force the training modal open mid-flight (it paused
+// the game — meaningless online, where the server world keeps moving, and an
+// interruption everywhere else). Instead a pending choice lights the pulsing
+// HUD chip; the pilot opens the cards when THEY choose — by clicking the
+// chip, or via the dock prompt (docked = the natural safe moment).
 function maybeShowPerkChoice() {
     if (location.search.includes('verify')) return; // harness drives perk flow explicitly
-    if (!game.pilot || game.pilot.pendingPerkChoices <= 0) return;
-    if (document.getElementById('perkChoiceOverlay')) return;
-    // The christening modal goes first; training waits its turn
-    if (document.getElementById('shipNamingOverlay')) {
-        setTimeout(maybeShowPerkChoice, 1500);
-        return;
-    }
-    // Let the promotion banner have its moment first
-    setTimeout(showPerkChoice, 1200);
+    updateTrainingChip();
+}
+
+function updateTrainingChip() {
+    const chip = document.getElementById('trainingChip');
+    if (!chip) return;
+    chip.style.display = (game.pilot && game.pilot.pendingPerkChoices > 0) ? 'block' : 'none';
 }
 
 function showPerkChoice() {
@@ -147,10 +150,13 @@ function showPerkChoice() {
     const choices = availablePerkChoices();
     if (choices.length === 0 || game.pilot.pendingPerkChoices <= 0) {
         game.pilot.pendingPerkChoices = 0;
+        updateTrainingChip();
         return;
     }
 
-    game.paused = true;
+    // Solo can freeze time for the choice; online the world doesn't stop
+    // for anyone — the pilot picked this moment, so it's on them.
+    if (!(typeof net !== 'undefined' && net.online)) game.paused = true;
 
     const overlay = document.createElement('div');
     overlay.id = 'perkChoiceOverlay';
@@ -178,9 +184,21 @@ function showPerkChoice() {
             CHOOSE YOUR TRAINING
         </div>
         <div style="display: flex; gap: 18px;">${cards}</div>
+        <div onclick="dismissPerkChoice()" style="color: #888888; font-size: 12px; margin-top: 22px;
+            cursor: pointer; text-decoration: underline;">train later</div>
     `;
     document.body.appendChild(overlay);
 }
+
+// Close without choosing — the chip keeps pulsing, nothing is lost. Nobody
+// should ever be trapped in a menu while pirates are shooting.
+function dismissPerkChoice() {
+    const overlay = document.getElementById('perkChoiceOverlay');
+    if (overlay) overlay.remove();
+    game.paused = false;
+    updateTrainingChip();
+}
+window.dismissPerkChoice = dismissPerkChoice;
 
 function choosePerk(id) {
     const pilot = game.pilot;
@@ -212,14 +230,17 @@ function choosePerk(id) {
     const overlay = document.getElementById('perkChoiceOverlay');
     if (overlay) overlay.remove();
     game.paused = false;
+    updateTrainingChip();
 
     updateUI();
     characterManager.saveCharacter(true);
 
-    // Stacked promotions (retroactive commissions) choose again immediately
-    if (pilot.pendingPerkChoices > 0) maybeShowPerkChoice();
+    // Stacked promotions (retroactive commissions): the pilot is already in
+    // choosing mode, so offer the next card set immediately
+    if (pilot.pendingPerkChoices > 0 && !location.search.includes('verify')) showPerkChoice();
 }
 window.choosePerk = choosePerk;
+window.showPerkChoice = showPerkChoice;
 
 // Minimap range composes the scanner perk with the whisperdrive coil's
 // interference — one place computes it so nothing stomps anything

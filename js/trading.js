@@ -92,6 +92,14 @@ function dock(planet) {
 
     // Auto-save on docking
     autoSave('dock');
+
+    // A pending promotion perk offers itself now — berthed at a station is
+    // the natural safe moment to train (the chip works anywhere, anytime)
+    if (game.pilot && game.pilot.pendingPerkChoices > 0 &&
+        !location.search.includes('verify') &&
+        typeof showPerkChoice === 'function') {
+        setTimeout(showPerkChoice, 600); // let the docking UI settle first
+    }
 }
 
 function undock() {

@@ -8,12 +8,21 @@
 </head>
 <body>
     <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
+        <div id="canvasWrap">
+            <canvas id="gameCanvas"></canvas>
+            <!-- Mini-map: anchored to the play area's corner, so it can never
+                 cover the sidebar's Ship Status panel -->
+            <div id="miniMap">
+                <canvas id="miniMapCanvas" width="150" height="150"></canvas>
+                <div id="miniMapTitle">Strategic Nav</div>
+            </div>
+        </div>
         <div id="ui">
             <div class="panel" id="shipStatusPanel">
                 <h3>Ship Status</h3>
                 <div>Rank: <span id="pilotRank" style="color: #ffdd44;">· Cadet</span></div>
                 <div id="xpLine" style="color: #88bbff; font-size: 11px;"></div>
+                <div id="trainingChip" onclick="showPerkChoice()" style="display: none;">⭐ Training available — click to choose</div>
                 <div>Credits: $<span id="credits">1000</span></div>
                 <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
                 <div>Hull: <span id="hull">100</span>/<span id="hullMax">100</span></div>
@@ -173,13 +182,7 @@
     </div>
 
     <!-- Toast notifications (overlay, never shifts layout) -->
-    <div id="hudFeedback" style="display: none;"></div>
-
-    <!-- Mini-map -->
-    <div id="miniMap">
-        <canvas id="miniMapCanvas" width="150" height="150"></canvas>
-        <div id="miniMapTitle">Strategic Nav</div>
-    </div>
+    <div id="hudToastStack"></div>
 
     <!-- Full map overlay -->
     <div id="fullMapOverlay" style="display: none;">

@@ -370,19 +370,18 @@ function render() {
     }
 
     // Forward thrust indicator - intensity based on current thrust
-    const hasMainFuel = game.ship.fuel > 0;
-    const hasEmergencyFuel = game.ship.emergencyFuel > 0;
-    const canThrust = hasMainFuel || hasEmergencyFuel;
+    // (thrust never fully dies: dry tanks fall through to the solar-sail crawl)
+    const isCrawlMode = game.ship.fuel <= 0 && game.ship.emergencyFuel <= 0;
 
-    if (game.ship.thrust.isThrusting && canThrust) {
+    if (game.ship.thrust.isThrusting) {
         const intensity = game.ship.thrust.current;
         const alpha = 0.3 + (intensity * 0.7); // 30% to 100% opacity
         const flameLength = 5 + (intensity * 10); // 5 to 15 pixel flame
         const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 
-        ctx.globalAlpha = alpha;
-        // Different flame color for emergency mode
-        ctx.strokeStyle = isEmergencyMode ? '#ff4444' : '#ff8800'; // Red flame in emergency mode
+        ctx.globalAlpha = isCrawlMode ? alpha * 0.6 : alpha;
+        // Flame tells the fuel story: orange burn, red emergency, pale starlight sail
+        ctx.strokeStyle = isCrawlMode ? '#88ddff' : isEmergencyMode ? '#ff4444' : '#ff8800';
         ctx.lineWidth = 1 + intensity; // Thicker line at full thrust
         ctx.beginPath();
         ctx.moveTo(shape.tail, -2 * intensity);
@@ -394,15 +393,14 @@ function render() {
     }
 
     // Reverse thrust indicator (smaller, blue) - intensity based on current thrust
-    if (game.ship.thrust.isReversing && canThrust) {
+    if (game.ship.thrust.isReversing) {
         const intensity = game.ship.thrust.current;
         const alpha = 0.3 + (intensity * 0.7);
         const flameLength = 3 + (intensity * 5); // Smaller reverse flame
         const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 
-        ctx.globalAlpha = alpha;
-        // Different flame color for emergency mode
-        ctx.strokeStyle = isEmergencyMode ? '#ff6666' : '#4488ff'; // Light red in emergency mode
+        ctx.globalAlpha = isCrawlMode ? alpha * 0.6 : alpha;
+        ctx.strokeStyle = isCrawlMode ? '#88ddff' : isEmergencyMode ? '#ff6666' : '#4488ff';
         ctx.lineWidth = 1 + (intensity * 0.5);
         ctx.beginPath();
         ctx.moveTo(shape.nose, -1 * intensity);

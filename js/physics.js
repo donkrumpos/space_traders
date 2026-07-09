@@ -27,13 +27,27 @@ function update() {
     // Apply current thrust to ship velocity
     if (game.ship.thrust.current > 0) {
         const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
+        const isCrawlMode = game.ship.fuel <= 0 && game.ship.emergencyFuel <= 0;
         const baseMaxThrust = 0.2; // Base maximum thrust
         const emergencyThrustReduction = 0.15; // Emergency mode is much weaker (75% reduction)
+        const crawlThrustReduction = 0.05; // Solar sail: a floor, not a feature — never stranded, never worth choosing
+
+        // A completely dry ship is never dead in space (that was a silent
+        // softlock — drag stops a coasting ship in seconds, and rescue
+        // events only spawn for MOVING ships). Announce the state once.
+        if (isCrawlMode && !game.sailNoticeShown) {
+            game.sailNoticeShown = true;
+            if (typeof showHudFeedback === 'function') {
+                showHudFeedback('Tanks dry — solar sails out, crawling on starlight', 'warning', 6000);
+            }
+        }
+        if (!isCrawlMode) game.sailNoticeShown = false;
 
         // Knocked-out engines limp at 40% thrust (60% with Emergency Thrusters)
         const enginesDamaged = game.ship.systems && game.ship.systems.engines === 'damaged';
         const limpFactor = hasPerk('emergency_thrusters') ? 0.6 : 0.4;
-        const maxThrust = (isEmergencyMode ? baseMaxThrust * emergencyThrustReduction : baseMaxThrust)
+        const maxThrust = baseMaxThrust
+            * (isCrawlMode ? crawlThrustReduction : isEmergencyMode ? emergencyThrustReduction : 1)
             * (enginesDamaged ? limpFactor : 1);
         const actualThrust = maxThrust * game.ship.thrust.current;
 
@@ -135,13 +149,11 @@ function updateThrustSystem() {
     const thrust = game.ship.thrust;
     const deltaTime = 1/60; // Assuming 60 FPS for consistent timing
 
-    // Check thrust input states (allow emergency thrust when main fuel is depleted)
-    const hasMainFuel = game.ship.fuel > 0;
-    const hasEmergencyFuel = game.ship.emergencyFuel > 0;
-    const canThrust = hasMainFuel || hasEmergencyFuel;
-
-    const wantsForwardThrust = game.keys['ArrowUp'] && canThrust;
-    const wantsReverseThrust = game.keys['ArrowDown'] && canThrust;
+    // Thrust always answers the stick: main fuel, then the emergency
+    // reserve, then the solar-sail crawl — a dry tank slows you 20×,
+    // it never strands you.
+    const wantsForwardThrust = game.keys['ArrowUp'];
+    const wantsReverseThrust = game.keys['ArrowDown'];
 
     // Update thrust state flags
     thrust.isThrusting = wantsForwardThrust;

@@ -6,40 +6,57 @@ function flashCredits() {
     el.classList.add('credits-pulse');
 }
 
+const HUD_TOAST_MAX = 4;          // visible at once; oldest evicted beyond this
+const HUD_TOAST_COLORS = {
+    error:   { bg: '#ff4444', fg: '#ffffff' },
+    warning: { bg: '#ffaa00', fg: '#000000' },
+    success: { bg: '#00ff00', fg: '#000000' },
+    info:    { bg: '#00aaff', fg: '#ffffff' }
+};
+
 function showHudFeedback(message, type = 'info', duration = 3000) {
-    const feedbackEl = document.getElementById('hudFeedback');
-    if (!feedbackEl) return;
+    const stack = document.getElementById('hudToastStack');
+    if (!stack) return;
 
-    feedbackEl.textContent = message;
-    feedbackEl.style.display = 'block';
+    // Reading-time floor: callers pass durations tuned for glances, but a
+    // long mission line needs more screen time than "Cargo full!"
+    duration = Math.min(9000, Math.max(duration, 1600 + message.length * 45));
 
-    switch(type) {
-        case 'error':
-            feedbackEl.style.backgroundColor = '#ff4444';
-            feedbackEl.style.color = '#ffffff';
-            break;
-        case 'warning':
-            feedbackEl.style.backgroundColor = '#ffaa00';
-            feedbackEl.style.color = '#000000';
-            break;
-        case 'success':
-            feedbackEl.style.backgroundColor = '#00ff00';
-            feedbackEl.style.color = '#000000';
-            break;
-        case 'info':
-        default:
-            feedbackEl.style.backgroundColor = '#00aaff';
-            feedbackEl.style.color = '#ffffff';
-            break;
+    // Same message already showing → bump a ×N counter and its timer
+    // instead of stacking spam (save acks, repeated pickup denials)
+    for (const t of stack.children) {
+        if (t._message === message && t._type === type) {
+            t._count++;
+            t.textContent = `${message} ×${t._count}`;
+            clearTimeout(t._timer);
+            t.classList.remove('fading');
+            t._timer = setTimeout(() => hudToastFade(t), duration);
+            return;
+        }
     }
 
-    if (game.hudFeedbackTimeout) {
-        clearTimeout(game.hudFeedbackTimeout);
+    const colors = HUD_TOAST_COLORS[type] || HUD_TOAST_COLORS.info;
+    const toast = document.createElement('div');
+    toast.className = 'hud-toast';
+    toast.textContent = message;
+    toast.style.backgroundColor = colors.bg;
+    toast.style.color = colors.fg;
+    toast._message = message;
+    toast._type = type;
+    toast._count = 1;
+    stack.appendChild(toast); // newest at the bottom of the column
+
+    while (stack.children.length > HUD_TOAST_MAX) {
+        clearTimeout(stack.firstChild._timer);
+        stack.firstChild.remove();
     }
 
-    game.hudFeedbackTimeout = setTimeout(() => {
-        feedbackEl.style.display = 'none';
-    }, duration);
+    toast._timer = setTimeout(() => hudToastFade(toast), duration);
+}
+
+function hudToastFade(toast) {
+    toast.classList.add('fading');
+    setTimeout(() => toast.remove(), 400); // matches the CSS transition
 }
 
 function updateUI() {
@@ -58,7 +75,10 @@ function updateUI() {
     document.getElementById('credits').textContent = game.ship.credits;
     const isEmergencyMode = game.ship.fuel <= 0 && game.ship.emergencyFuel > 0;
 
-    if (isEmergencyMode) {
+    if (game.ship.fuel <= 0 && game.ship.emergencyFuel <= 0) {
+        document.getElementById('fuel').textContent = '0 (SAIL)'; // solar-sail crawl
+        document.getElementById('fuel').style.color = '#88ddff';
+    } else if (isEmergencyMode) {
         document.getElementById('fuel').textContent = `0 (E:${Math.floor(game.ship.emergencyFuel)})`;
         document.getElementById('fuel').style.color = '#ff8800'; // Orange for emergency
     } else {
