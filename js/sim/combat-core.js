@@ -46,24 +46,27 @@
 
     // Combat targets system — three pirate tiers. Danger scales with wealth:
     // a rich trader is a juicy target, so tougher pirates come looking.
+    // leadFactor: how much of the intercept solution the tier's gunners
+    // apply (0 = aim at where you ARE — trivially outrun; 1 = full lead).
+    // Scouts stay kind to new pilots; warlords make you actually weave.
     const ENEMY_TIERS = {
         scout: {
             name: 'Scout', hull: 30, size: 7, color: '#ff8844',
             maxThrust: 0.18, maxSpeed: 7, turnSpeed: 0.04,
             cooldownMin: 1200, cooldownVar: 800, damage: 10, accuracy: 0.75,
-            rewardMin: 80, rewardVar: 80, detectRange: 700
+            rewardMin: 80, rewardVar: 80, detectRange: 700, leadFactor: 0.35
         },
         raider: {
             name: 'Raider', hull: 70, size: 9, color: '#ff4444',
             maxThrust: 0.15, maxSpeed: 6, turnSpeed: 0.03,
             cooldownMin: 900, cooldownVar: 600, damage: 16, accuracy: 0.85,
-            rewardMin: 220, rewardVar: 160, detectRange: 850
+            rewardMin: 220, rewardVar: 160, detectRange: 850, leadFactor: 0.65
         },
         warlord: {
             name: 'Warlord', hull: 140, size: 12, color: '#cc44ff',
             maxThrust: 0.13, maxSpeed: 5.5, turnSpeed: 0.025,
             cooldownMin: 650, cooldownVar: 350, damage: 24, accuracy: 0.9,
-            rewardMin: 600, rewardVar: 400, detectRange: 1000
+            rewardMin: 600, rewardVar: 400, detectRange: 1000, leadFactor: 0.9
         }
     };
 
@@ -113,6 +116,7 @@
             maxSpeed: tier.maxSpeed,
             damage: tier.damage,
             detectRange: tier.detectRange,
+            leadFactor: tier.leadFactor || 0,
             reward: tier.rewardMin + Math.random() * tier.rewardVar,
             lastSpawn: Date.now(),
             weapons: {
@@ -163,6 +167,7 @@
             maxSpeed: 6,
             damage: 24,
             detectRange: 1100,
+            leadFactor: 0.9, // a named warlord earns its bounty
             reward: bounty.reward,
             lastSpawn: Date.now(),
             weapons: {
@@ -344,6 +349,21 @@
                 prey.x - enemy.x
             );
 
+            // Gunnery solution: aim at where the prey will be when a 600 u/s
+            // bolt arrives, not where it is now (aim-at-current is trivially
+            // outrun — a thrusting ship is faster than the bolt). leadFactor
+            // scales how much of the solve each tier applies. Targets carry
+            // vx/vy in units/second; traders don't, and fall back to no lead.
+            let aimAngle = angleToPlayer;
+            const lead = enemy.leadFactor || 0;
+            if (lead > 0 && (prey.vx || prey.vy)) {
+                const boltTime = distanceToPlayer / 600;
+                aimAngle = Math.atan2(
+                    prey.y + (prey.vy || 0) * boltTime * lead - enemy.y,
+                    prey.x + (prey.vx || 0) * boltTime * lead - enemy.x
+                );
+            }
+
             // Check if enemy took damage and trigger evasion
             if (enemy.hull < enemy.ai.lastDamageHull && enemy.ai.evasionCooldown <= 0) {
                 enemy.ai.state = 'evading';
@@ -393,15 +413,23 @@
                 enemy.ai.state = 'engage';
 
                 if (distanceToPlayer > enemy.ai.targetDistance) {
-                    // Approach player: turn toward player and thrust
-                    targetAngle = angleToPlayer;
+                    // Approach: nose onto the intercept, not the prey — a
+                    // hunter leads its quarry
+                    targetAngle = aimAngle;
                     shouldThrust = true;
                 } else if (distanceToPlayer < enemy.ai.targetDistance - 50) {
                     // Too close: turn away and reverse thrust
                     targetAngle = angleToPlayer + Math.PI;
                     shouldThrust = true;
+                } else if (enemy.weapons.fireCooldown <= 250) {
+                    // Gun (nearly) ready: attack run — swing the nose onto
+                    // the firing solution. Before this, orbiting enemies
+                    // "fired" along their strafe heading: 90° wide of the
+                    // prey by construction, pure fireworks.
+                    targetAngle = aimAngle;
+                    shouldThrust = false;
                 } else {
-                    // At optimal range: orbit player for strafing shots
+                    // Gun cycling: orbit the prey for the next run
                     targetAngle = angleToPlayer + Math.PI / 2;
                     shouldThrust = distanceToPlayer > enemy.ai.targetDistance - 25;
                 }

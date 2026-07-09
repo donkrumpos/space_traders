@@ -73,7 +73,8 @@ function positionedTargets() {
     const targets = [];
     for (const [name, p] of pilots) {
         if (typeof p.x === 'number' && typeof p.y === 'number') {
-            targets.push({ name, x: p.x, y: p.y, cargoUnits: p.cargoUnits || 0 });
+            // vx/vy ride ship.state in units/second — CombatCore gunnery lead
+            targets.push({ name, x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, cargoUnits: p.cargoUnits || 0 });
         }
     }
     return targets;
@@ -108,6 +109,8 @@ export function combatPilotState(name, msg) {
     const p = ensurePilot(name);
     if (typeof msg.x === 'number') p.x = msg.x;
     if (typeof msg.y === 'number') p.y = msg.y;
+    if (typeof msg.vx === 'number') p.vx = msg.vx;
+    if (typeof msg.vy === 'number') p.vy = msg.vy;
 }
 
 export function combatPilotLeft(name) {
@@ -337,6 +340,31 @@ export function handleCombatMessage(ws, msg, send) {
             if (idx === -1) return true;
             state.drops.splice(idx, 1);
             broadcast({ t: 'drop.taken', dropId: msg.dropId, by: ws.pilot });
+            return true;
+        }
+
+        case 'cargo.scatter': {
+            // A destroyed pilot's hold scatters at the wreck as shared pods —
+            // same wire shape and claim flow as kill loot, first scoop wins
+            // (family trust model: quantities sanity-capped, not audited).
+            const x = Number(msg.x), y = Number(msg.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !msg.cargo) return true;
+            let budget = 150; // cap total units against a malformed client
+            for (const g of Object.keys(msg.cargo).slice(0, 12)) {
+                let qty = Math.min(Math.floor(Number(msg.cargo[g])) || 0, budget);
+                budget -= qty;
+                while (qty > 0) { // pods of ≤5 so the wreck reads as a debris field
+                    const podQty = Math.min(5, qty);
+                    qty -= podQty;
+                    state.drops.push({
+                        id: newId('d'),
+                        x: x + (Math.random() - 0.5) * 240,
+                        y: y + (Math.random() - 0.5) * 240,
+                        kind: 'cargo', goodType: g, qty: podQty,
+                        expiresAt: simNow + 90 // longer than kill loot — the corpse run needs time
+                    });
+                }
+            }
             return true;
         }
 

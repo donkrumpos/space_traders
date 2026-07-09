@@ -331,7 +331,9 @@ function updateEnemies(deltaTime) {
     if (combatNetOnline()) {
         const locals = game.enemies.filter(e => e.id === undefined);
         if (locals.length > 0) {
-            const targets = [{ x: game.ship.x, y: game.ship.y, cargoUnits: cargoUnitsCarried() }];
+            const targets = [{ x: game.ship.x, y: game.ship.y,
+                vx: game.ship.velocity.x * 60, vy: game.ship.velocity.y * 60, // units/second for gunnery lead
+                cargoUnits: cargoUnitsCarried() }];
             const { shots } = CombatCore.updateEnemies(
                 { enemies: locals, targets, traders: game.traders || [] },
                 deltaTime, COMBAT_FX);
@@ -357,7 +359,9 @@ function updateEnemies(deltaTime) {
 
     // AI/movement/band logic runs in the shared core; enemy fire comes back
     // as projectile objects (the client owns its projectile list)
-    const targets = [{ x: game.ship.x, y: game.ship.y, cargoUnits: cargoUnitsCarried() }];
+    const targets = [{ x: game.ship.x, y: game.ship.y,
+                vx: game.ship.velocity.x * 60, vy: game.ship.velocity.y * 60, // units/second for gunnery lead
+                cargoUnits: cargoUnitsCarried() }];
     const { shots } = CombatCore.updateEnemies(
         { enemies: game.enemies, targets, traders: game.traders || [] },
         deltaTime, COMBAT_FX);
@@ -694,6 +698,40 @@ function handlePlayerDestruction() {
         game.ship.velocity.x * 60, game.ship.velocity.y * 60);
     playExplosionSound();
     addShake(0.8);
+
+    // The hold doesn't die with the ship: cargo scatters at the wreck as
+    // pods anyone can scoop — hopefully you, racing back from respawn.
+    // Online the server owns the pods (shared, first-wins like kill loot);
+    // offline they're ordinary local drops with a long fuse.
+    const wreckX = game.ship.x, wreckY = game.ship.y;
+    const manifest = {};
+    Object.keys(game.ship.cargo).forEach(g => {
+        if (game.ship.cargo[g] > 0) manifest[g] = game.ship.cargo[g];
+    });
+    const unitsLost = Object.values(manifest).reduce((a, b) => a + b, 0);
+    if (unitsLost > 0) {
+        if (typeof net !== 'undefined' && net.online) {
+            net.send({ t: 'cargo.scatter', x: wreckX, y: wreckY, cargo: manifest });
+        } else {
+            Object.keys(manifest).forEach(g => {
+                let qty = manifest[g];
+                while (qty > 0) { // pods of ≤5 so the wreck reads as a debris field
+                    const podQty = Math.min(5, qty);
+                    qty -= podQty;
+                    game.drops.push({
+                        x: wreckX + (Math.random() - 0.5) * 240,
+                        y: wreckY + (Math.random() - 0.5) * 240,
+                        vx: (Math.random() - 0.5) * 0.8,
+                        vy: (Math.random() - 0.5) * 0.8,
+                        goodType: g, amount: podQty,
+                        life: 90 // longer than kill loot — the corpse run needs time
+                    });
+                }
+            });
+        }
+        game.ship.cargo = {};
+        showHudFeedback(`${unitsLost} cargo units adrift at the wreck — race back before someone else scoops them!`, 'warning', 8000);
+    }
 
     // Reset hull to 25%, shields to full
     game.ship.hull = game.ship.hullMax * 0.25;

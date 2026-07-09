@@ -408,6 +408,34 @@ VERIFY_SUITES.mods = (assert) => {
     updateMissionsUI();
 };
 
+VERIFY_SUITES.cargoScatter = (assert) => {
+    // Destruction scatters the hold at the wreck (offline path: local drops)
+    const saved = {
+        cargo: { ...game.ship.cargo }, credits: game.ship.credits,
+        x: game.ship.x, y: game.ship.y,
+        hull: game.ship.hull, shield: game.ship.shield, streak: game.combatStreak
+    };
+    const dropsBefore = game.drops.length;
+    game.ship.cargo = { food: 7, materials: 3 };
+    handlePlayerDestruction();
+    const pods = game.drops.slice(dropsBefore);
+    assert('death scatters the hold into pods', pods.length === 3); // 5+2 food, 3 materials
+    assert('pods carry every lost unit', pods.reduce((a, d) => a + d.amount, 0) === 10);
+    assert('pods scatter around the wreck, not the respawn point',
+        pods.every(d => Math.abs(d.x - saved.x) < 400 && Math.abs(d.y - saved.y) < 400));
+    assert('the hold is empty after the wreck', Object.keys(game.ship.cargo).length === 0);
+    assert('death still costs 25% credits', game.ship.credits === saved.credits - Math.floor(saved.credits * 0.25));
+
+    // Restore — destruction moved and taxed the verify pilot
+    game.drops.length = dropsBefore;
+    game.ship.cargo = saved.cargo;
+    game.ship.credits = saved.credits;
+    game.ship.x = saved.x; game.ship.y = saved.y;
+    game.ship.hull = saved.hull; game.ship.shield = saved.shield;
+    game.combatStreak = saved.streak;
+    updateUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');
