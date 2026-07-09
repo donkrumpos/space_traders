@@ -332,7 +332,7 @@ VERIFY_SUITES.ships = (assert) => {
 };
 
 VERIFY_SUITES.mods = (assert) => {
-    assert('catalog holds 8 one-off parts', Object.keys(MODS).length === 8);
+    assert('catalog holds 9 one-off parts', Object.keys(MODS).length === 9);
     game.ship.mods = [];
     game.ship.hullId = 'skiff';
     recomputeShipStats();
@@ -425,6 +425,16 @@ VERIFY_SUITES.cargoScatter = (assert) => {
         pods.every(d => Math.abs(d.x - saved.x) < 400 && Math.abs(d.y - saved.y) < 400));
     assert('the hold is empty after the wreck', Object.keys(game.ship.cargo).length === 0);
     assert('death still costs 25% credits', game.ship.credits === saved.credits - Math.floor(saved.credits * 0.25));
+
+    // The Reliquary Hold keeps the cargo through a second wreck
+    const savedMods = (game.ship.mods || []).slice();
+    game.ship.mods = ['reliquary_hold'];
+    game.ship.cargo = { food: 7, materials: 3 };
+    const dropsBeforeVault = game.drops.length;
+    handlePlayerDestruction();
+    assert('reliquary hold spills nothing', game.drops.length === dropsBeforeVault);
+    assert('reliquary hold keeps the cargo', game.ship.cargo.food === 7 && game.ship.cargo.materials === 3);
+    game.ship.mods = savedMods;
 
     // Restore — destruction moved and taxed the verify pilot
     game.drops.length = dropsBefore;

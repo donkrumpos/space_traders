@@ -709,7 +709,10 @@ function handlePlayerDestruction() {
         if (game.ship.cargo[g] > 0) manifest[g] = game.ship.cargo[g];
     });
     const unitsLost = Object.values(manifest).reduce((a, b) => a + b, 0);
-    if (unitsLost > 0) {
+    if (unitsLost > 0 && hasMod('reliquary_hold')) {
+        // Precursor vault-alloy: the one hold that survives its ship
+        showHudFeedback('The Reliquary Hold rides out the wreck — cargo intact', 'success', 6000);
+    } else if (unitsLost > 0) {
         if (typeof net !== 'undefined' && net.online) {
             net.send({ t: 'cargo.scatter', x: wreckX, y: wreckY, cargo: manifest });
         } else {

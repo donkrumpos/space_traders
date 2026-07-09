@@ -87,6 +87,10 @@ const MODS = {
     songbird_antenna: {
         name: 'Songbird Array', cost: 2600,
         blurb: 'Contracts pay 10% more — dispatchers like a clear channel.'
+    },
+    reliquary_hold: {
+        name: 'Reliquary Hold', cost: 7500,
+        blurb: 'A precursor vault-alloy hold. Whatever else burns, the cargo rides out the wreck.'
     }
 };
 

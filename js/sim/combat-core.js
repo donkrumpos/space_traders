@@ -264,13 +264,27 @@
     function buildEnemyShots(enemy) {
         const shots = [];
         const volley = enemy.weapons.volley || 1;
+        // The shooter's own velocity rides every bolt (inheritance below), so
+        // an uncompensated gunner ALWAYS misses: an orbiting raider strafes at
+        // up to ~360 u/s, smearing its 600 u/s bolts sideways ~150 units over
+        // typical range — which is why a parked ship used to be unhittable.
+        const sx = enemy.velocity.x * 60, sy = enemy.velocity.y * 60;
         for (let s = 0; s < volley; s++) {
-            // Calculate firing angle with some inaccuracy, plus volley fan spread
-            const baseAngle = enemy.angle;
+            // Aim down the AI's firing solution (intercept lead) with some
+            // inaccuracy, plus volley fan spread
+            const baseAngle = (enemy.ai && enemy.ai.aimAngle !== undefined) ? enemy.ai.aimAngle : enemy.angle;
             const spread = (1 - enemy.weapons.accuracy) * 0.5; // Convert accuracy to spread
             const inaccuracy = (Math.random() - 0.5) * spread;
             const fanOffset = volley > 1 ? (s - (volley - 1) / 2) * 0.12 : 0;
-            const firingAngle = baseAngle + inaccuracy + fanOffset;
+            const wantAngle = baseAngle + inaccuracy + fanOffset;
+
+            // Ballistic compensation: pick the barrel direction u so that
+            // 600·u + shooterVel points exactly down wantAngle. Solving
+            // |α·d − S| = 600 for the bolt's true speed α along d:
+            const dx = Math.cos(wantAngle), dy = Math.sin(wantAngle);
+            const sd = sx * dx + sy * dy;
+            const alpha = sd + Math.sqrt(Math.max(600 * 600 - (sx * sx + sy * sy) + sd * sd, 0));
+            const firingAngle = Math.atan2(dy * alpha - sy, dx * alpha - sx);
 
             const projectile = {
                 type: 'enemy_laser',
@@ -363,6 +377,7 @@
                     prey.x + (prey.vx || 0) * boltTime * lead - enemy.x
                 );
             }
+            enemy.ai.aimAngle = aimAngle; // buildEnemyShots fires down this line
 
             // Check if enemy took damage and trigger evasion
             if (enemy.hull < enemy.ai.lastDamageHull && enemy.ai.evasionCooldown <= 0) {
