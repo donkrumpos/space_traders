@@ -107,6 +107,13 @@ async function newGamePage(browser, pilot, { seedIdentity = true, stubNaming = t
     }
     // Headless safety net: never block on a native dialog.
     await page.evaluateOnNewDocument(() => { window.prompt = () => null; });
+    // Plot armor: harness ships park in hostile space for minutes, and since
+    // ballistic compensation the spawn-cadence pirates actually HIT parked
+    // ships — a mid-suite death (4s wreck pause + respawn teleport) would
+    // wreck every assertion after it. damagePlayer honors this flag.
+    await page.evaluateOnNewDocument(() => {
+        window.addEventListener('load', () => { if (window.game) game.testInvulnerable = true; });
+    });
     if (tap) await page.evaluateOnNewDocument(() => {
         window.__wsTap = [];
         const Native = window.WebSocket;

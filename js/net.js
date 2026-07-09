@@ -977,6 +977,7 @@ function netHandleEnemyKilled(msg) {
 // vaporize the crate for everyone).
 function netUpdateServerDrops() {
     if (typeof game === 'undefined' || !game.ship) return;
+    if (game.deathState) return; // a burning wreck claims nothing
     const now = Date.now();
     for (const d of netDropMap.values()) {
         const dx = d.x - game.ship.x;

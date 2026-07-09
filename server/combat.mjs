@@ -338,6 +338,11 @@ export function handleCombatMessage(ws, msg, send) {
             // First claim wins; the loser hears the winner's drop.taken
             const idx = state.drops.findIndex(d => d.id === msg.dropId);
             if (idx === -1) return true;
+            const d = state.drops[idx];
+            // Wreck pods are claim-locked to their owner while the dead pilot
+            // spawns back in — nobody vacuums a wreck mid-death-sequence.
+            // Swallowed claims retry client-side and succeed once the lock lifts.
+            if (d.lockUntil && simNow < d.lockUntil && d.ownerLock !== ws.pilot) return true;
             state.drops.splice(idx, 1);
             broadcast({ t: 'drop.taken', dropId: msg.dropId, by: ws.pilot });
             return true;
@@ -361,7 +366,10 @@ export function handleCombatMessage(ws, msg, send) {
                         x: x + (Math.random() - 0.5) * 240,
                         y: y + (Math.random() - 0.5) * 240,
                         kind: 'cargo', goodType: g, qty: podQty,
-                        expiresAt: simNow + 90 // longer than kill loot — the corpse run needs time
+                        expiresAt: simNow + 90, // longer than kill loot — the corpse run needs time
+                        // Owner-locked while the dead pilot spawns back in
+                        // (respawn delay + margin); server-private fields
+                        ownerLock: ws.pilot, lockUntil: simNow + 8
                     });
                 }
             }

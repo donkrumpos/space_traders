@@ -426,6 +426,16 @@ VERIFY_SUITES.cargoScatter = (assert) => {
     assert('the hold is empty after the wreck', Object.keys(game.ship.cargo).length === 0);
     assert('death still costs 25% credits', game.ship.credits === saved.credits - Math.floor(saved.credits * 0.25));
 
+    // Death is a sequence, not a teleport: the ship holds at the wreck,
+    // takes no further damage, and only moves home when the timer ends
+    assert('death enters the wreck pause', !!game.deathState && game.ship.x === saved.x);
+    const hullDuring = game.ship.hull;
+    damagePlayer(50);
+    assert('the wreck cannot be killed twice', game.ship.hull === hullDuring);
+    finishPlayerRespawn();
+    assert('respawn lands near the start planet with the pause cleared',
+        !game.deathState && game.ship.x === 1050 && game.ship.shield === game.ship.shieldMax);
+
     // The Reliquary Hold keeps the cargo through a second wreck
     const savedMods = (game.ship.mods || []).slice();
     game.ship.mods = ['reliquary_hold'];
@@ -434,6 +444,7 @@ VERIFY_SUITES.cargoScatter = (assert) => {
     handlePlayerDestruction();
     assert('reliquary hold spills nothing', game.drops.length === dropsBeforeVault);
     assert('reliquary hold keeps the cargo', game.ship.cargo.food === 7 && game.ship.cargo.materials === 3);
+    finishPlayerRespawn();
     game.ship.mods = savedMods;
 
     // Restore — destruction moved and taxed the verify pilot

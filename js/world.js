@@ -284,12 +284,13 @@ function updateDrops(deltaTime) {
             continue;
         }
 
-        // Scoop by flying through
+        // Scoop by flying through (a dead ship scoops nothing — its own
+        // scattered pods sit at the wreck until it respawns and flies back)
         const dist = Math.sqrt(
             Math.pow(d.x - game.ship.x, 2) +
             Math.pow(d.y - game.ship.y, 2)
         );
-        if (dist < 26) {
+        if (dist < 26 && !game.deathState) {
             // Powerups need no cargo space — they slot straight into the ship
             if (d.kind === 'powerup') {
                 activatePowerup(d.powerType);

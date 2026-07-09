@@ -589,8 +589,8 @@ function checkProjectileCollisions() {
             }
         }
 
-        // Check enemy projectiles vs player
-        if (!hitSomething && projectile.source === 'enemy') {
+        // Check enemy projectiles vs player (a burning wreck isn't a target)
+        if (!hitSomething && projectile.source === 'enemy' && !game.deathState) {
             const playerSize = 10; // Player ship collision size
             const distance = pointToSegmentDistance(
                 game.ship.x, game.ship.y, prevX, prevY, projectile.x, projectile.y
@@ -652,6 +652,9 @@ function maybeDamageSubsystem() {
 }
 
 function damagePlayer(damage) {
+    if (game.deathState) return; // the wreck can't be killed twice
+    if (game.testInvulnerable) return; // verify-net plot armor (harness ships park in hostile space)
+
     // Check if player is invulnerable (brief period after last hit)
     if (game.damage.invulnerabilityTime > 0) {
         return;
@@ -690,9 +693,10 @@ function damagePlayer(damage) {
     console.log(`Player hit for ${damage}! Shield: ${Math.round(game.ship.shield)}/${game.ship.shieldMax}, Hull: ${Math.round(game.ship.hull)}/${game.ship.hullMax}`);
 }
 
+const RESPAWN_DELAY = 4; // seconds at the wreck before the ship comes back
+
 function handlePlayerDestruction() {
-    // For now, respawn player with some penalties
-    console.log("Player ship destroyed! Respawning...");
+    if (game.deathState) return; // already dying — one wreck per ship
 
     spawnExplosion(game.ship.x, game.ship.y, '#00ff00',
         game.ship.velocity.x * 60, game.ship.velocity.y * 60);
@@ -736,13 +740,65 @@ function handlePlayerDestruction() {
         showHudFeedback(`${unitsLost} cargo units adrift at the wreck — race back before someone else scoops them!`, 'warning', 8000);
     }
 
+    // Lose some credits (25%) — the tax lands at the moment of death
+    const creditsLost = Math.floor(game.ship.credits * 0.25);
+    game.ship.credits -= creditsLost;
+
+    // Dying ends the bounty streak
+    game.combatStreak = 0;
+
+    // Death is a MOMENT now, not a teleport: the ship shatters at the wreck,
+    // the pods drift, and the pilot watches it burn for RESPAWN_DELAY seconds
+    // before the ship comes back. update() runs the sequence.
+    game.ship.velocity.x = 0;
+    game.ship.velocity.y = 0;
+    game.deathState = { timer: RESPAWN_DELAY, x: wreckX, y: wreckY, boomTimer: 0 };
+
+    const old = document.getElementById('deathBanner');
+    if (old) old.remove();
+    const banner = document.createElement('div');
+    banner.id = 'deathBanner';
+    banner.style.cssText = `
+        position: fixed; top: 25%; left: 50%; transform: translateX(-50%);
+        background: #1a0000; border: 3px solid #ff4444; padding: 22px 44px;
+        font-family: 'Courier New', monospace; text-align: center;
+        z-index: 2000; box-shadow: 0 0 40px #ff444488;
+    `;
+    banner.innerHTML = `
+        <div style="color:#ff4444; font-size:13px; letter-spacing:4px;">SHIP DESTROYED</div>
+        <div id="deathCountdown" style="color:#ffffff; font-size:22px; margin-top:8px;"></div>
+        <div style="color:#888888; font-size:11px; margin-top:8px;">−$${creditsLost} · the wreck keeps what you carried</div>
+    `;
+    document.body.appendChild(banner);
+
+    console.log(`Ship destroyed. Lost ${creditsLost} credits; respawning in ${RESPAWN_DELAY}s.`);
+}
+
+// Runs each frame while game.deathState is set: secondary blasts ripple
+// through the first stretch (the shatter), the banner counts down, and the
+// respawn fires when the timer runs out.
+function updateDeathSequence(dt) {
+    const ds = game.deathState;
+    ds.timer -= dt;
+    ds.boomTimer -= dt;
+    if (ds.timer > RESPAWN_DELAY - 1.8 && ds.boomTimer <= 0) {
+        ds.boomTimer = 0.22 + Math.random() * 0.2;
+        spawnExplosion(
+            ds.x + (Math.random() - 0.5) * 44,
+            ds.y + (Math.random() - 0.5) * 44,
+            Math.random() < 0.5 ? '#00ff00' : '#ffaa44',
+            (Math.random() - 0.5) * 150, (Math.random() - 0.5) * 150);
+        addShake(0.3);
+    }
+    const countdown = document.getElementById('deathCountdown');
+    if (countdown) countdown.textContent = `respawning in ${Math.max(0, ds.timer).toFixed(1)}s`;
+    if (ds.timer <= 0) finishPlayerRespawn();
+}
+
+function finishPlayerRespawn() {
     // Reset hull to 25%, shields to full
     game.ship.hull = game.ship.hullMax * 0.25;
     game.ship.shield = game.ship.shieldMax;
-
-    // Lose some credits (25%)
-    const creditsLost = Math.floor(game.ship.credits * 0.25);
-    game.ship.credits -= creditsLost;
 
     // Move player to a safe location (near starting area)
     game.ship.x = 1050;
@@ -750,14 +806,17 @@ function handlePlayerDestruction() {
     game.ship.velocity.x = 0;
     game.ship.velocity.y = 0;
 
-    // Clear all enemies to give player a break; dying ends the bounty streak
+    // Clear all enemies to give player a break (online this only clears
+    // client-local ones — server enemies re-merge and keep their grudges)
     game.enemies = [];
-    game.combatStreak = 0;
+
+    game.deathState = null;
+    const banner = document.getElementById('deathBanner');
+    if (banner) banner.remove();
 
     // Auto-save the respawn state
     autoSave('respawn');
-
-    console.log(`Lost ${creditsLost} credits. Respawned at starting location.`);
+    updateUI();
 }
 
 function updateDamageEffects(deltaTime) {

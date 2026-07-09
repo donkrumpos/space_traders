@@ -177,6 +177,7 @@ function init() {
     // Event listeners
     document.addEventListener('keydown', (e) => {
         game.keys[e.code] = true;
+        if (game.deathState) { e.preventDefault(); return; } // the wreck takes no orders
         if (e.code === 'Space') {
             e.preventDefault();
             if (game.isDocked) {

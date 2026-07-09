@@ -323,7 +323,11 @@ function render() {
     // Draw lead-target reticle (where to aim at the nearest enemy)
     renderLeadReticle(ctx, game.camera);
 
-    // Draw ship (always in center)
+    // Draw ship (always in center) — unless it's currently a debris field
+    if (game.deathState) {
+        ctx.restore(); // end screen-shake translate
+        return;
+    }
     const shipX = game.canvas.width / 2;
     const shipY = game.canvas.height / 2;
 

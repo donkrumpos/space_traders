@@ -2,6 +2,24 @@ function update() {
     // Modal choices (perk training) freeze the world so nobody dies mid-menu
     if (game.paused) return;
 
+    // Dead ships don't fly: while the wreck burns, the death sequence owns
+    // the ship and the world keeps breathing around it — pirates swirl,
+    // pods drift, projectiles fly. Camera stays on the wreck (ship hasn't
+    // moved yet; respawn happens when the sequence ends).
+    if (game.deathState) {
+        const deltaTime = 1/60;
+        updateDeathSequence(deltaTime);
+        updateProjectiles(deltaTime);
+        updateEnemies(deltaTime);
+        updateDamageEffects(deltaTime);
+        updateEffects(deltaTime);
+        updateAsteroids(deltaTime);
+        updateDrops(deltaTime);
+        updateTraffic(deltaTime);
+        updateUI();
+        return;
+    }
+
     // Check for nearby planets for docking effects
     let nearPlanet = null;
     let inDockingRange = false;
