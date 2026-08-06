@@ -1,39 +1,71 @@
 # Next Session Roadmap
 
-State as of 2026-07-08 (late night): **First real two-machine playtest DONE —
-and it worked.** Dad + Arthur flew together on https://siegeperilousstudio.com;
-the session produced a stream of live fixes, all deployed (themisto VPS,
-Apache + wss + systemd; see docs/RUNBOOK.md). verify-net: 93/93; solo
-?verify: **102/102**. Family secret + first-visit setup: RUNBOOK.md.
+State as of 2026-08-06: **Code-review hardening session — two batches committed
+and pushed (5a9623a, 81f8bf8), both gates green after each** (solo ?verify
+102/102, verify-net 93/93). Four parallel review agents swept client logic,
+net/server, render/UI, and repo structure; the top two tiers of findings are
+fixed, the rest are backlogged below. **The server-side fixes are NOT yet
+deployed to themisto** — first order of business next session.
+(2026-07-08 family playtest record: commit 66689f5.)
 
-## What the playtest shipped (2026-07-08, commits bcf26ee → b86f86b)
+## Deploy first (5 minutes)
 
-- **Snapshot interpolation** for server enemies/traders (was extrapolate-and-
-  snap → jerky). Docs said "interpolate"; now the code does.
-- **Bad-secret reject is visible + self-heals** (Arthur typed the secret wrong
-  and silently played offline solo — that was the "can't see Arthur" mystery;
-  the server log's `reject: bad secret for pilot "arthur"` is the tell).
-- **UI batch:** minimap anchored to the play area (was covering Ship Status),
-  toast stack (cap 4, reading-time floor, ×N duplicate collapse), perk choice
-  no longer force-pauses — pulsing ⭐ Training chip + dock prompt +
-  "train later" dismiss. Pause is solo-only.
-- **Solar-sail crawl:** dry tanks = 5% thrust floor, burns nothing, pale-blue
-  flame, `0 (SAIL)` readout. The stranded softlock is gone.
-- **Ballistic compensation** — THE fix of the night. Enemy bolts inherit
-  shooter velocity; orbiting pirates smeared every shot ~150u sideways and
-  could not hit even a PARKED ship (sim: 221 shots/60s → 0 hits). Gunners now
-  solve barrel direction so total bolt velocity rides the aim line, plus
-  per-tier intercept lead (scout .35 / raider .65 / warlord .9). Parked in a
-  6-pack: 0 → ~48 DPS. Full-burn escape still works. 2 scouts vs parked
-  beginner: 0.8 DPS (teaches, never kills).
-- **Death is a moment:** 4s wreck pause (shatter explosions, SHIP DESTROYED
-  banner + countdown + credit tax), cargo scatters as pods (`cargo.scatter`,
-  owner-locked 8s server-side so nobody vacuums a wreck mid-respawn), corpse
-  run to recover. **Reliquary Hold** (9th mod, $7500): cargo survives the
-  wreck. verify-net harness ships now carry `game.testInvulnerable` plot
-  armor (real gunnery was killing parked test pilots mid-suite).
+- `ssh themisto` pull + restart per RUNBOOK.md to pick up: crash guards
+  (malformed-URL 400, uncaughtException flushes world before dying), ws
+  maxPayload 256KB + hello timeout, Object.hasOwn trade validation, backups
+  pruning (existing bloat shrinks on each pilot's next save).
+- Note: local dev needed `npm rebuild better-sqlite3` after node hit v25.9 —
+  if themisto's node ever jumps majors, same rebuild applies (an `engines`
+  field in package.json is a backlogged nicety).
 
-## Next playtest watchlist
+## What the review session shipped (2026-08-06, 5a9623a → 81f8bf8)
+
+- **Fixed-timestep game loop** — THE fix of the session. update() ticks were
+  literally display-refresh-rate (hardcoded 1/60 assumption): a 120Hz screen
+  ran the whole game 2× fast. Now a rAF-clocked accumulator spends real time
+  in whole 60Hz ticks (250ms clamp eats the tab-switch delta), and rAF re-arms
+  *before* the tick so a thrown frame logs instead of freezing the game until
+  reload. Subtlety: all timing comes from rAF's own timestamps — mixing in
+  performance.now() broke under headless virtual time (verify caught it).
+- **Escort-dock crash:** completeMissionsAt skips non-delivery missions;
+  docking at an escort's destination threw on goods[undefined] mid-dock.
+- **Docked = station shielding:** damagePlayer early-returns while docked
+  (single choke point for all damage), enemy bolts pass docked ships, respawn
+  defensively undocks. Dying docked used to respawn you still "docked" at a
+  far planet with weapons locked.
+- **Save safety:** CHARACTER_VERSION bump now migrates in place with the
+  original stashed to a backup localStorage key (was: silently discard every
+  pilot). importCharacter applies before saving (was: restore clobbered the
+  imported doc with pre-import state — a no-op).
+- **Server integrity:** trade validation uses Object.hasOwn (inherited keys
+  like "toString" passed `!== undefined` and persisted NaN prices into the
+  shared market); savePilot prunes backups to last-20-per-pilot in-transaction
+  (verified against a scratch db — was unbounded, one full doc per save).
+
+## Review backlog (third batch candidates, verified findings)
+
+- **Perf, all per-frame:** updateUI() rebuilds panels via chained
+  `innerHTML +=` every frame; full-map canvas resized (= backing store
+  realloc + clear) every frame while open; ~25 getElementById/frame in ui.js;
+  per-ghost shadowBlur + per-frame gradient allocs in render.js.
+- **Net nits:** `mission.taken` reply omits reqId → double-clicked board
+  offers can resolve the wrong promise (one-line server echo); `dev-secret`
+  fallback when FAMILY_SECRET env is missing — should refuse to start;
+  same-pilot-two-devices = 30s kick ping-pong with alternating save clobbers;
+  market-event timeLeft stale for mid-event joiners (send endsAt);
+  damage.claim/cargo.scatter fully client-trusted (cap per-weapon damage).
+- **Coverage:** verify.js has no trading/economy/events suites — the
+  most-played systems have zero solo assertions (~50 lines each in the
+  existing VERIFY_SUITES pattern); no `npm run verify` script that can
+  actually exit nonzero (one-liner lives in a comment).
+- **Hygiene:** README badly drifted (5 planets, "combat in development", no
+  multiplayer); PROTOCOL.md says 92/92; index_original.html is 827 dead
+  lines; RUNBOOK publishes VPS IP/ssh port/username — move to private ssh
+  config; DOCK_RANGE 60 hardcoded ×4; cargoUnitsCarried() re-inlined ×7;
+  starfield doesn't wrap (sky empties flying far negative); fuel depot fill
+  leaves credits fractional.
+
+## Next playtest watchlist (carried from 2026-07-08)
 
 - **Deaths are real now.** Does the warlord tier feel earned or cheap for
   Arthur at high wealth? Knobs: per-tier `leadFactor`, 0.2 rad fire gate.
@@ -48,6 +80,9 @@ Apache + wss + systemd; see docs/RUNBOOK.md). verify-net: 93/93; solo
   they need a homeostasis nudge.
 - Reliquary Hold as bench mod is v1 — Foggy wants it quest-shaped eventually
   (Ossuary Drift dig-quest is the natural home when a quest system exists).
+- **New since review:** 120Hz devices now run at correct speed — if anyone's
+  device previously felt "faster", that was real and is now fixed; combat
+  pacing may feel different on those machines.
 
 ## Known v1 gaps (documented in PROTOCOL.md; post-playtest candidates)
 
@@ -56,7 +91,6 @@ Apache + wss + systemd; see docs/RUNBOOK.md). verify-net: 93/93; solo
 - Peers don't see your death (no death broadcast — your ghost just sits
   still for 4s, then teleports home). Candidate: broadcast + explosion FX.
 - No `www.` DNS record / cert (bare domain only).
-- backups table in world.db grows unpruned (fine for years at n=2).
 
 ## Tuning flags (carried)
 
