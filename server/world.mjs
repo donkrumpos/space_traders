@@ -180,9 +180,12 @@ export function handleWorldMessage(ws, msg, send) {
             const meta = metaByName.get(msg.planet);
             const market = world.markets[msg.planet];
             const qty = Math.floor(Number(msg.qty));
-            const ok = !!(meta && market && qty > 0 &&
-                (msg.side === 'buy' ? meta.produces[msg.good] !== undefined
-                                    : msg.side === 'sell' && meta.demands[msg.good] !== undefined));
+            // Object.hasOwn, not `!== undefined`: inherited keys ("toString",
+            // "constructor") would pass the loose check and write NaN prices
+            // into the shared, persisted market
+            const ok = !!(meta && market && qty > 0 && typeof msg.good === 'string' &&
+                (msg.side === 'buy' ? Object.hasOwn(meta.produces, msg.good)
+                                    : msg.side === 'sell' && Object.hasOwn(meta.demands, msg.good)));
             if (!ok) {
                 send(ws, { t: 'trade.result', reqId: msg.reqId, ok: false, prices: null });
                 return true;

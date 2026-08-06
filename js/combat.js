@@ -589,8 +589,9 @@ function checkProjectileCollisions() {
             }
         }
 
-        // Check enemy projectiles vs player (a burning wreck isn't a target)
-        if (!hitSomething && projectile.source === 'enemy' && !game.deathState) {
+        // Check enemy projectiles vs player (a burning wreck isn't a target,
+        // and neither is a ship parked inside the station's shield)
+        if (!hitSomething && projectile.source === 'enemy' && !game.deathState && !game.isDocked) {
             const playerSize = 10; // Player ship collision size
             const distance = pointToSegmentDistance(
                 game.ship.x, game.ship.y, prevX, prevY, projectile.x, projectile.y
@@ -653,6 +654,7 @@ function maybeDamageSubsystem() {
 
 function damagePlayer(damage) {
     if (game.deathState) return; // the wreck can't be killed twice
+    if (game.isDocked) return; // station shielding — dying while docked would strand the respawn in a corrupt docked state
     if (game.testInvulnerable) return; // verify-net plot armor (harness ships park in hostile space)
 
     // Check if player is invulnerable (brief period after last hit)
@@ -813,6 +815,10 @@ function finishPlayerRespawn() {
     game.deathState = null;
     const banner = document.getElementById('deathBanner');
     if (banner) banner.remove();
+
+    // Belt and braces: if death somehow caught us docked, don't respawn
+    // still flagged docked at a planet we're nowhere near
+    if (game.isDocked) undock();
 
     // Auto-save the respawn state
     autoSave('respawn');

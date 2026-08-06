@@ -100,13 +100,22 @@ class CharacterManager {
             if (saved) {
                 const parsed = JSON.parse(saved);
 
-                // Validate version compatibility
-                if (parsed.version === CHARACTER_VERSION) {
+                if (parsed && parsed.ship && parsed.id) {
+                    // Never discard a pilot over a version bump: stash the
+                    // original untouched, then migrate in place — the
+                    // applyCharacterToGame backfills handle missing fields
+                    if (parsed.version !== CHARACTER_VERSION) {
+                        try {
+                            localStorage.setItem(`${STORAGE_KEY}_backup_v${parsed.version || 'unknown'}`, saved);
+                        } catch (e) { /* backup is best-effort */ }
+                        console.log(`Character version ${parsed.version} -> ${CHARACTER_VERSION}, migrating in place (backup stashed)`);
+                        parsed.version = CHARACTER_VERSION;
+                    }
                     this.character = parsed;
                     this.character.lastPlayed = Date.now();
                     console.log("Character loaded from storage");
                 } else {
-                    console.log("Character version mismatch, creating new character");
+                    console.log("Saved character malformed, creating new character");
                     this.character = createDefaultCharacter();
                 }
             } else {

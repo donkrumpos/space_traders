@@ -23,6 +23,8 @@ const stmts = {
     upsertPilot: db.prepare(`INSERT INTO pilots (name, doc, updated) VALUES (?, ?, ?)
         ON CONFLICT(name) DO UPDATE SET doc = excluded.doc, updated = excluded.updated`),
     backup: db.prepare('INSERT INTO backups (pilot, doc, created) VALUES (?, ?, ?)'),
+    pruneBackups: db.prepare(`DELETE FROM backups WHERE pilot = ? AND id NOT IN
+        (SELECT id FROM backups WHERE pilot = ? ORDER BY id DESC LIMIT 20)`),
     getWorld: db.prepare('SELECT snapshot FROM world WHERE id = 1'),
     saveWorld: db.prepare(`INSERT INTO world (id, snapshot, updated) VALUES (1, ?, ?)
         ON CONFLICT(id) DO UPDATE SET snapshot = excluded.snapshot, updated = excluded.updated`)
@@ -33,11 +35,16 @@ export function getPilot(name) {
     return row ? { doc: row.doc, updated: row.updated } : null;
 }
 
-// Backup-before-overwrite is the contract: a pilot doc is never silently replaced.
+// Backup-before-overwrite is the contract: a pilot doc is never silently
+// replaced. Kept to the last 20 per pilot — one row per save would grow
+// world.db without bound.
 export const savePilot = db.transaction((name, docJson) => {
     const existing = stmts.getPilot.get(name);
     const now = Date.now();
-    if (existing) stmts.backup.run(name, existing.doc, now);
+    if (existing) {
+        stmts.backup.run(name, existing.doc, now);
+        stmts.pruneBackups.run(name, name);
+    }
     stmts.upsertPilot.run(name, docJson, now);
     return now;
 });
