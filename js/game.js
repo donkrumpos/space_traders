@@ -264,10 +264,39 @@ function resizeCanvas() {
     }
 }
 
-function gameLoop() {
-    update();
-    render();
+// Fixed-step simulation: update() advances the world exactly one 60Hz tick
+// per call, so elapsed real time is banked and spent in whole ticks — the
+// game runs at the same speed on a 60Hz laptop and a 120Hz iPad. The frame
+// clamp swallows the giant delta after a background-tab freeze instead of
+// fast-forwarding the world through it.
+const TICK_MS = 1000 / 60;
+const MAX_FRAME_MS = 250;
+let lastFrameTs = null;
+let tickDebt = 0;
+
+function gameLoop(ts) {
+    // Re-arm before updating: a throw below must never end the rAF chain
     requestAnimationFrame(gameLoop);
+    // The bootstrap call from init() has no rAF timestamp — it only arms the
+    // loop. All timing comes from rAF's own clock (mixing in performance.now()
+    // breaks under headless virtual time, where the timebases disagree).
+    if (typeof ts !== 'number') return;
+    if (lastFrameTs === null) {
+        lastFrameTs = ts;
+        tickDebt = TICK_MS; // first real frame always runs one tick
+    }
+    tickDebt += Math.min(Math.max(ts - lastFrameTs, 0), MAX_FRAME_MS);
+    lastFrameTs = ts;
+    try {
+        while (tickDebt >= TICK_MS) {
+            update();
+            tickDebt -= TICK_MS;
+        }
+        render();
+    } catch (err) {
+        tickDebt = 0; // drop the backlog so a bad tick doesn't re-throw every frame
+        console.error('gameLoop error:', err);
+    }
 }
 
 function startGame() {

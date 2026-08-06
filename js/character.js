@@ -402,8 +402,11 @@ class CharacterManager {
             // Basic validation
             if (imported.version && imported.id && imported.ship) {
                 this.character = imported;
-                this.saveCharacter(true);
+                // Apply BEFORE saving: saveCharacter(true) snapshots the live
+                // game state via updateCharacterFromGame(), which would
+                // overwrite the imported ship/world with pre-import state
                 this.applyCharacterToGame();
+                this.saveCharacter(true);
                 console.log("Character imported successfully");
                 return true;
             } else {

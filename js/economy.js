@@ -159,6 +159,9 @@ function acceptMission(offerId) {
 function completeMissionsAt(planet) {
     for (let i = game.missions.length - 1; i >= 0; i--) {
         const m = game.missions[i];
+        // Only delivery contracts redeem cargo here — escorts share `dest`
+        // but have no goodType/qty and resolve when the freighter arrives
+        if (!m.goodType) continue;
         if (m.dest !== planet.name) continue;
         const have = game.ship.cargo[m.goodType] || 0;
         if (have >= m.qty) {

@@ -33,7 +33,11 @@ const MIME = {
 
 function serveStatic(req, res) {
     if (!STATIC_DIR) { res.writeHead(404); res.end('no static dir'); return; }
-    let urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    let urlPath;
+    // decodeURIComponent throws on malformed escapes ("/%") — that must be a
+    // 400, not a process exit
+    try { urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname); }
+    catch { res.writeHead(400); res.end('bad request'); return; }
     if (urlPath.endsWith('/')) urlPath += 'index.html';
     const filePath = path.join(STATIC_DIR, urlPath);
     // path.join normalizes ".."; anything escaping STATIC_DIR is a traversal attempt
@@ -48,7 +52,9 @@ function serveStatic(req, res) {
 }
 
 const httpServer = http.createServer(serveStatic);
-const wss = new WebSocketServer({ server: httpServer });
+// maxPayload: the biggest legitimate frame is a char.push doc (a few KB);
+// ws's 100MiB default would let a stranger stall the event loop pre-auth
+const wss = new WebSocketServer({ server: httpServer, maxPayload: 256 * 1024 });
 
 // pilot name -> ws (one live socket per pilot)
 const pilots = new Map();
@@ -75,6 +81,12 @@ function broadcastAll(obj) {
 
 wss.on('connection', (ws) => {
     ws.pilot = null;
+
+    // Sockets that never complete the hello handshake don't get to sit on an
+    // FD forever (they're invisible to `pilots` and would otherwise never die)
+    const helloTimer = setTimeout(() => {
+        if (!ws.pilot) ws.terminate();
+    }, 10000);
 
     ws.on('message', (raw) => {
         let msg;
@@ -162,6 +174,7 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
+        clearTimeout(helloTimer);
         if (ws.pilot && pilots.get(ws.pilot) === ws) {
             pilots.delete(ws.pilot);
             combatPilotLeft(ws.pilot);
@@ -191,3 +204,11 @@ function shutdown() {
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// World persistence is debounced (up to 60s behind), so an unexpected throw
+// must flush before the process dies — otherwise trades/grudges rewind
+process.on('uncaughtException', (err) => {
+    log(`fatal: ${err && err.stack || err}`);
+    try { flushWorld(); closeDb(); } catch { /* already going down */ }
+    process.exit(1);
+});
