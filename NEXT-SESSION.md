@@ -1,5 +1,21 @@
 # Next Session Roadmap
 
+State as of 2026-08-31: **Exploration milestone built on branch
+`feature/exploration-poi` (pushed to origin, NOT merged to main, NOT deployed).**
+Seven discoverable POIs out in the dark with shared first-charter landmarks +
+per-pilot rewards; wrapped-starfield fix (backlog item); forward-compatible
+reward schema with mod + questSeed rails for the future quest system. Both gates
+green: solo ?verify 117/117, verify-net 101/101. `TEST-PLAN.md` is the family
+playtest hand-off; `docs/PROTOCOL.md` has the new "M5 — exploration" wire
+section; added `CLAUDE.md` (repo briefing + "sync" protocol). **Next up: the
+persistent-world milestone** — a living world with reasons to log in anytime
+(see the `space-traders-direction` memory for the vision + hand-off prompt).
+Open design flags to settle via playtest: reward-per-visitor vs scarce
+first-come loot; sensor-ping-then-fly-in vs pure fly-in discovery; whether to
+physically spread the planets out too; POI art (still placeholder glyphs).
+
+(2026-08-06 review-hardening session record follows.)
+
 State as of 2026-08-06: **Code-review hardening session — two batches committed
 and pushed (5a9623a, 81f8bf8), both gates green after each** (solo ?verify
 102/102, verify-net 93/93). Four parallel review agents swept client logic,
@@ -10,6 +26,9 @@ deployed to themisto** — first order of business next session.
 
 ## Deploy first (5 minutes)
 
+- **Also undeployed now:** the `feature/exploration-poi` server changes (POI
+  discovery handler + snapshot field). Fold into the same themisto deploy once
+  the branch is playtested and merged.
 - `ssh themisto` pull + restart per RUNBOOK.md to pick up: crash guards
   (malformed-URL 400, uncaughtException flushes world before dying), ws
   maxPayload 256KB + hello timeout, Object.hasOwn trade validation, backups
