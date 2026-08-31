@@ -159,14 +159,24 @@ function render() {
         ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
     }
 
-    // Draw stars with parallax effect (back to front)
+    // Draw stars with parallax effect (back to front). Each star tiles over its
+    // layer's field (fieldW/fieldH): wrapping the parallax-adjusted position
+    // modulo the field makes the starfield infinite and seamless in every
+    // direction — flying far, including into negative space, never empties the
+    // sky. (Legacy stars without fieldW fall back to the un-wrapped path.)
     game.stars.forEach(star => {
         // Apply parallax - closer stars move faster with camera
         const parallaxX = game.camera.x * star.depth;
         const parallaxY = game.camera.y * star.depth;
 
-        const screenX = star.x - parallaxX;
-        const screenY = star.y - parallaxY;
+        let screenX = star.x - parallaxX;
+        let screenY = star.y - parallaxY;
+
+        if (star.fieldW && star.fieldH) {
+            // Normalize into [0, field) so the pattern repeats around the camera
+            screenX = ((screenX % star.fieldW) + star.fieldW) % star.fieldW;
+            screenY = ((screenY % star.fieldH) + star.fieldH) % star.fieldH;
+        }
 
         // Expanded culling bounds for larger stars
         const margin = star.size + 5;

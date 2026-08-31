@@ -471,7 +471,8 @@ VERIFY_SUITES.exploration = (assert) => {
         pending: game.pilot.pendingPerkChoices,
         discovered: (game.pilot.discoveredPOIs || []).slice(),
         mine: poi.mine, charted: poi.charted, chartedBy: poi.chartedBy,
-        paused: game.paused, mods: (game.ship.mods || []).slice()
+        paused: game.paused, mods: (game.ship.mods || []).slice(),
+        questSeeds: (game.pilot.questSeeds || []).slice()
     };
 
     // Fresh site: unknown to this pilot
@@ -515,7 +516,30 @@ VERIFY_SUITES.exploration = (assert) => {
     assert('a peer discovery grants no reward and no personal claim',
         poi.mine === false && game.ship.credits === creditsBeforePeer);
 
+    // Reward-schema rails (Slice 3): mod + questSeed grants. Cap the rank first
+    // so the extra XP can't stack perk-choice overlays mid-suite.
+    if (typeof PILOT_RANKS !== 'undefined') game.pilot.rank = PILOT_RANKS.length - 1;
+
+    const choir = game.pois.find(p => p.reward && p.reward.mod);
+    if (choir) {
+        choir.mine = false; choir.charted = false;
+        game.ship.x = choir.x - 40; game.ship.y = choir.y;
+        updatePOIDetection();
+        assert('a POI can grant a ship mod', hasMod(choir.reward.mod));
+    }
+    const dig = game.pois.find(p => p.reward && p.reward.questSeed);
+    if (dig) {
+        dig.mine = false; dig.charted = false;
+        game.ship.x = dig.x - 40; game.ship.y = dig.y;
+        updatePOIDetection();
+        assert('a POI questSeed is recorded for the future quest system',
+            Array.isArray(game.pilot.questSeeds) && game.pilot.questSeeds.includes(dig.reward.questSeed));
+    }
+
     // Restore — discovery moved the ship, paid out, and stowed cargo
+    if (choir) { choir.mine = false; choir.charted = false; choir.chartedBy = null; }
+    if (dig) { dig.mine = false; dig.charted = false; dig.chartedBy = null; }
+    game.pilot.questSeeds = saved.questSeeds;
     game.ship.x = saved.x; game.ship.y = saved.y;
     game.ship.velocity.x = saved.vx; game.ship.velocity.y = saved.vy;
     game.ship.credits = saved.credits; game.ship.cargo = saved.cargo;
@@ -526,6 +550,25 @@ VERIFY_SUITES.exploration = (assert) => {
     poi.mine = saved.mine; poi.charted = saved.charted; poi.chartedBy = saved.chartedBy;
     game.paused = saved.paused;
     updateUI();
+};
+
+VERIFY_SUITES.starfield = (assert) => {
+    assert('stars carry a tiling field', game.stars.length > 0 &&
+        game.stars.every(s => s.fieldW > 0 && s.fieldH > 0));
+    // The old fixed-rectangle starfield emptied when the camera flew far
+    // (especially negative). The wrap must tile every star back into its field
+    // at any camera — so the origin region of screen space is always populated.
+    const camX = -73000.5, camY = 61234.25; // far-flung, deliberately unaligned
+    let inField = 0;
+    game.stars.forEach(s => {
+        let x = s.x - camX * s.depth;
+        let y = s.y - camY * s.depth;
+        x = ((x % s.fieldW) + s.fieldW) % s.fieldW;
+        y = ((y % s.fieldH) + s.fieldH) % s.fieldH;
+        if (x >= 0 && x < s.fieldW && y >= 0 && y < s.fieldH) inField++;
+    });
+    assert('every star tiles back into its field far from origin (no empty sky)',
+        inField === game.stars.length);
 };
 
 function runVerify() {
