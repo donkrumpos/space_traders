@@ -1013,6 +1013,80 @@ async function explorationSuite(t, { browser, base, wsUrl }) {
     t('server keeps the first charter (VerifyG), ignores later reports', charter === 'VerifyG', `charter=${charter}`);
 }
 
+// M6 [chronicle]: the world remembers. The server keeps a persisted ledger of
+// notable happenings (POI charters, market events, boss kills) and clients get
+// a "while you were away" digest diffed against welcome.lastSeen. Reuses G/H
+// from [exploration] — G's wraith_cache charter is already in the ledger.
+async function chronicleSuite(t, { browser, base, wsUrl }) {
+    const hook = await S.G.page.evaluate(() => typeof netChronicle === 'function');
+    t('netChronicle console hook present', hook, 'client missing js/chronicle.js netChronicle()');
+    if (!hook) return;
+
+    // 1. the [exploration] charter landed in both ledgers
+    const gHas = await until(() => S.G.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'poi.charted' && e.text.includes('VerifyG'))));
+    t("G's ledger records the POI charter", !!gHas);
+    const hHas = await until(() => S.H.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'poi.charted' && e.text.includes('VerifyG'))));
+    t("H's ledger records it too (shared ledger)", !!hHas);
+
+    // 2. a forced market event appends live on both (chronicle.add broadcast)
+    const gCount = await S.G.page.evaluate(() => netChronicle().count);
+    await S.G.page.evaluate(() => net.send({
+        t: 'debug.marketEvent', planetName: 'Meridian Deep', goodType: 'food', side: 'sell', multiplier: 2
+    }));
+    const gEv = await until(() => S.G.page.evaluate(c => {
+        const v = netChronicle();
+        return v.count > c && v.latest.some(e => e.kind === 'market.event' && e.text.includes('Meridian Deep'));
+    }, gCount));
+    const hEv = await until(() => S.H.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'market.event' && e.text.includes('Meridian Deep'))));
+    t('market event appends to G live', !!gEv);
+    t('market event appends to H live', !!hEv);
+
+    // 3. the snapshot carries the full ledger (persisted world state)
+    const sinceSnap = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    await S.G.page.evaluate(() => net.send({ t: 'debug.snapshot' }));
+    const snapLedger = await until(() => S.G.page.evaluate(s => {
+        const snaps = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'world.snapshot' && Array.isArray(m.chronicle));
+        return snaps.length ? snaps[snaps.length - 1].chronicle : false;
+    }, sinceSnap));
+    t('world.snapshot carries the chronicle', Array.isArray(snapLedger) && snapLedger.length >= 2,
+        `snapshot chronicle: ${JSON.stringify(snapLedger).slice(0, 120)}`);
+
+    // 4. the away digest: G saves (stamping the server's lastSeen for the
+    // pilot), leaves; the world makes news; a returning G sees it as unseen.
+    const ackBase = await S.G.page.evaluate(() => netStatus().lastSaveAck || 0);
+    await S.G.page.evaluate(() => characterManager.saveCharacter(true));
+    const acked = await until(() => S.G.page.evaluate(b => (netStatus().lastSaveAck || 0) > b, ackBase));
+    t('G save acked before leaving', !!acked);
+    await S.G.context.close();
+    S.G = null;
+    const gGone = await until(() => S.H.page.evaluate(() => !(netStatus().peers || []).includes('VerifyG')), { timeout: 10000 });
+    t('G left the server (peers)', !!gGone);
+    await sleep(150); // the news must be stamped strictly after G's last save
+    await S.H.page.evaluate(() => net.send({
+        t: 'debug.marketEvent', planetName: 'Agricon Prime', goodType: 'medicine', side: 'sell', multiplier: 2
+    }));
+    const newsUp = await until(() => S.H.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'market.event' && e.text.includes('Agricon Prime'))));
+    t('news happened while G was away', !!newsUp);
+
+    S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
+    await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('G back online', !!(await until(() => S.G.page.evaluate(() => netStatus().online === true))));
+    const digest = await until(() => S.G.page.evaluate(() => {
+        const v = netChronicle();
+        return (v.lastSeen > 0 && v.unseen >= 1 && v.digestShown === true) ? v : false;
+    }));
+    t('returning G gets a while-you-were-away backlog (lastSeen>0, unseen≥1, digest fired)', !!digest,
+        `netChronicle=${JSON.stringify(await S.G.page.evaluate(() => { const v = netChronicle(); return { lastSeen: v.lastSeen, unseen: v.unseen, digestShown: v.digestShown, count: v.count }; }))}`);
+    const unseenIsNews = await S.G.page.evaluate(ls =>
+        netChronicle().latest.some(e => e.at > ls && e.text.includes('Agricon Prime')),
+        digest ? digest.lastSeen : 0);
+    t('the unseen entry is the away-time news', !!digest && unseenIsNews);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1024,6 +1098,7 @@ const SUITES = [
     ['world', worldSuite],
     ['combat', combatSuite],
     ['exploration', explorationSuite],
+    ['chronicle', chronicleSuite],
 ];
 
 // ---------------------------------------------------------------------------

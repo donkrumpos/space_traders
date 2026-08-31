@@ -571,6 +571,74 @@ VERIFY_SUITES.starfield = (assert) => {
         inField === game.stars.length);
 };
 
+VERIFY_SUITES.chronicle = (assert) => {
+    // Client half of the M6 chronicle: ledger apply, digest math, panel.
+    // Exercised with synthetic entries — no net layer involved (solo gate).
+    const saved = {
+        entries: chronicle.entries.slice(),
+        lastSeen: chronicle.lastSeen,
+        digestShown: chronicle.digestShown
+    };
+    const now = Date.now();
+
+    assert('chronicle module loaded', typeof applyChronicleSnapshot === 'function'
+        && typeof applyChronicleAdd === 'function' && typeof setChronicleLastSeen === 'function');
+    assert('netChronicle console hook present', typeof netChronicle === 'function');
+
+    assert('timeAgo buckets read right',
+        chronicleTimeAgo(now - 30 * 1000, now) === 'just now' &&
+        chronicleTimeAgo(now - 10 * 60 * 1000, now) === '10m ago' &&
+        chronicleTimeAgo(now - 5 * 3600 * 1000, now) === '5h ago' &&
+        chronicleTimeAgo(now - 3 * 86400 * 1000, now) === '3d ago');
+
+    assert('every ledger kind formats to a human line',
+        formatChronicleEntry({ kind: 'poi.charted', pilot: 'Arthur', poi: 'wraith_cache', name: 'The Wraith Cache' }) === 'Arthur charted The Wraith Cache' &&
+        formatChronicleEntry({ kind: 'market.event', label: 'medicine shortage at Ossuary Drift', planet: 'Ossuary Drift' }) === 'medicine shortage at Ossuary Drift' &&
+        formatChronicleEntry({ kind: 'boss.killed', pilot: 'Foggy', faction: 'Rustfang Cartel' }) === 'Foggy broke a Rustfang Cartel raid');
+    assert('unknown kinds still print something',
+        formatChronicleEntry({ kind: 'future.thing', pilot: 'X' }).includes('future.thing'));
+
+    // Digest math: lastSeen splits the ledger into seen/unseen
+    setChronicleLastSeen(now - 3600 * 1000); // "last flew an hour ago"
+    applyChronicleSnapshot([
+        { at: now - 2 * 3600 * 1000, kind: 'market.event', label: 'old news', planet: 'X' },
+        { at: now - 30 * 60 * 1000, kind: 'poi.charted', pilot: 'Peer', poi: 'p', name: 'Site' },
+        { at: now - 60 * 1000, kind: 'boss.killed', pilot: 'Peer', faction: 'Void Choir' }
+    ]);
+    let view = netChronicle();
+    assert('snapshot adopted into the ledger', view.count === 3);
+    assert('unseen counts only entries after lastSeen', view.unseen === 2);
+    assert('digest fires once per connect', view.digestShown === true);
+    assert('panel is visible with entries',
+        document.getElementById('chroniclePanel').style.display === 'block' &&
+        document.getElementById('chronicleList').textContent.includes('Peer charted Site'));
+
+    // Live append rides chronicle.add
+    applyChronicleAdd({ at: now, kind: 'poi.charted', pilot: 'Live', poi: 'q', name: 'New Site' });
+    view = netChronicle();
+    assert('chronicle.add appends', view.count === 4 &&
+        view.latest[view.latest.length - 1].text === 'Live charted New Site');
+
+    // A brand-new pilot (lastSeen 0) missed nothing by definition
+    setChronicleLastSeen(0);
+    assert('new pilot has no unseen backlog', netChronicle().unseen === 0);
+
+    // Ledger cap holds
+    const flood = [];
+    for (let i = 0; i < 150; i++) flood.push({ at: now - i, kind: 'market.event', label: `e${i}`, planet: 'X' });
+    applyChronicleSnapshot(flood);
+    assert('client ledger caps at 100', netChronicle().count === 100);
+
+    // Restore — empty ledger hides the panel again for a clean sidebar
+    chronicle.entries = saved.entries;
+    chronicle.lastSeen = saved.lastSeen;
+    chronicle.digestShown = saved.digestShown;
+    updateChroniclePanelUI();
+    assert('restored ledger leaves no trace',
+        netChronicle().count === saved.entries.length &&
+        (saved.entries.length > 0 || document.getElementById('chroniclePanel').style.display === 'none'));
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

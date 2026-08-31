@@ -464,6 +464,37 @@ shared, persistent fact; the reward is granted per-pilot (co-op friendly).
   contact; charted sites draw as their archetype icon on all three map surfaces.
 - **Console hooks:** `window.listPOIs()`, `window.warpToPOI(id)`.
 
+### M6 — persistent living world (chronicle: the world remembers)
+
+The world keeps a **chronicle** — a capped ledger (100 entries) of notable
+happenings, persisted inside the singleton `world` JSON blob (same SQLite
+snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
+`{ at, kind, ...detail }`, oldest → newest. Kinds so far:
+
+| kind | detail | recorded when |
+|------|--------|---------------|
+| `poi.charted` | `{ pilot, poi, name }` | a POI's FIRST charter lands (`poi.discover`, world.mjs) |
+| `market.event` | `{ label, planet }` | a market event starts (`setEvent`, incl. debug-forced) |
+| `boss.killed` | `{ pilot, faction, tier }` | a raid-band boss dies (`damage.claim`, combat.mjs). Common-pirate kills are deliberately NOT recorded (noise) |
+
+| t | dir | payload |
+|---|-----|---------|
+| `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
+
+- **`world.snapshot.chronicle`**: the full ledger array (additive snapshot
+  field; old clients ignore it).
+- **`welcome.lastSeen`** (additive field): the server-side `updated` stamp of
+  this pilot's stored doc, `0` for a brand-new pilot. This is "when you last
+  flew" as the SERVER remembers it — every real save (`char.push`) refreshes it.
+- **Away digest (client, `js/chronicle.js`):** on each (re)connect the client
+  stamps `lastSeen` from welcome, then when the snapshot lands shows ONE
+  "While you were away — N things happened" HUD digest plus the last ≤3 unseen
+  entries (`entry.at > lastSeen`; `lastSeen === 0` ⇒ nothing was missed). The
+  **Galaxy Log** sidebar panel (`#chroniclePanel`) lists the latest 8 entries,
+  unseen ones highlighted; hidden when the ledger is empty (offline/solo).
+- **Console hook:** `window.netChronicle()` →
+  `{ count, lastSeen, unseen, digestShown, latest }`.
+
 ## verify-net.mjs (the gate)
 
 Node script at repo root. Uses `puppeteer-core` with

@@ -253,6 +253,9 @@ function netHandleMessage(msg) {
             net.online = true;
             net.status = 'online';
             net.peers = (msg.peers || []).filter(p => p !== netIdentity.pilot);
+            // M6: stamp lastSeen BEFORE the snapshot lands — the chronicle
+            // digest diffs against it when world.snapshot arrives next.
+            if (typeof setChronicleLastSeen === 'function') setChronicleLastSeen(msg.lastSeen || 0);
             netApplySyncRule(msg.doc);
             netSyncedOnce = true;
             netStartSender();
@@ -360,6 +363,10 @@ function netHandleMessage(msg) {
         // --- M5: exploration -------------------------------------------
         case 'poi.discovered':
             if (typeof applyPOIDiscovered === 'function') applyPOIDiscovered(msg);
+            break;
+        // --- M6: chronicle ---------------------------------------------
+        case 'chronicle.add':
+            if (typeof applyChronicleAdd === 'function') applyChronicleAdd(msg.entry);
             break;
         // Unknown t: ignored (forward compatibility)
     }
@@ -543,6 +550,10 @@ function netApplySnapshot(snap) {
     // per-pilot by flying to the site).
     if (snap.discoveredPOIs && typeof applyDiscoveredPOIsFromServer === 'function') {
         applyDiscoveredPOIsFromServer(snap.discoveredPOIs);
+    }
+    // M6: the world's ledger — feeds the Galaxy Log panel + away digest.
+    if (snap.chronicle && typeof applyChronicleSnapshot === 'function') {
+        applyChronicleSnapshot(snap.chronicle);
     }
 }
 

@@ -19,7 +19,7 @@
 // - The world sleeps at zero pilots: ticks skip entirely, all combat timers
 //   freeze (sim-time based). M3 market-event timers keep running (unchanged).
 import config from './config.mjs';
-import { getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact } from './world.mjs';
+import { getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact, recordChronicle } from './world.mjs';
 
 // Side-effect imports set the globals (same files, no fork — PROTOCOL.md
 // "Combat/traffic sim extraction"). planets.js is already loaded by world.mjs
@@ -330,6 +330,15 @@ export function handleCombatMessage(ws, msg, send) {
             if (outcome.grudgeDelta) {
                 bumpGrudge(outcome.grudgeDelta.faction, outcome.grudgeDelta.amount);
                 broadcast({ t: 'grudge.update', grudges: getGrudges() });
+            }
+            // A broken band is family news; common-pirate kills are too noisy
+            // for the ledger (dozens per session).
+            if (enemy.isBandBoss) {
+                recordChronicle('boss.killed', {
+                    pilot: ws.pilot,
+                    faction: enemy.factionName || null,
+                    tier: enemy.tierName || null
+                });
             }
             return true;
         }

@@ -18,6 +18,7 @@ const EconomyCore = globalThis.EconomyCore;
 const metaByName = new Map(SIM_PLANETS.map(p => [p.name, p]));
 // Valid POI ids — reject discovery reports for anything not in the roster
 const POI_IDS = new Set(SIM_POIS.map(p => p.id));
+const poiMetaById = new Map(SIM_POIS.map(p => [p.id, p]));
 
 // A board is one offers[] array: delivery offers plus (sometimes) a bounty
 // entry (type:'bounty') — one generateMissionOffers roll covers both.
@@ -32,7 +33,10 @@ function rollBoard(meta) {
 
 // discoveredPOIs: { poiId: { pilot, at } } — the galaxy-wide charter record,
 // first-write-wins. Persisted in the singleton world snapshot like grudges.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {} };
+// chronicle: the world's memory (M6) — a capped ledger of notable happenings
+// ({ at, kind, ...detail }), newest last. Persisted so "while you were away"
+// survives restarts; clients diff it against welcome.lastSeen for the digest.
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [] };
 
 {
     let saved = null;
@@ -50,6 +54,7 @@ const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, 
     }
     if (saved && saved.grudges) world.grudges = saved.grudges;
     if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
+    if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
     // An event that was live at shutdown resumes with its remaining time
     // (endsAt is a server-side wall-clock field added on top of timeLeft).
     if (saved && saved.marketEvent && saved.marketEvent.endsAt > Date.now()) {
@@ -80,6 +85,26 @@ export function flushWorld() {
     if (dirty) persist();
 }
 
+// --- Chronicle (M6): the world remembers -------------------------------------
+// One append path for every notable happening. Entries are small and flat:
+// { at, kind, ...detail }. Kinds so far: 'poi.charted' { pilot, poi, name },
+// 'market.event' { label, planet }, 'boss.killed' { pilot, faction, tier }.
+// Capped so the snapshot blob can't grow without bound; broadcast so open
+// clients keep their Galaxy Log current without re-snapshotting.
+
+const CHRONICLE_MAX = 100;
+
+export function recordChronicle(kind, detail) {
+    const entry = { at: Date.now(), kind, ...detail };
+    world.chronicle.push(entry);
+    if (world.chronicle.length > CHRONICLE_MAX) {
+        world.chronicle.splice(0, world.chronicle.length - CHRONICLE_MAX);
+    }
+    broadcast({ t: 'chronicle.add', entry });
+    markDirty();
+    return entry;
+}
+
 // --- Market event scheduler -------------------------------------------------
 // Same cadence the solo client used (js/economy.js): first stir at 75s,
 // events run 180s (timeLeft), 90-210s cooldown between events, 20s retry
@@ -103,6 +128,7 @@ function setEvent(ev) {
     ev.endsAt = Date.now() + ev.timeLeft * 1000; // survives a restart
     world.marketEvent = ev;
     broadcast({ t: 'market.event', marketEvent: ev });
+    recordChronicle('market.event', { label: ev.label, planet: ev.planetName });
     markDirty();
     scheduleEventTimer(ev.timeLeft * 1000, endEvent);
 }
@@ -176,7 +202,8 @@ export function worldSnapshotMessage() {
         marketEvent: world.marketEvent,
         missionBoards: world.missionBoards,
         grudges: world.grudges,
-        discoveredPOIs: world.discoveredPOIs
+        discoveredPOIs: world.discoveredPOIs,
+        chronicle: world.chronicle
     };
 }
 
@@ -255,6 +282,8 @@ export function handleWorldMessage(ws, msg, send) {
             if (!id || !POI_IDS.has(id)) return true; // unknown site — ignore
             if (!world.discoveredPOIs[id]) {
                 world.discoveredPOIs[id] = { pilot: ws.pilot, at: Date.now() };
+                const meta = poiMetaById.get(id);
+                recordChronicle('poi.charted', { pilot: ws.pilot, poi: id, name: meta ? meta.name : id });
                 markDirty();
             }
             const rec = world.discoveredPOIs[id];
