@@ -1087,6 +1087,104 @@ async function chronicleSuite(t, { browser, base, wsUrl }) {
     t('the unseen entry is the away-time news', !!digest && unseenIsNews);
 }
 
+// M6 [salvage]: regenerating caches. A charted site's cache reopens on a
+// server-owned wall-clock window (seeded at charter, rolled 12-24h after each
+// claim); salvage is first-come galaxy-wide. Reuses G/H from [chronicle] —
+// wraith_cache is charted and its first window sits hours in the future, so
+// debug.poiState forces readiness where the tests need it.
+async function salvageSuite(t, { browser, base, wsUrl }) {
+    const POI = 'wraith_cache';
+
+    // 1. charter seeded a future window (rides the snapshot)
+    const sinceSnap = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    await S.G.page.evaluate(() => net.send({ t: 'debug.snapshot' }));
+    const seeded = await until(() => S.G.page.evaluate((s, id) => {
+        const snaps = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'world.snapshot' && m.poiState);
+        if (!snaps.length) return false;
+        const st = snaps[snaps.length - 1].poiState[id];
+        return (st && st.nextSalvageAt > Date.now()) ? st.nextSalvageAt : false;
+    }, sinceSnap, POI));
+    t('charter seeded a future cache window (snapshot.poiState)', !!seeded);
+
+    // 2. a cooling cache refuses the claim
+    await S.H.page.evaluate(id => {
+        window.__salvCool = null;
+        net.salvagePOI(id).then(r => { window.__salvCool = r; }).catch(e => { window.__salvCool = { err: String(e) }; });
+    }, POI);
+    const refused = await until(() => S.H.page.evaluate(() => window.__salvCool));
+    t('claiming a cooling cache refuses (ok:false + window echoed)',
+        !!refused && refused.ok === false && refused.nextSalvageAt > Date.now(),
+        JSON.stringify(refused));
+
+    // 3. force the window open; the poi.state broadcast reaches the clients
+    await S.G.page.evaluate(id => net.send({ t: 'debug.poiState', id, nextSalvageAt: Date.now() - 5000 }), POI);
+    const gReady = await until(() => S.G.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return !!p && typeof p.nextSalvageAt === 'number' && Date.now() >= p.nextSalvageAt;
+    }, POI));
+    t('forced window reaches G (poi.state broadcast)', !!gReady);
+
+    // 4. the REAL fly-in path: G (who "already claimed" the site — salvage,
+    // not re-discovery) warps in; detection sends the claim; the roster's
+    // salvage table pays out ($300 + 1 relic for the wraith cache).
+    const credits0 = await S.G.page.evaluate(() => game.ship.credits);
+    await S.G.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        p.mine = true; p.charted = true; p._salvageAskedAt = 0;
+        if (!Array.isArray(game.pilot.discoveredPOIs)) game.pilot.discoveredPOIs = [];
+        if (!game.pilot.discoveredPOIs.includes(id)) game.pilot.discoveredPOIs.push(id);
+        warpToPOI(id);
+    }, POI);
+    const paid = await until(() => S.G.page.evaluate(c => game.ship.credits > c, credits0), { timeout: 10000 });
+    t('fly-in salvage pays (real detection path)', !!paid,
+        `credits stuck at ${await S.G.page.evaluate(() => game.ship.credits)}`);
+    const credits1 = await S.G.page.evaluate(() => game.ship.credits);
+    t('payout matches the roster salvage table ($300)', credits1 === credits0 + 300,
+        `got +$${credits1 - credits0}`);
+    t('salvage relic stowed', !!(await S.G.page.evaluate(() => (game.ship.cargo.relics || 0) >= 1)));
+    const hFuture = await until(() => S.H.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return !!p && p.nextSalvageAt > Date.now();
+    }, POI));
+    t('the claim rolls the next window for everyone', !!hFuture);
+    const chron = await until(() => S.G.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'poi.salvaged' && e.text.includes('VerifyG'))));
+    t('the salvage lands in the chronicle', !!chron);
+
+    // 5. first-come race: park G away from the site (detection must not steal
+    // the race), reopen the window, both claim at once — exactly one wins.
+    await S.G.page.evaluate(() => { game.ship.x += 99999; game.ship.velocity.x = 0; game.ship.velocity.y = 0; });
+    await S.G.page.evaluate(id => net.send({ t: 'debug.poiState', id, nextSalvageAt: Date.now() - 5000 }), POI);
+    const reopened = await until(() => S.G.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        return Date.now() >= p.nextSalvageAt;
+    }, POI));
+    t('window reopened for the race', !!reopened);
+    await Promise.all([
+        S.G.page.evaluate(id => {
+            window.__salvRace = null;
+            net.salvagePOI(id).then(r => { window.__salvRace = r; }).catch(e => { window.__salvRace = { err: String(e) }; });
+        }, POI),
+        S.H.page.evaluate(id => {
+            window.__salvRace = null;
+            net.salvagePOI(id).then(r => { window.__salvRace = r; }).catch(e => { window.__salvRace = { err: String(e) }; });
+        }, POI),
+    ]);
+    const raced = await until(async () => {
+        const g = await S.G.page.evaluate(() => window.__salvRace);
+        const h = await S.H.page.evaluate(() => window.__salvRace);
+        return (g && h) ? { g, h } : false;
+    });
+    t('both race replies landed', !!raced);
+    if (raced) {
+        const wins = (raced.g.ok ? 1 : 0) + (raced.h.ok ? 1 : 0);
+        t('exactly one racer wins the cache (first-come)', wins === 1,
+            `g.ok=${raced.g.ok} h.ok=${raced.h.ok}`);
+        const loser = raced.g.ok ? raced.h : raced.g;
+        t('the loser learns the fresh window', !!loser && loser.nextSalvageAt > Date.now());
+    }
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1099,6 +1197,7 @@ const SUITES = [
     ['combat', combatSuite],
     ['exploration', explorationSuite],
     ['chronicle', chronicleSuite],
+    ['salvage', salvageSuite],
 ];
 
 // ---------------------------------------------------------------------------

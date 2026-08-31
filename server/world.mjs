@@ -36,7 +36,11 @@ function rollBoard(meta) {
 // chronicle: the world's memory (M6) — a capped ledger of notable happenings
 // ({ at, kind, ...detail }), newest last. Persisted so "while you were away"
 // survives restarts; clients diff it against welcome.lastSeen for the digest.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [] };
+// poiState: { poiId: { nextSalvageAt } } — regenerating caches (M6). Readiness
+// is COMPUTED on read against wall-clock (the marketEvent.endsAt pattern taken
+// further: no timers at all), so it needs no catch-up logic and survives any
+// restart or idle stretch for free.
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {} };
 
 {
     let saved = null;
@@ -55,6 +59,12 @@ const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, 
     if (saved && saved.grudges) world.grudges = saved.grudges;
     if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
     if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
+    if (saved && saved.poiState) world.poiState = saved.poiState;
+    // Migration: sites charted before caches existed get a cycle seeded now,
+    // so a live world's landmarks start regenerating on the next deploy.
+    for (const id of Object.keys(world.discoveredPOIs)) {
+        if (!world.poiState[id]) world.poiState[id] = { nextSalvageAt: rollNextSalvageAt() };
+    }
     // An event that was live at shutdown resumes with its remaining time
     // (endsAt is a server-side wall-clock field added on top of timeLeft).
     if (saved && saved.marketEvent && saved.marketEvent.endsAt > Date.now()) {
@@ -93,6 +103,17 @@ export function flushWorld() {
 // clients keep their Galaxy Log current without re-snapshotting.
 
 const CHRONICLE_MAX = 100;
+
+// Regenerating caches (M6): after a charter or a salvage claim, the next
+// salvage window opens 12-24h out — the daily-ish cadence pinned at kickoff.
+// A daily check-in usually finds SOMETHING ready across seven sites; the
+// jitter keeps the refresh from being clockwork-farmable.
+const SALVAGE_MIN_MS = 12 * 3600 * 1000;
+const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
+
+function rollNextSalvageAt(now = Date.now()) {
+    return now + SALVAGE_MIN_MS + Math.random() * SALVAGE_JITTER_MS;
+}
 
 export function recordChronicle(kind, detail) {
     const entry = { at: Date.now(), kind, ...detail };
@@ -203,7 +224,8 @@ export function worldSnapshotMessage() {
         missionBoards: world.missionBoards,
         grudges: world.grudges,
         discoveredPOIs: world.discoveredPOIs,
-        chronicle: world.chronicle
+        chronicle: world.chronicle,
+        poiState: world.poiState
     };
 }
 
@@ -284,10 +306,39 @@ export function handleWorldMessage(ws, msg, send) {
                 world.discoveredPOIs[id] = { pilot: ws.pilot, at: Date.now() };
                 const meta = poiMetaById.get(id);
                 recordChronicle('poi.charted', { pilot: ws.pilot, poi: id, name: meta ? meta.name : id });
+                // The cache starts its first regeneration cycle at charter time
+                world.poiState[id] = { nextSalvageAt: rollNextSalvageAt() };
+                broadcast({ t: 'poi.state', id, nextSalvageAt: world.poiState[id].nextSalvageAt });
                 markDirty();
             }
             const rec = world.discoveredPOIs[id];
             broadcast({ t: 'poi.discovered', id, pilot: rec.pilot, at: rec.at });
+            return true;
+        }
+
+        case 'poi.salvage': {
+            // A pilot at a charted site claims its regenerated cache. First
+            // come wins galaxy-wide (mission-board precedent): readiness is
+            // checked against wall-clock, and a successful claim immediately
+            // rolls the next window so a racing second claim bounces. The
+            // reward comes from the roster's salvage table server-side — the
+            // client applies exactly what the reply says.
+            const id = typeof msg.id === 'string' ? msg.id : null;
+            const st = id ? world.poiState[id] : null;
+            const meta = id ? poiMetaById.get(id) : null;
+            const ready = !!(st && world.discoveredPOIs[id] && Date.now() >= st.nextSalvageAt);
+            if (!ready || !meta) {
+                send(ws, { t: 'poi.salvaged', reqId: msg.reqId, ok: false, id,
+                           nextSalvageAt: st ? st.nextSalvageAt : null });
+                return true;
+            }
+            st.nextSalvageAt = rollNextSalvageAt();
+            recordChronicle('poi.salvaged', { pilot: ws.pilot, poi: id, name: meta.name });
+            send(ws, { t: 'poi.salvaged', reqId: msg.reqId, ok: true, id,
+                       reward: meta.salvage || { credits: 200, xp: 15 },
+                       nextSalvageAt: st.nextSalvageAt });
+            broadcast({ t: 'poi.state', id, nextSalvageAt: st.nextSalvageAt });
+            markDirty();
             return true;
         }
 
@@ -304,6 +355,19 @@ export function handleWorldMessage(ws, msg, send) {
                 ev.label = `${ev.goodType} ${ev.side === 'sell' ? 'shortage' : 'glut'} at ${ev.planetName}`;
             }
             setEvent(ev);
+            return true;
+        }
+
+        case 'debug.poiState': {
+            // Harness hook: force a cache window (e.g. nextSalvageAt in the
+            // past = "ready now") without waiting 12h. Site must be known.
+            if (process.env.VERIFY_DEBUG !== '1') return true;
+            const id = typeof msg.id === 'string' && POI_IDS.has(msg.id) ? msg.id : null;
+            const at = Number(msg.nextSalvageAt);
+            if (!id || !Number.isFinite(at)) return true;
+            world.poiState[id] = { nextSalvageAt: at };
+            broadcast({ t: 'poi.state', id, nextSalvageAt: at });
+            markDirty();
             return true;
         }
 

@@ -111,6 +111,97 @@ function applyPOIDiscovered(msg) {
     }
 }
 
+// --- Regenerating caches (M6) ----------------------------------------------
+// The server owns cache readiness (world.poiState → poi.nextSalvageAt here).
+// A pilot who has already claimed a site (poi.mine) and flies back in when the
+// cache is ready sends poi.salvage; FIRST claim galaxy-wide wins (the shared
+// mission-board precedent), and the server rolls the next 12-24h window.
+// A pilot who never claimed the site gets their discovery moment instead —
+// salvage never fires for them (no double reward). Offline: nextSalvageAt
+// never arrives, so nothing here runs — solo play is untouched.
+
+// world.snapshot.poiState: { id: { nextSalvageAt } }
+function applyPOIState(map) {
+    if (!game.pois || !map) return;
+    Object.keys(map).forEach(id => {
+        const poi = poiById(id);
+        if (poi && map[id]) poi.nextSalvageAt = map[id].nextSalvageAt;
+    });
+}
+
+// poi.state broadcast: one site's window moved (someone salvaged, or a charter
+// seeded the first cycle).
+function applyPOIStateUpdate(msg) {
+    const poi = poiById(msg && msg.id);
+    if (poi) poi.nextSalvageAt = msg.nextSalvageAt;
+}
+
+function poiSalvageReady(poi) {
+    return !!(poi && poi.charted && typeof poi.nextSalvageAt === 'number'
+        && Date.now() >= poi.nextSalvageAt);
+}
+
+// "salvage in 5h" map annotation for a site you've already claimed
+function poiSalvageEtaText(poi) {
+    if (!poi || typeof poi.nextSalvageAt !== 'number') return null;
+    const ms = poi.nextSalvageAt - Date.now();
+    if (ms <= 0) return 'salvage ready';
+    if (ms < 3600 * 1000) return `salvage in ${Math.max(1, Math.round(ms / 60000))}m`;
+    return `salvage in ${Math.round(ms / 3600000)}h`;
+}
+
+const SALVAGE_RETRY_MS = 10000; // don't spam claims while parked in the radius
+
+function trySalvagePOI(poi) {
+    if (!window.net || !window.net.online || typeof window.net.salvagePOI !== 'function') return;
+    const now = Date.now();
+    if (poi._salvageAskedAt && now - poi._salvageAskedAt < SALVAGE_RETRY_MS) return;
+    poi._salvageAskedAt = now;
+    window.net.salvagePOI(poi.id).then(res => {
+        if (res && typeof res.nextSalvageAt === 'number') poi.nextSalvageAt = res.nextSalvageAt;
+        if (res && res.ok) grantSalvageReward(poi, res.reward || {});
+        // ok:false = someone beat us to it (or not ready after all) — the
+        // reply's nextSalvageAt already pushed the marker out; stay quiet.
+    }).catch(() => { /* offline blip — detection retries next pass */ });
+}
+
+// Apply exactly what the server granted. Same hold-cap rule as discovery:
+// relics that don't fit pay out instead of vanishing.
+function grantSalvageReward(poi, r) {
+    if (r.credits) {
+        game.ship.credits += r.credits;
+        if (characterManager && characterManager.character) {
+            characterManager.character.progress.totalCreditsEarned += r.credits;
+        }
+    }
+    let stowed = 0;
+    if (r.relics) {
+        const free = Math.max(0, game.ship.cargoMax - cargoUnitsCarried());
+        stowed = Math.min(r.relics, free);
+        if (stowed > 0) game.ship.cargo.relics = (game.ship.cargo.relics || 0) + stowed;
+        if (stowed < r.relics) game.ship.credits += (r.relics - stowed) * 120;
+    }
+    if (typeof addShipLog === 'function') addShipLog(`Salvaged ${poi.name}.`);
+    const kind = poiKind(poi);
+    if (typeof playPickupSound === 'function') playPickupSound();
+    if (typeof spawnFloater === 'function') {
+        spawnFloater(game.ship.x, game.ship.y - 54, `${kind.symbol} Salvaged: ${poi.name}`, kind.color, 15);
+        if (r.credits) spawnFloater(game.ship.x, game.ship.y - 34, `+$${r.credits}`, '#ffdd44', 13);
+        if (stowed > 0) spawnFloater(game.ship.x, game.ship.y - 18, `+${stowed} relics`, kind.color, 13);
+    }
+    if (typeof showHudFeedback === 'function') {
+        showHudFeedback(`${kind.symbol} Salvaged ${poi.name} — the cache will rebuild in time`, 'success', 5000);
+    }
+    if (r.xp && typeof addXP === 'function') {
+        addXP(r.xp, 'salvage'); // saves + updates UI
+    } else {
+        if (typeof updateUI === 'function') updateUI();
+        if (typeof characterManager === 'object' && characterManager.saveCharacter) {
+            characterManager.saveCharacter();
+        }
+    }
+}
+
 // --- Detection: fly within discoveryRadius to claim ------------------------
 // Called from update() on the alive path (never while paused or dead). Sensor
 // range = the minimap range, which perks/mods already scale (long_range_scanner,
@@ -125,8 +216,12 @@ function updatePOIDetection() {
         const dist = Math.sqrt(dx * dx + dy * dy);
         poi.dist = dist;
         poi.inSensor = dist <= sensor;
-        if (!poi.mine && dist <= (poi.discoveryRadius || 75)) {
-            claimPOI(poi);
+        if (dist <= (poi.discoveryRadius || 75)) {
+            if (!poi.mine) {
+                claimPOI(poi);
+            } else if (poiSalvageReady(poi)) {
+                trySalvagePOI(poi); // regenerated cache — first claim wins
+            }
         }
     }
 }
@@ -184,9 +279,11 @@ function grantPOIReward(poi) {
         lines.push(`Mod: ${MODS[r.mod].name}`);
     }
 
-    if (r.lore && game.ship.log) {
-        game.ship.log.push(r.lore);
-        if (typeof updateShipPanelUI === 'function') updateShipPanelUI();
+    if (r.lore) {
+        // addShipLog wraps in the { t, text } shape the ship panel renders
+        // (a raw string push showed as "undefined" in the log — M5 bug).
+        if (typeof addShipLog === 'function') addShipLog(r.lore);
+        else if (game.ship.log) game.ship.log.push({ t: Date.now(), text: r.lore });
     }
 
     // questSeed is reserved for the future quest system — record it so the
@@ -278,6 +375,18 @@ function renderPOIs(ctx, camera) {
             ctx.fillText(`charted by ${poi.chartedBy}${poi.mine ? ' ✓' : ''}`, screenX, screenY + 33);
         }
 
+        // Regenerating cache (M6): a ready cache glows gold — the fly-back-out
+        // pull; a claimed-but-cooling site shows when it's worth returning.
+        const eta = poiSalvageEtaText(poi);
+        if (eta) {
+            const ready = poiSalvageReady(poi);
+            ctx.fillStyle = ready ? '#ffcc44' : '#556677';
+            if (ready) ctx.globalAlpha = 0.6 + 0.4 * Math.abs(Math.sin(t * 0.004));
+            ctx.font = '8px Courier New';
+            ctx.fillText(ready ? '✦ salvage ready' : eta, screenX, screenY + 44);
+            ctx.globalAlpha = 1;
+        }
+
         const ringR = poi.discoveryRadius || 75;
         if (poi.dist < ringR) {
             ctx.strokeStyle = kind.color;
@@ -343,6 +452,10 @@ function renderPOIFullMap(ctx, scale, offsetX, offsetY) {
         ctx.fillStyle = '#7788aa';
         ctx.font = '8px Courier New';
         ctx.fillText(kind.label + (poi.chartedBy ? ` · ${poi.chartedBy}` : ''), mapX, mapY + 18);
+        if (poiSalvageReady(poi)) {
+            ctx.fillStyle = '#ffcc44';
+            ctx.fillText('✦ salvage ready', mapX, mapY + 28);
+        }
     });
 }
 
@@ -364,7 +477,8 @@ window.listPOIs = function () {
     return (game.pois || []).map(p => ({
         id: p.id, name: p.name, kind: p.kind,
         charted: p.charted, chartedBy: p.chartedBy, mine: p.mine,
-        dist: Math.round(p.dist), at: `(${p.x}, ${p.y})`
+        dist: Math.round(p.dist), at: `(${p.x}, ${p.y})`,
+        salvage: poiSalvageEtaText(p)
     }));
 };
 // Warp the ship next to a POI to test discovery without the long flight.

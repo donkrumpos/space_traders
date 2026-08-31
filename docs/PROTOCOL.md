@@ -476,10 +476,15 @@ snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
 | `poi.charted` | `{ pilot, poi, name }` | a POI's FIRST charter lands (`poi.discover`, world.mjs) |
 | `market.event` | `{ label, planet }` | a market event starts (`setEvent`, incl. debug-forced) |
 | `boss.killed` | `{ pilot, faction, tier }` | a raid-band boss dies (`damage.claim`, combat.mjs). Common-pirate kills are deliberately NOT recorded (noise) |
+| `poi.salvaged` | `{ pilot, poi, name }` | a regenerated cache is claimed (`poi.salvage`) |
 
 | t | dir | payload |
 |---|-----|---------|
 | `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
+| `poi.salvage` | c→s | `{ reqId, id }` — "I'm at this charted site and its cache looks ready." Request/response like `trade` |
+| `poi.salvaged` | s→c | `{ reqId, ok, id, reward?, nextSalvageAt }` — `ok:true` carries the roster's `salvage` table (`{ credits, relics, xp }`, server-owned; the client applies exactly this) and the freshly rolled next window. `ok:false` = not ready / already claimed; `nextSalvageAt` echoes the live window so the loser's map updates |
+| `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt }` — a site's cache window moved (charter seeded the first cycle, or a salvage claim rolled the next). Drives the "✦ salvage ready" map markers |
+| `debug.poiState` | c→s | `{ id, nextSalvageAt }` — VERIFY_DEBUG only: force a window (harness sets it in the past = ready now) |
 
 - **`world.snapshot.chronicle`**: the full ledger array (additive snapshot
   field; old clients ignore it).
@@ -494,6 +499,17 @@ snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
   unseen ones highlighted; hidden when the ledger is empty (offline/solo).
 - **Console hook:** `window.netChronicle()` →
   `{ count, lastSeen, unseen, digestShown, latest }`.
+- **Regenerating caches (`world.snapshot.poiState`)**: `{ id: { nextSalvageAt } }`,
+  persisted in the world blob. Seeded at first charter, re-rolled 12–24h out
+  after each claim (jitter kills clockwork farming). Readiness is **computed on
+  read against wall-clock** — the `marketEvent.endsAt` pattern taken further:
+  no timers, no catch-up pass, restart- and idle-proof by construction. Boot
+  migrates windows in for sites charted before the field existed. Client rule
+  (`js/exploration.js`): a pilot who never claimed the site gets the discovery
+  moment (`claimPOI`); a returning pilot (`poi.mine`) inside the radius with a
+  ready window sends `poi.salvage` (throttled 10s). Salvage is FIRST-COME
+  galaxy-wide — deliberate scarcity per the kickoff fork ("whoever flies out
+  first gets it"), same precedent as shared mission boards and loot drops.
 
 ## verify-net.mjs (the gate)
 

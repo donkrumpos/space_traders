@@ -65,6 +65,8 @@ function formatChronicleEntry(e) {
     switch (e.kind) {
         case 'poi.charted':
             return `${e.pilot} charted ${e.name || e.poi}`;
+        case 'poi.salvaged':
+            return `${e.pilot} salvaged ${e.name || e.poi}`;
         case 'market.event':
             return e.label || `market event at ${e.planet}`;
         case 'boss.killed':

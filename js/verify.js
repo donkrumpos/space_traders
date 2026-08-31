@@ -571,6 +571,68 @@ VERIFY_SUITES.starfield = (assert) => {
         inField === game.stars.length);
 };
 
+VERIFY_SUITES.salvage = (assert) => {
+    // Client half of M6 regenerating caches. Readiness/ETA/reward-apply are
+    // exercised directly; the claim wire itself is verify-net's job.
+    const poi = game.pois.find(p => p.id === 'wraith_cache') || game.pois[0];
+    const now = Date.now();
+    const saved = {
+        charted: poi.charted, mine: poi.mine, next: poi.nextSalvageAt, asked: poi._salvageAskedAt,
+        credits: game.ship.credits, cargo: { ...game.ship.cargo }, cargoMax: game.ship.cargoMax,
+        xp: game.pilot.xp, rank: game.pilot.rank, pending: game.pilot.pendingPerkChoices,
+        x: game.ship.x, y: game.ship.y, logLen: (game.ship.log || []).length
+    };
+
+    assert('salvage module loaded', typeof applyPOIState === 'function'
+        && typeof poiSalvageReady === 'function' && typeof grantSalvageReward === 'function');
+    assert('roster carries salvage tables', game.pois.every(p =>
+        !SIM_POIS.find(s => s.id === p.id).salvage || typeof p.salvage === 'object'));
+
+    // State apply + readiness math
+    poi.charted = true;
+    applyPOIState({ [poi.id]: { nextSalvageAt: now + 5 * 3600 * 1000 } });
+    assert('poiState snapshot lands on the runtime POI', poi.nextSalvageAt === now + 5 * 3600 * 1000);
+    assert('a future window is not ready', poiSalvageReady(poi) === false);
+    assert('ETA reads in hours', poiSalvageEtaText(poi) === 'salvage in 5h');
+    applyPOIStateUpdate({ id: poi.id, nextSalvageAt: now + 20 * 60 * 1000 });
+    assert('poi.state broadcast updates the window', poiSalvageEtaText(poi) === 'salvage in 20m');
+    poi.nextSalvageAt = now - 1000;
+    assert('a past window is ready', poiSalvageReady(poi) === true && poiSalvageEtaText(poi) === 'salvage ready');
+    poi.charted = false;
+    assert('an uncharted site is never ready', poiSalvageReady(poi) === false);
+    poi.charted = true;
+
+    // Reward apply: credits, relic stow with overflow payout, log line
+    if (typeof PILOT_RANKS !== 'undefined') game.pilot.rank = PILOT_RANKS.length - 1; // no perk modal
+    game.ship.cargo = {};
+    game.ship.cargoMax = 1; // room for exactly one relic
+    const c0 = game.ship.credits;
+    grantSalvageReward(poi, { credits: 300, relics: 2, xp: 10 });
+    assert('salvage pays credits + overflow for the unstowable relic',
+        game.ship.credits === c0 + 300 + 120);
+    assert('one relic stowed to the cap', game.ship.cargo.relics === 1);
+    assert('salvage writes the ship log', (game.ship.log || []).some(e =>
+        e && e.text && e.text.includes(`Salvaged ${poi.name}`)));
+
+    // Offline: detection must not grant anything (the claim is server-owned)
+    poi.mine = true;
+    poi.nextSalvageAt = now - 1000;
+    poi._salvageAskedAt = 0;
+    game.ship.x = poi.x - 30; game.ship.y = poi.y;
+    const c1 = game.ship.credits;
+    updatePOIDetection();
+    assert('offline fly-in claims nothing locally (server owns salvage)', game.ship.credits === c1);
+
+    // Restore
+    poi.charted = saved.charted; poi.mine = saved.mine;
+    poi.nextSalvageAt = saved.next; poi._salvageAskedAt = saved.asked;
+    game.ship.credits = saved.credits; game.ship.cargo = saved.cargo; game.ship.cargoMax = saved.cargoMax;
+    game.pilot.xp = saved.xp; game.pilot.rank = saved.rank; game.pilot.pendingPerkChoices = saved.pending;
+    game.ship.x = saved.x; game.ship.y = saved.y;
+    if (game.ship.log) game.ship.log.length = saved.logLen;
+    updateUI();
+};
+
 VERIFY_SUITES.chronicle = (assert) => {
     // Client half of the M6 chronicle: ledger apply, digest math, panel.
     // Exercised with synthetic entries — no net layer involved (solo gate).

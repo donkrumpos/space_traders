@@ -109,6 +109,12 @@ const net = {
     discoverPOI(id) {
         net.send({ t: 'poi.discover', id });
     },
+    // M6: claim a regenerated cache at a charted site. Request/response like
+    // trade — first claim galaxy-wide wins; the reply carries the granted
+    // reward (server-owned salvage table) and the freshly rolled next window.
+    salvagePOI(id) {
+        return netRequest('poi.salvage', { id }, 'salvage');
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -364,6 +370,13 @@ function netHandleMessage(msg) {
         case 'poi.discovered':
             if (typeof applyPOIDiscovered === 'function') applyPOIDiscovered(msg);
             break;
+        // --- M6: regenerating caches ------------------------------------
+        case 'poi.salvaged':
+            netResolvePending(msg, 'salvage');
+            break;
+        case 'poi.state':
+            if (typeof applyPOIStateUpdate === 'function') applyPOIStateUpdate(msg);
+            break;
         // --- M6: chronicle ---------------------------------------------
         case 'chronicle.add':
             if (typeof applyChronicleAdd === 'function') applyChronicleAdd(msg.entry);
@@ -554,6 +567,10 @@ function netApplySnapshot(snap) {
     // M6: the world's ledger — feeds the Galaxy Log panel + away digest.
     if (snap.chronicle && typeof applyChronicleSnapshot === 'function') {
         applyChronicleSnapshot(snap.chronicle);
+    }
+    // M6: cache windows for charted sites (salvage-ready markers).
+    if (snap.poiState && typeof applyPOIState === 'function') {
+        applyPOIState(snap.poiState);
     }
 }
 
