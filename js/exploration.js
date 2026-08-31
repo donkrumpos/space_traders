@@ -120,25 +120,31 @@ function applyPOIDiscovered(msg) {
 // salvage never fires for them (no double reward). Offline: nextSalvageAt
 // never arrives, so nothing here runs — solo play is untouched.
 
-// world.snapshot.poiState: { id: { nextSalvageAt } }
+// world.snapshot.poiState: { id: { nextSalvageAt, occupation } }
+// occupation: { faction, color, since } | null — pirates dug in (M6): salvage
+// is blocked and flying near the site musters the squatting band server-side.
 function applyPOIState(map) {
     if (!game.pois || !map) return;
     Object.keys(map).forEach(id => {
         const poi = poiById(id);
-        if (poi && map[id]) poi.nextSalvageAt = map[id].nextSalvageAt;
+        if (!poi || !map[id]) return;
+        poi.nextSalvageAt = map[id].nextSalvageAt;
+        poi.occupation = map[id].occupation || null;
     });
 }
 
-// poi.state broadcast: one site's window moved (someone salvaged, or a charter
-// seeded the first cycle).
+// poi.state broadcast: one site's window moved (someone salvaged, a charter
+// seeded the first cycle, raiders dug in, or a pilot drove them out).
 function applyPOIStateUpdate(msg) {
     const poi = poiById(msg && msg.id);
-    if (poi) poi.nextSalvageAt = msg.nextSalvageAt;
+    if (!poi) return;
+    poi.nextSalvageAt = msg.nextSalvageAt;
+    poi.occupation = msg.occupation || null;
 }
 
 function poiSalvageReady(poi) {
-    return !!(poi && poi.charted && typeof poi.nextSalvageAt === 'number'
-        && Date.now() >= poi.nextSalvageAt);
+    return !!(poi && poi.charted && !poi.occupation
+        && typeof poi.nextSalvageAt === 'number' && Date.now() >= poi.nextSalvageAt);
 }
 
 // "salvage in 5h" map annotation for a site you've already claimed
@@ -375,16 +381,26 @@ function renderPOIs(ctx, camera) {
             ctx.fillText(`charted by ${poi.chartedBy}${poi.mine ? ' ✓' : ''}`, screenX, screenY + 33);
         }
 
-        // Regenerating cache (M6): a ready cache glows gold — the fly-back-out
-        // pull; a claimed-but-cooling site shows when it's worth returning.
-        const eta = poiSalvageEtaText(poi);
-        if (eta) {
-            const ready = poiSalvageReady(poi);
-            ctx.fillStyle = ready ? '#ffcc44' : '#556677';
-            if (ready) ctx.globalAlpha = 0.6 + 0.4 * Math.abs(Math.sin(t * 0.004));
+        // Occupation trumps the cache line: raiders dug in, salvage blocked
+        // until someone breaks the band (flying close musters the fight).
+        if (poi.occupation) {
+            ctx.fillStyle = poi.occupation.color || '#ff5555';
+            ctx.globalAlpha = 0.7 + 0.3 * Math.abs(Math.sin(t * 0.004));
             ctx.font = '8px Courier New';
-            ctx.fillText(ready ? '✦ salvage ready' : eta, screenX, screenY + 44);
+            ctx.fillText(`⚑ ${poi.occupation.faction} dug in`, screenX, screenY + 44);
             ctx.globalAlpha = 1;
+        } else {
+            // Regenerating cache (M6): a ready cache glows gold — the
+            // fly-back-out pull; a cooling site shows when to return.
+            const eta = poiSalvageEtaText(poi);
+            if (eta) {
+                const ready = poiSalvageReady(poi);
+                ctx.fillStyle = ready ? '#ffcc44' : '#556677';
+                if (ready) ctx.globalAlpha = 0.6 + 0.4 * Math.abs(Math.sin(t * 0.004));
+                ctx.font = '8px Courier New';
+                ctx.fillText(ready ? '✦ salvage ready' : eta, screenX, screenY + 44);
+                ctx.globalAlpha = 1;
+            }
         }
 
         const ringR = poi.discoveryRadius || 75;
@@ -452,7 +468,10 @@ function renderPOIFullMap(ctx, scale, offsetX, offsetY) {
         ctx.fillStyle = '#7788aa';
         ctx.font = '8px Courier New';
         ctx.fillText(kind.label + (poi.chartedBy ? ` · ${poi.chartedBy}` : ''), mapX, mapY + 18);
-        if (poiSalvageReady(poi)) {
+        if (poi.occupation) {
+            ctx.fillStyle = poi.occupation.color || '#ff5555';
+            ctx.fillText(`⚑ ${poi.occupation.faction} dug in`, mapX, mapY + 28);
+        } else if (poiSalvageReady(poi)) {
             ctx.fillStyle = '#ffcc44';
             ctx.fillText('✦ salvage ready', mapX, mapY + 28);
         }
@@ -478,7 +497,8 @@ window.listPOIs = function () {
         id: p.id, name: p.name, kind: p.kind,
         charted: p.charted, chartedBy: p.chartedBy, mine: p.mine,
         dist: Math.round(p.dist), at: `(${p.x}, ${p.y})`,
-        salvage: poiSalvageEtaText(p)
+        salvage: poiSalvageEtaText(p),
+        occupiedBy: p.occupation ? p.occupation.faction : null
     }));
 };
 // Warp the ship next to a POI to test discovery without the long flight.

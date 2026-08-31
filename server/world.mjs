@@ -7,13 +7,16 @@ import { getWorld, saveWorld } from './db.mjs';
 import config from './config.mjs';
 
 // Side-effect imports set the globals (same files, no fork — PROTOCOL.md
-// "Economy sim extraction").
+// "Economy sim extraction"). combat-core is here for pickRaidFaction (M6
+// occupations are grudge-weighted); combat.mjs re-imports it for free.
 await import('../js/sim/planets.js');
 await import('../js/sim/pois.js');
 await import('../js/sim/economy-core.js');
+await import('../js/sim/combat-core.js');
 const SIM_PLANETS = globalThis.SIM_PLANETS;
 const SIM_POIS = globalThis.SIM_POIS || [];
 const EconomyCore = globalThis.EconomyCore;
+const CombatCore = globalThis.CombatCore;
 
 const metaByName = new Map(SIM_PLANETS.map(p => [p.name, p]));
 // Valid POI ids — reject discovery reports for anything not in the roster
@@ -36,11 +39,22 @@ function rollBoard(meta) {
 // chronicle: the world's memory (M6) — a capped ledger of notable happenings
 // ({ at, kind, ...detail }), newest last. Persisted so "while you were away"
 // survives restarts; clients diff it against welcome.lastSeen for the digest.
-// poiState: { poiId: { nextSalvageAt } } — regenerating caches (M6). Readiness
-// is COMPUTED on read against wall-clock (the marketEvent.endsAt pattern taken
-// further: no timers at all), so it needs no catch-up logic and survives any
-// restart or idle stretch for free.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {} };
+// poiState: { poiId: { nextSalvageAt, occupation } } — regenerating caches +
+// occupations (M6). Cache readiness is COMPUTED on read against wall-clock
+// (the marketEvent.endsAt pattern taken further: no timers at all), so it
+// needs no catch-up logic and survives any restart or idle stretch for free.
+// occupation: { faction, color, since } | undefined — pirates dug in at a
+// charted site; salvage blocked until a pilot breaks the band (combat.mjs).
+// nextOccupationAt: wall-clock stamp of the next occupation roll (persisted).
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0 };
+
+// M6 cadence knobs — declared ABOVE the restore block below, which calls the
+// roll helpers at module init (const TDZ would bite otherwise).
+const SALVAGE_MIN_MS = 12 * 3600 * 1000;      // cache regen: 12-24h w/ jitter
+const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
+const OCCUPATION_MIN_MS = 12 * 3600 * 1000;   // occupation roll: 12-24h apart
+const OCCUPATION_JITTER_MS = 12 * 3600 * 1000;
+const OCCUPATION_MAX = 2;
 
 {
     let saved = null;
@@ -60,11 +74,14 @@ const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, 
     if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
     if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
     if (saved && saved.poiState) world.poiState = saved.poiState;
+    if (saved && saved.nextOccupationAt) world.nextOccupationAt = saved.nextOccupationAt;
     // Migration: sites charted before caches existed get a cycle seeded now,
     // so a live world's landmarks start regenerating on the next deploy.
     for (const id of Object.keys(world.discoveredPOIs)) {
         if (!world.poiState[id]) world.poiState[id] = { nextSalvageAt: rollNextSalvageAt() };
     }
+    // First boot (or pre-occupation world): the first raiders muster 12-24h out
+    if (!world.nextOccupationAt) world.nextOccupationAt = Date.now() + rollOccupationDelay();
     // An event that was live at shutdown resumes with its remaining time
     // (endsAt is a server-side wall-clock field added on top of timeLeft).
     if (saved && saved.marketEvent && saved.marketEvent.endsAt > Date.now()) {
@@ -108,11 +125,78 @@ const CHRONICLE_MAX = 100;
 // salvage window opens 12-24h out — the daily-ish cadence pinned at kickoff.
 // A daily check-in usually finds SOMETHING ready across seven sites; the
 // jitter keeps the refresh from being clockwork-farmable.
-const SALVAGE_MIN_MS = 12 * 3600 * 1000;
-const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
-
 function rollNextSalvageAt(now = Date.now()) {
     return now + SALVAGE_MIN_MS + Math.random() * SALVAGE_JITTER_MS;
+}
+
+// Occupations (M6): daily-ish, a pirate band digs in at a charted site.
+// The world only ever ADDS (kickoff fork): nothing is lost, but the site's
+// cache is blocked until someone flies out and breaks the band — danger as
+// content, feeding the loved chaotic combat. Capped at 2 concurrent so the
+// map never clogs; grudge-weighted faction pick makes the shared vendetta
+// visible on the map. Liberation opens the cache IMMEDIATELY — clear the
+// pirates, collect the salvage, one tight loop.
+function rollOccupationDelay() {
+    return OCCUPATION_MIN_MS + Math.random() * OCCUPATION_JITTER_MS;
+}
+
+function poiStateMessage(id) {
+    const st = world.poiState[id] || {};
+    return { t: 'poi.state', id, nextSalvageAt: st.nextSalvageAt || null, occupation: st.occupation || null };
+}
+
+function occupyPOI(id, faction) {
+    const st = world.poiState[id];
+    const meta = poiMetaById.get(id);
+    if (!st || !meta || st.occupation) return false;
+    st.occupation = { faction: faction.name, color: faction.color || null, since: Date.now() };
+    recordChronicle('poi.occupied', { faction: faction.name, poi: id, name: meta.name });
+    broadcast(poiStateMessage(id));
+    markDirty();
+    return true;
+}
+
+// The roll clock: a cheap 60s check against the persisted wall-clock stamp.
+// A long-dead server rolls at most ONE catch-up occupation on resume (the
+// stamp then jumps to the future) — gentler than backfilling a week of raids.
+function maybeRollOccupation() {
+    if (Date.now() < world.nextOccupationAt) return;
+    world.nextOccupationAt = Date.now() + rollOccupationDelay();
+    markDirty();
+    const occupied = Object.values(world.poiState).filter(s => s && s.occupation).length;
+    if (occupied >= OCCUPATION_MAX) return;
+    const candidates = Object.keys(world.discoveredPOIs)
+        .filter(id => world.poiState[id] && !world.poiState[id].occupation);
+    if (candidates.length === 0) return; // nothing charted yet — quiet sky
+    const id = candidates[Math.floor(Math.random() * candidates.length)];
+    occupyPOI(id, CombatCore.pickRaidFaction(world.grudges));
+}
+
+setInterval(maybeRollOccupation, 60 * 1000).unref();
+
+// combat.mjs asks where the raiders sit (site coords + who) each spawn check
+export function getOccupiedPOIs() {
+    const out = [];
+    for (const [id, st] of Object.entries(world.poiState)) {
+        if (!st || !st.occupation) continue;
+        const meta = poiMetaById.get(id);
+        if (meta) out.push({ id, x: meta.x, y: meta.y, faction: st.occupation.faction });
+    }
+    return out;
+}
+
+// The band boss at an occupied site died: the site is free and the cache
+// opens NOW — the fight earns the salvage on the spot.
+export function liberatePOI(id, pilot) {
+    const st = world.poiState[id];
+    const meta = poiMetaById.get(id);
+    if (!st || !st.occupation || !meta) return;
+    const faction = st.occupation.faction;
+    st.occupation = null;
+    st.nextSalvageAt = Date.now();
+    recordChronicle('poi.liberated', { pilot, faction, poi: id, name: meta.name });
+    broadcast(poiStateMessage(id));
+    markDirty();
 }
 
 export function recordChronicle(kind, detail) {
@@ -308,7 +392,7 @@ export function handleWorldMessage(ws, msg, send) {
                 recordChronicle('poi.charted', { pilot: ws.pilot, poi: id, name: meta ? meta.name : id });
                 // The cache starts its first regeneration cycle at charter time
                 world.poiState[id] = { nextSalvageAt: rollNextSalvageAt() };
-                broadcast({ t: 'poi.state', id, nextSalvageAt: world.poiState[id].nextSalvageAt });
+                broadcast(poiStateMessage(id));
                 markDirty();
             }
             const rec = world.discoveredPOIs[id];
@@ -326,10 +410,14 @@ export function handleWorldMessage(ws, msg, send) {
             const id = typeof msg.id === 'string' ? msg.id : null;
             const st = id ? world.poiState[id] : null;
             const meta = id ? poiMetaById.get(id) : null;
-            const ready = !!(st && world.discoveredPOIs[id] && Date.now() >= st.nextSalvageAt);
+            // Occupied sites yield nothing until the band is broken (M6
+            // occupations) — the refusal tells the client who's squatting.
+            const ready = !!(st && !st.occupation && world.discoveredPOIs[id]
+                && Date.now() >= st.nextSalvageAt);
             if (!ready || !meta) {
                 send(ws, { t: 'poi.salvaged', reqId: msg.reqId, ok: false, id,
-                           nextSalvageAt: st ? st.nextSalvageAt : null });
+                           nextSalvageAt: st ? st.nextSalvageAt : null,
+                           occupation: (st && st.occupation) || null });
                 return true;
             }
             st.nextSalvageAt = rollNextSalvageAt();
@@ -337,7 +425,7 @@ export function handleWorldMessage(ws, msg, send) {
             send(ws, { t: 'poi.salvaged', reqId: msg.reqId, ok: true, id,
                        reward: meta.salvage || { credits: 200, xp: 15 },
                        nextSalvageAt: st.nextSalvageAt });
-            broadcast({ t: 'poi.state', id, nextSalvageAt: st.nextSalvageAt });
+            broadcast(poiStateMessage(id));
             markDirty();
             return true;
         }
@@ -361,13 +449,29 @@ export function handleWorldMessage(ws, msg, send) {
         case 'debug.poiState': {
             // Harness hook: force a cache window (e.g. nextSalvageAt in the
             // past = "ready now") without waiting 12h. Site must be known.
+            // Preserves any occupation — windows and squatters are orthogonal.
             if (process.env.VERIFY_DEBUG !== '1') return true;
             const id = typeof msg.id === 'string' && POI_IDS.has(msg.id) ? msg.id : null;
             const at = Number(msg.nextSalvageAt);
             if (!id || !Number.isFinite(at)) return true;
-            world.poiState[id] = { nextSalvageAt: at };
-            broadcast({ t: 'poi.state', id, nextSalvageAt: at });
+            world.poiState[id] = { ...(world.poiState[id] || {}), nextSalvageAt: at };
+            broadcast(poiStateMessage(id));
             markDirty();
+            return true;
+        }
+
+        case 'debug.occupyPOI': {
+            // Harness hook: force an occupation now (the real roll is 12-24h).
+            // Site must be charted + stated; factionName optional.
+            if (process.env.VERIFY_DEBUG !== '1') return true;
+            const id = typeof msg.id === 'string' && POI_IDS.has(msg.id) ? msg.id : null;
+            if (!id || !world.poiState[id]) return true;
+            let faction = CombatCore.pickRaidFaction(world.grudges);
+            if (msg.factionName) {
+                const wanted = CombatCore.PIRATE_FACTIONS.find(f => f.name === msg.factionName);
+                if (wanted) faction = wanted;
+            }
+            occupyPOI(id, faction);
             return true;
         }
 

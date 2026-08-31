@@ -1185,6 +1185,97 @@ async function salvageSuite(t, { browser, base, wsUrl }) {
     }
 }
 
+// M6 [occupation]: pirates dig in at charted sites. world.mjs owns the
+// occupation (persisted, salvage-blocking); combat.mjs makes it physical —
+// approaching the site musters the squatting band, killing its boss liberates
+// the site and opens the cache on the spot. Reuses G/H from [salvage]; the
+// forced faction is Rustfang Cartel (untouched by earlier suites, so the band
+// near the site is unambiguous despite [scaling]'s leftover Iron Shoal bands).
+async function occupationSuite(t, { browser, base, wsUrl }) {
+    const POI = 'wraith_cache';
+    const FACTION = 'Rustfang Cartel';
+
+    // 1. force the occupation; state + chronicle reach everyone
+    await S.G.page.evaluate((id, f) => net.send({ t: 'debug.occupyPOI', id, factionName: f }), POI, FACTION);
+    const gOcc = await until(() => S.G.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        return (p && p.occupation && p.occupation.faction) || false;
+    }, POI));
+    t('occupation reaches G (poi.state broadcast)', gOcc === FACTION, `got ${JSON.stringify(gOcc)}`);
+    const hOcc = await until(() => S.H.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        return !!(p && p.occupation);
+    }, POI));
+    t('occupation reaches H too', !!hOcc);
+    const chronOcc = await until(() => S.H.page.evaluate(f =>
+        netChronicle().latest.some(e => e.kind === 'poi.occupied' && e.text.includes(f)), FACTION));
+    t('the occupation lands in the chronicle', !!chronOcc);
+
+    // 2. an occupied cache refuses salvage even with an open window
+    await S.G.page.evaluate(id => net.send({ t: 'debug.poiState', id, nextSalvageAt: Date.now() - 5000 }), POI);
+    await S.H.page.evaluate(id => {
+        window.__salvOcc = null;
+        net.salvagePOI(id).then(r => { window.__salvOcc = r; }).catch(e => { window.__salvOcc = { err: String(e) }; });
+    }, POI);
+    const refusal = await until(() => S.H.page.evaluate(() => window.__salvOcc));
+    t('occupied site refuses salvage and names the squatters',
+        !!refusal && refusal.ok === false && !!refusal.occupation && refusal.occupation.faction === FACTION,
+        JSON.stringify(refusal));
+
+    // 3. flying near the site musters the occupying band AT the site
+    await S.G.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        game.ship.x = p.x + 500; game.ship.y = p.y;
+        game.ship.velocity.x = 0; game.ship.velocity.y = 0;
+    }, POI);
+    const band = await until(() => S.G.page.evaluate((id, f) => {
+        const p = game.pois.find(x => x.id === id);
+        const c = netCombat();
+        const members = c.enemies.filter(e => e.bandId && Math.hypot(e.x - p.x, e.y - p.y) < 1600);
+        const boss = members.find(e => e.isBandBoss && e.factionName === f);
+        if (!boss) return false;
+        return { bossId: boss.id, bandId: boss.bandId, size: members.length };
+    }, POI, FACTION), { timeout: 20000 });
+    t('approaching the site musters the occupying band', !!band,
+        'no Rustfang band appeared near the site within 20s');
+    if (!band) return;
+    t('the band came in force (boss + escort)', band.size >= 2, `size=${band.size}`);
+
+    // 4. break the band: minions first (escort shield), then the boss.
+    // Re-query between rounds — late-synced minions must not save the boss.
+    for (let round = 0; round < 4; round++) {
+        const minionIds = await S.G.page.evaluate(bid =>
+            netCombat().enemies.filter(e => e.bandId === bid && !e.isBandBoss).map(e => e.id), band.bandId);
+        if (minionIds.length === 0) break;
+        for (const id of minionIds) await killEnemy(S.G.page, id);
+    }
+    const unshielded = await until(async () => {
+        const v = await combatView(S.G.page);
+        const b = v && v.enemies.find(e => e.id === band.bossId);
+        return !!b && !b.shielded;
+    }, { timeout: 10000 });
+    t('boss unshields once the escort is down', !!unshielded);
+    t('the boss falls', !!(await killEnemy(S.G.page, band.bossId)));
+
+    // 5. liberation: site freed for everyone, cache open NOW, chronicled
+    const freed = await until(() => S.H.page.evaluate(id => {
+        const p = game.pois.find(x => x.id === id);
+        return !!p && !p.occupation && typeof p.nextSalvageAt === 'number' && Date.now() >= p.nextSalvageAt;
+    }, POI), { timeout: 10000 });
+    t('liberation frees the site and opens the cache for everyone', !!freed);
+    const chronLib = await until(() => S.G.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'poi.liberated' && e.text.includes('VerifyG'))));
+    t('the liberation lands in the chronicle (credited to the killer)', !!chronLib);
+
+    // 6. the freed cache actually pays
+    await S.H.page.evaluate(id => {
+        window.__salvFree = null;
+        net.salvagePOI(id).then(r => { window.__salvFree = r; }).catch(e => { window.__salvFree = { err: String(e) }; });
+    }, POI);
+    const claimed = await until(() => S.H.page.evaluate(() => window.__salvFree));
+    t('the liberated cache pays out', !!claimed && claimed.ok === true, JSON.stringify(claimed));
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1198,6 +1289,7 @@ const SUITES = [
     ['exploration', explorationSuite],
     ['chronicle', chronicleSuite],
     ['salvage', salvageSuite],
+    ['occupation', occupationSuite],
 ];
 
 // ---------------------------------------------------------------------------

@@ -67,6 +67,10 @@ function formatChronicleEntry(e) {
             return `${e.pilot} charted ${e.name || e.poi}`;
         case 'poi.salvaged':
             return `${e.pilot} salvaged ${e.name || e.poi}`;
+        case 'poi.occupied':
+            return `${e.faction} raiders dug in at ${e.name || e.poi}`;
+        case 'poi.liberated':
+            return `${e.pilot} drove the ${e.faction} out of ${e.name || e.poi}`;
         case 'market.event':
             return e.label || `market event at ${e.planet}`;
         case 'boss.killed':

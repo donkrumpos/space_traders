@@ -578,6 +578,7 @@ VERIFY_SUITES.salvage = (assert) => {
     const now = Date.now();
     const saved = {
         charted: poi.charted, mine: poi.mine, next: poi.nextSalvageAt, asked: poi._salvageAskedAt,
+        occ: poi.occupation,
         credits: game.ship.credits, cargo: { ...game.ship.cargo }, cargoMax: game.ship.cargoMax,
         xp: game.pilot.xp, rank: game.pilot.rank, pending: game.pilot.pendingPerkChoices,
         x: game.ship.x, y: game.ship.y, logLen: (game.ship.log || []).length
@@ -601,6 +602,15 @@ VERIFY_SUITES.salvage = (assert) => {
     poi.charted = false;
     assert('an uncharted site is never ready', poiSalvageReady(poi) === false);
     poi.charted = true;
+
+    // Occupations (M6 slice 3): a dug-in band blocks the cache; liberation
+    // (occupation cleared, window opened) hands it straight back.
+    applyPOIStateUpdate({ id: poi.id, nextSalvageAt: now - 1000,
+        occupation: { faction: 'Rustfang Cartel', color: '#ff5555', since: now } });
+    assert('a dug-in band blocks salvage readiness',
+        !!poi.occupation && poi.occupation.faction === 'Rustfang Cartel' && poiSalvageReady(poi) === false);
+    applyPOIStateUpdate({ id: poi.id, nextSalvageAt: now - 1000, occupation: null });
+    assert('liberation clears the block', poi.occupation === null && poiSalvageReady(poi) === true);
 
     // Reward apply: credits, relic stow with overflow payout, log line
     if (typeof PILOT_RANKS !== 'undefined') game.pilot.rank = PILOT_RANKS.length - 1; // no perk modal
@@ -626,6 +636,7 @@ VERIFY_SUITES.salvage = (assert) => {
     // Restore
     poi.charted = saved.charted; poi.mine = saved.mine;
     poi.nextSalvageAt = saved.next; poi._salvageAskedAt = saved.asked;
+    poi.occupation = saved.occ;
     game.ship.credits = saved.credits; game.ship.cargo = saved.cargo; game.ship.cargoMax = saved.cargoMax;
     game.pilot.xp = saved.xp; game.pilot.rank = saved.rank; game.pilot.pendingPerkChoices = saved.pending;
     game.ship.x = saved.x; game.ship.y = saved.y;
@@ -656,7 +667,10 @@ VERIFY_SUITES.chronicle = (assert) => {
     assert('every ledger kind formats to a human line',
         formatChronicleEntry({ kind: 'poi.charted', pilot: 'Arthur', poi: 'wraith_cache', name: 'The Wraith Cache' }) === 'Arthur charted The Wraith Cache' &&
         formatChronicleEntry({ kind: 'market.event', label: 'medicine shortage at Ossuary Drift', planet: 'Ossuary Drift' }) === 'medicine shortage at Ossuary Drift' &&
-        formatChronicleEntry({ kind: 'boss.killed', pilot: 'Foggy', faction: 'Rustfang Cartel' }) === 'Foggy broke a Rustfang Cartel raid');
+        formatChronicleEntry({ kind: 'boss.killed', pilot: 'Foggy', faction: 'Rustfang Cartel' }) === 'Foggy broke a Rustfang Cartel raid' &&
+        formatChronicleEntry({ kind: 'poi.salvaged', pilot: 'Arthur', poi: 'p', name: 'The Site' }) === 'Arthur salvaged The Site' &&
+        formatChronicleEntry({ kind: 'poi.occupied', faction: 'Iron Shoal', poi: 'p', name: 'The Site' }) === 'Iron Shoal raiders dug in at The Site' &&
+        formatChronicleEntry({ kind: 'poi.liberated', pilot: 'Foggy', faction: 'Iron Shoal', poi: 'p', name: 'The Site' }) === 'Foggy drove the Iron Shoal out of The Site');
     assert('unknown kinds still print something',
         formatChronicleEntry({ kind: 'future.thing', pilot: 'X' }).includes('future.thing'));
 

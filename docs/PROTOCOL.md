@@ -477,14 +477,17 @@ snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
 | `market.event` | `{ label, planet }` | a market event starts (`setEvent`, incl. debug-forced) |
 | `boss.killed` | `{ pilot, faction, tier }` | a raid-band boss dies (`damage.claim`, combat.mjs). Common-pirate kills are deliberately NOT recorded (noise) |
 | `poi.salvaged` | `{ pilot, poi, name }` | a regenerated cache is claimed (`poi.salvage`) |
+| `poi.occupied` | `{ faction, poi, name }` | raiders dig in at a charted site (daily-ish roll, world.mjs) |
+| `poi.liberated` | `{ pilot, faction, poi, name }` | the occupation boss dies (`damage.claim`, combat.mjs) — replaces the plain `boss.killed` entry for that kill |
 
 | t | dir | payload |
 |---|-----|---------|
 | `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
 | `poi.salvage` | c→s | `{ reqId, id }` — "I'm at this charted site and its cache looks ready." Request/response like `trade` |
 | `poi.salvaged` | s→c | `{ reqId, ok, id, reward?, nextSalvageAt }` — `ok:true` carries the roster's `salvage` table (`{ credits, relics, xp }`, server-owned; the client applies exactly this) and the freshly rolled next window. `ok:false` = not ready / already claimed; `nextSalvageAt` echoes the live window so the loser's map updates |
-| `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt }` — a site's cache window moved (charter seeded the first cycle, or a salvage claim rolled the next). Drives the "✦ salvage ready" map markers |
-| `debug.poiState` | c→s | `{ id, nextSalvageAt }` — VERIFY_DEBUG only: force a window (harness sets it in the past = ready now) |
+| `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt, occupation }` — a site's state moved (charter seeded the first cycle, a salvage claim rolled the next window, raiders dug in, or a pilot drove them out). `occupation` = `{ faction, color, since }` or `null`. Drives the "✦ salvage ready" / "⚑ dug in" map markers |
+| `debug.poiState` | c→s | `{ id, nextSalvageAt }` — VERIFY_DEBUG only: force a window (harness sets it in the past = ready now). Preserves any occupation |
+| `debug.occupyPOI` | c→s | `{ id, factionName? }` — VERIFY_DEBUG only: force an occupation now (real roll is 12-24h) |
 
 - **`world.snapshot.chronicle`**: the full ledger array (additive snapshot
   field; old clients ignore it).
@@ -510,6 +513,20 @@ snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
   ready window sends `poi.salvage` (throttled 10s). Salvage is FIRST-COME
   galaxy-wide — deliberate scarcity per the kickoff fork ("whoever flies out
   first gets it"), same precedent as shared mission boards and loot drops.
+- **Occupations**: daily-ish (`world.nextOccupationAt`, persisted; 60s check
+  loop; 12–24h between rolls; at most ONE catch-up roll after downtime), a
+  grudge-weighted faction (`CombatCore.pickRaidFaction(world.grudges)` — the
+  shared vendetta made visible) digs in at a random charted, unoccupied site.
+  Max 2 concurrent. The world only ever ADDS (kickoff fork): nothing is taken,
+  but salvage is blocked while occupied. combat.mjs makes it physical: a pilot
+  within 1000 units of an occupied site with no live tagged band musters the
+  squatters AT the site (`makeRaidBand` with the faction forced, every member
+  tagged `occupyingPoi`, per-pilot minion scaling as usual). Killing the tagged
+  boss → `liberatePOI`: occupation cleared, **cache opens immediately**
+  (`nextSalvageAt = now` — clear the pirates, collect the salvage, one loop),
+  `poi.liberated` chronicled to the killer. Despawned bands (pilots flew off)
+  simply re-muster on the next approach — the occupation lives in world state,
+  not in the enemies.
 
 ## verify-net.mjs (the gate)
 
