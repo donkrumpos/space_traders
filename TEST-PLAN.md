@@ -1,10 +1,85 @@
-# Test Plan — Exploration milestone (branch `feature/exploration-poi`)
+# Test Plan — Exploration + Persistent World milestones (branch `feature/exploration-poi`)
 
-Built headless on 2026-08-31 while you were away. **Nothing here is merged to
-`main` or deployed to themisto yet** — it lives on the branch
-`feature/exploration-poi` for you to try, then decide what to keep. Both
-automated gates are green (solo `?verify` 117/117, `node verify-net.mjs`
-101/101); this doc is for the things a machine can't judge — how it *feels*.
+Built headless on 2026-08-31 while you were away — TWO milestones now live on
+this branch: **Exploration** (the seven POIs, below) and **Persistent World**
+("The World Remembers and Moves", first section). **Nothing is merged to
+`main` or deployed to themisto yet.** Both automated gates are green (solo
+`?verify` 144/144, `node verify-net.mjs` 136/136); this doc is for the things
+a machine can't judge — how it *feels*.
+
+---
+
+# Part 1 — Persistent World: "The World Remembers and Moves"
+
+The gap we set out to close: the world persisted but nothing *happened* while
+you were away, and nothing pulled you back. Three slices, per the forks you
+pinned at kickoff (chronicle + living sites; adds + occupations; daily-ish
+cadence; digest + log panel):
+
+1. **The Chronicle** — the world keeps a ledger (POI charters, broken raid
+   bands, market events, salvages, occupations, liberations). Log in after
+   time away and you get a **"While you were away — N things happened"**
+   digest, plus a **Galaxy Log** sidebar panel (unseen entries highlighted).
+2. **Regenerating caches** — every charted site's cache refills on a
+   **12–24h wall-clock window** (runs while the server is up OR down — it's a
+   timestamp, not a timer). Ready caches glow **✦ salvage ready** on the map;
+   cooling ones show an ETA. Salvage is **first-come galaxy-wide** (~⅓ of the
+   discovery reward) — whoever flies out first collects.
+3. **Occupations** — daily-ish, a pirate faction (grudge-weighted: your
+   vendettas literally shape the map) **digs in at a charted site**. Salvage
+   is blocked, the site shows **⚑ <faction> dug in**, and flying near it
+   musters the band AT the site — the loved chaotic fight, now with a place.
+   Kill the boss → the site is liberated, **the cache opens immediately**,
+   and the chronicle credits you by name.
+
+## How to check it — quick console-assisted pass (both pilots online)
+
+Setup is the same as Part 2 below (branch server + static). The real cadences
+are 12–24h, so day-to-day play tests them honestly; to force things NOW, run
+the server with `VERIFY_DEBUG=1` and use the browser console:
+
+1. **Chronicle + digest.** Play a few minutes (chart something, break a raid),
+   close the tab, have the other pilot do something notable, reopen. You
+   should get the away digest, and the **Galaxy Log** panel should list the
+   news with the new items highlighted. `netChronicle()` in the console shows
+   `{ count, lastSeen, unseen }`.
+2. **Salvage.** With `VERIFY_DEBUG=1`:
+   `net.send({ t:'debug.poiState', id:'wraith_cache', nextSalvageAt: Date.now()-1 })`
+   → the site should start pulsing **✦ salvage ready** for everyone. Fly back
+   to it (you must have charted it personally): floaters, ~$300 + a relic, a
+   ship-log line, a chronicle entry — and the site flips to "salvage in ~Xh"
+   on BOTH screens. Second pilot arriving after you gets nothing (first-come:
+   check that this feels exciting, not mean — it's the fork we picked, easy to
+   flip to per-pilot if the family hates it).
+3. **Occupation.** `net.send({ t:'debug.occupyPOI', id:'silent_beacon' })` →
+   **⚑ dug in** appears on everyone's map + Galaxy Log entry. Fly out: the
+   band should muster at the site and come at you (does it feel like an
+   ambush?). Break it — minions first, the boss unshields last, exactly like
+   raid bands. On the boss kill: site freed, cache INSTANTLY ready (grab it!),
+   "you drove them out" in the chronicle.
+4. **Away-time regen (the honest test).** Chart sites today, don't play
+   tomorrow morning, log in tomorrow evening: some caches should be ready and
+   possibly a site occupied — the map should have *moved* while you were gone.
+
+## Design calls I made — sanity-check against how it plays
+
+- **Salvage is first-come** (vs the per-visitor discovery reward). Scarcity is
+  the login pull ("fly out before your brother does") and follows the shared
+  mission-board/loot-drop precedent. Discovery rewards stay per-visitor.
+- **Liberation opens the cache immediately** — occupations are net *positive*
+  content (fight + loot), never a loss. The world only ever adds.
+- **Occupations cap at 2** and don't expire on their own — they wait to be
+  cleared. If the map feels cluttered or nagging, expiry is a small knob.
+- **Chronicle records charters, boss kills, market events, salvages,
+  occupations, liberations** — not common pirate kills or trades (noise).
+  Deaths aren't chronicled yet (no death broadcast exists — known M4 gap).
+- **Cadence numbers** (12–24h salvage, 12–24h occupation roll, max one
+  catch-up occupation after server downtime) are all constants at the top of
+  `server/world.mjs`.
+
+---
+
+# Part 2 — Exploration milestone (the seven sites)
 
 ## TL;DR — what shipped
 
@@ -121,20 +196,28 @@ knob we can turn:
 ## The automated gates (both green on this branch)
 
 ```bash
-# solo — 117/117
+# solo — 144/144
 python3 -m http.server 8377 &                                   # serve
 CHS=~/.cache/puppeteer/chrome-headless-shell/*/chrome-headless-shell-mac-arm64/chrome-headless-shell
 $CHS --headless --dump-dom --virtual-time-budget=12000 \
   "http://localhost:8377/index.html?verify" | grep VERIFY
 
-# multiplayer — 101/101
+# multiplayer — 136/136
 FAMILY_SECRET=dev-secret node verify-net.mjs | tail -1
 ```
 
-New coverage this milestone: solo `exploration` + `starfield` suites (detection,
-reward, idempotency, peer-landmark-no-reward, mod + questSeed grants, wrapped
-starfield); verify-net `exploration` suite (broadcast round-trip, first-charter-
-wins). Wire protocol documented in `docs/PROTOCOL.md` under "M5 — exploration".
+Coverage, exploration milestone: solo `exploration` + `starfield` suites
+(detection, reward, idempotency, peer-landmark-no-reward, mod + questSeed
+grants, wrapped starfield); verify-net `exploration` suite (broadcast
+round-trip, first-charter-wins). Wire protocol: `docs/PROTOCOL.md` "M5".
+
+Coverage, persistent-world milestone: solo `chronicle` + `salvage` suites
+(ledger apply/digest math/panel, cache readiness/ETA/occupation block, reward
+apply incl. relic-overflow, offline-grants-nothing); verify-net `chronicle`,
+`salvage`, `occupation` suites (shared ledger + away digest with a real
+leave/return, seeded windows, refusals, the real fly-in claim path, the
+first-come race, band-musters-on-approach, liberation opens the cache). Wire
+protocol: `docs/PROTOCOL.md` "M6".
 
 ## To ship it for real (when you've decided)
 

@@ -1,18 +1,47 @@
 # Next Session Roadmap
 
-State as of 2026-08-31: **Exploration milestone built on branch
-`feature/exploration-poi` (pushed to origin, NOT merged to main, NOT deployed).**
-Seven discoverable POIs out in the dark with shared first-charter landmarks +
-per-pilot rewards; wrapped-starfield fix (backlog item); forward-compatible
-reward schema with mod + questSeed rails for the future quest system. Both gates
-green: solo ?verify 117/117, verify-net 101/101. `TEST-PLAN.md` is the family
-playtest hand-off; `docs/PROTOCOL.md` has the new "M5 — exploration" wire
-section; added `CLAUDE.md` (repo briefing + "sync" protocol). **Next up: the
-persistent-world milestone** — a living world with reasons to log in anytime
-(see the `space-traders-direction` memory for the vision + hand-off prompt).
+State as of 2026-08-31 (second session): **Persistent World milestone ("The
+World Remembers and Moves") built on the SAME branch `feature/exploration-poi`
+(NOT merged, NOT deployed) — three verified slices on top of exploration:**
+
+1. **Chronicle** (6387d26): persisted capped world ledger (charters, boss
+   kills, market events, + later kinds), `chronicle.add` broadcasts,
+   `welcome.lastSeen`, "While you were away" digest + Galaxy Log panel
+   (`js/chronicle.js`). Also fixed en route: POI lore wrote raw strings into
+   the ship log → rendered "undefined" (now via addShipLog).
+2. **Regenerating caches** (6dea990): `world.poiState[id].nextSalvageAt`,
+   12-24h wall-clock windows COMPUTED on read (no timers — restart/idle-proof;
+   boot migration seeds windows for already-charted worlds). Salvage is
+   first-come galaxy-wide, ~⅓ of discovery reward (tables in js/sim/pois.js),
+   ✦/ETA map markers, chronicle entries.
+3. **Occupations** (0343e18): daily-ish persisted roll, grudge-weighted
+   faction digs in at a charted site (max 2, salvage blocked, ⚑ marker);
+   flying within 1000u musters the band AT the site (combat.mjs, members
+   tagged `occupyingPoi`); boss kill = liberation → cache opens immediately +
+   chronicled. Kickoff forks pinned with the user via AskUserQuestion:
+   chronicle+living-sites, adds+occupations (no losses), daily-ish cadence,
+   digest+log-panel UI.
+
+Gates green after every slice; final: **solo ?verify 144/144, verify-net
+136/136** (new suites: solo chronicle+salvage(+occupation asserts); net
+[chronicle], [salvage], [occupation]). PROTOCOL.md has the full **"M6 —
+persistent living world"** wire section. TEST-PLAN.md Part 1 is the new
+playtest hand-off (incl. VERIFY_DEBUG console commands to force windows/
+occupations without waiting 12-24h).
+
+**Next-milestone candidates** (pick after playtest): quest chains off the
+questSeed rails (Ossuary dig-quest); death broadcast + death chronicle
+entries (known M4 gap, now more visible since deaths are the one big event
+the ledger misses); occupation expiry knob if the map feels naggy; flipping
+salvage to per-pilot if first-come breeds family resentment.
+
+Earlier-same-day exploration state (still true): seven POIs, first-charter
+landmarks, per-pilot discovery rewards, wrapped starfield, M5 wire section.
 Open design flags to settle via playtest: reward-per-visitor vs scarce
-first-come loot; sensor-ping-then-fly-in vs pure fly-in discovery; whether to
-physically spread the planets out too; POI art (still placeholder glyphs).
+first-come loot (now PARTIALLY settled: discovery per-visitor, salvage
+first-come — confirm it feels right); sensor-ping-then-fly-in vs pure fly-in
+discovery; whether to physically spread the planets out too; POI art (still
+placeholder glyphs).
 
 (2026-08-06 review-hardening session record follows.)
 
@@ -26,9 +55,11 @@ deployed to themisto** — first order of business next session.
 
 ## Deploy first (5 minutes)
 
-- **Also undeployed now:** the `feature/exploration-poi` server changes (POI
-  discovery handler + snapshot field). Fold into the same themisto deploy once
-  the branch is playtested and merged.
+- **Also undeployed now:** the `feature/exploration-poi` server changes — POI
+  discovery handler + snapshot field AND the whole M6 layer (chronicle,
+  poiState/salvage, occupations; world.mjs/combat.mjs/server.mjs). Fold into
+  the same themisto deploy once the branch is playtested and merged. The M6
+  boot migration seeds cache windows for any sites already charted on prod.
 - `ssh themisto` pull + restart per RUNBOOK.md to pick up: crash guards
   (malformed-URL 400, uncaughtException flushes world before dying), ws
   maxPayload 256KB + hello timeout, Object.hasOwn trade validation, backups
