@@ -955,6 +955,64 @@ async function combatSuite(t, { browser, base, wsUrl }) {
     t('ticks resume after reconnect', !!(await until(async () => (await combatView(S.E.page)).lastTickN > nBack, { timeout: 5000 })), `stuck at ${nBack}`);
 }
 
+// M5 [exploration]: first-charter-wins POI discovery broadcasts to all pilots.
+// The local fly-in claim + reward is covered by the solo ?verify suite; this
+// suite validates the SHARED guarantee — a discovery becomes a landmark on
+// every pilot's map under the first charter's name, and later reports never
+// overwrite it. Direct net.discoverPOI() reports stand in for flying to the
+// site (stationary spawns are far from the POI, so nothing auto-claims).
+async function explorationSuite(t, { browser, base, wsUrl }) {
+    for (const k of ['A', 'A2', 'B', 'C', 'D', 'O', 'E', 'F']) {
+        if (S[k]) { await S[k].context.close().catch(() => {}); S[k] = null; }
+    }
+    const POI = 'wraith_cache';
+
+    S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
+    S.H = await newGamePage(browser, 'VerifyH', { tap: true, stubPerks: true });
+    await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.H.page.goto(`${base}/index.html?pilot=VerifyH&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('G online', !!(await until(() => S.G.page.evaluate(() => netStatus().online === true))));
+    t('H online', !!(await until(() => S.H.page.evaluate(() => netStatus().online === true))));
+
+    const loaded = await S.G.page.evaluate(() => Array.isArray(game.pois) && game.pois.length >= 1);
+    t('client loaded the shared POI roster', !!loaded);
+    const uncharted = await S.G.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id); return !!p && p.charted === false;
+    }, POI);
+    t('POI starts uncharted (fresh world)', !!uncharted);
+
+    // G charts the site
+    const sinceG = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    const sinceH = await S.H.page.evaluate(() => (window.__wsTap || []).length);
+    await S.G.page.evaluate(id => net.discoverPOI(id), POI);
+
+    const gGot = await until(() => S.G.page.evaluate((s, id) =>
+        (window.__wsTap || []).slice(s).some(m => m && m.t === 'poi.discovered' && m.id === id && m.pilot === 'VerifyG'), sinceG, POI));
+    const hGot = await until(() => S.H.page.evaluate((s, id) =>
+        (window.__wsTap || []).slice(s).some(m => m && m.t === 'poi.discovered' && m.id === id && m.pilot === 'VerifyG'), sinceH, POI));
+    t('G receives poi.discovered (charter VerifyG)', !!gGot);
+    t('H receives the broadcast too (shared landmark)', !!hGot);
+
+    const hCharts = await until(() => S.H.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return !!p && p.charted === true && p.chartedBy === 'VerifyG' && p.mine === false;
+    }, POI));
+    t('H charts the site under VerifyG with no personal claim', !!hCharts);
+
+    // First-write-wins: a later report from H must NOT change the charter
+    await S.H.page.evaluate(id => net.discoverPOI(id), POI);
+    await sleep(400);
+    const sinceSnap = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    await S.G.page.evaluate(() => net.send({ t: 'debug.snapshot' }));
+    const charter = await until(() => S.G.page.evaluate((s, id) => {
+        const snaps = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'world.snapshot' && m.discoveredPOIs);
+        if (!snaps.length) return null;
+        const rec = snaps[snaps.length - 1].discoveredPOIs[id];
+        return rec ? rec.pilot : null;
+    }, sinceSnap, POI));
+    t('server keeps the first charter (VerifyG), ignores later reports', charter === 'VerifyG', `charter=${charter}`);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -965,6 +1023,7 @@ const SUITES = [
     ['ghosts', ghostSuite],
     ['world', worldSuite],
     ['combat', combatSuite],
+    ['exploration', explorationSuite],
 ];
 
 // ---------------------------------------------------------------------------

@@ -212,6 +212,9 @@ function updateMiniMap() {
         }
     });
 
+    // Points of interest: charted landmarks + uncharted "?" contacts
+    if (typeof renderPOIMinimap === 'function') renderPOIMinimap(ctx, centerX, centerY, scale, range);
+
     // Draw ship (center) - more prominent
     ctx.fillStyle = '#00ff00';
     ctx.beginPath();
@@ -302,6 +305,14 @@ function updateFullMap() {
     minY = Math.min(minY, game.ship.y - padding);
     maxY = Math.max(maxY, game.ship.y + padding);
 
+    // Include charted POIs so landmarks out in the dark fit on the map
+    // (uncharted sites are deliberately excluded — fog stays fog)
+    if (typeof extendBoundsWithPOIs === 'function') {
+        const b = { minX, maxX, minY, maxY };
+        extendBoundsWithPOIs(b);
+        minX = b.minX; maxX = b.maxX; minY = b.minY; maxY = b.maxY;
+    }
+
     const universeWidth = maxX - minX;
     const universeHeight = maxY - minY;
 
@@ -363,6 +374,9 @@ function updateFullMap() {
         ctx.font = '8px Courier New';
         ctx.fillText(`${Math.floor(distance)} units`, mapX, mapY + 30);
     });
+
+    // Charted points of interest (landmarks). Uncharted sites stay hidden.
+    if (typeof renderPOIFullMap === 'function') renderPOIFullMap(ctx, scale, offsetX, offsetY);
 
     // Asteroid fields
     if (game.asteroids) {

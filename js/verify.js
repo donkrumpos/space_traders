@@ -457,6 +457,77 @@ VERIFY_SUITES.cargoScatter = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.exploration = (assert) => {
+    assert('POIs loaded from the shared roster', Array.isArray(game.pois) && game.pois.length >= 1);
+    const poi = game.pois.find(p => p.id === 'wraith_cache') || game.pois[0];
+    assert('a known POI exists', !!poi);
+
+    // Snapshot everything the discovery mutates, so the suite leaves no trace
+    const saved = {
+        x: game.ship.x, y: game.ship.y,
+        vx: game.ship.velocity.x, vy: game.ship.velocity.y,
+        credits: game.ship.credits, cargo: { ...game.ship.cargo },
+        xp: game.pilot.xp, rank: game.pilot.rank,
+        pending: game.pilot.pendingPerkChoices,
+        discovered: (game.pilot.discoveredPOIs || []).slice(),
+        mine: poi.mine, charted: poi.charted, chartedBy: poi.chartedBy,
+        paused: game.paused, mods: (game.ship.mods || []).slice()
+    };
+
+    // Fresh site: unknown to this pilot
+    poi.mine = false; poi.charted = false; poi.chartedBy = null;
+    game.pilot.discoveredPOIs = (game.pilot.discoveredPOIs || []).filter(id => id !== poi.id);
+
+    // Out of range → no discovery
+    game.ship.x = poi.x + 99999; game.ship.y = poi.y;
+    updatePOIDetection();
+    assert('a distant POI is not discovered', poi.mine === false);
+
+    // Fly into range → claim it
+    const creditsBefore = game.ship.credits;
+    game.ship.x = poi.x - 40; game.ship.y = poi.y;
+    game.ship.velocity.x = 0; game.ship.velocity.y = 0;
+    updatePOIDetection();
+    assert('flying within range charts the POI', poi.mine === true && poi.charted === true);
+    assert('the POI records a charter name', typeof poi.chartedBy === 'string' && poi.chartedBy.length > 0);
+    assert('discovery is persisted to the pilot', game.pilot.discoveredPOIs.includes(poi.id));
+
+    const r = poi.reward || {};
+    if (r.credits) {
+        // credits reward + any hold-full overflow payout, minus nothing else here
+        assert('credits reward was granted', game.ship.credits >= creditsBefore + r.credits);
+    }
+    if (r.relics) {
+        assert('relics were stowed in the hold', (game.ship.cargo.relics || 0) >= 1);
+    }
+
+    // Idempotent: re-entering the same site grants nothing more
+    const creditsAfterClaim = game.ship.credits;
+    updatePOIDetection();
+    assert('re-entering a claimed POI does not re-grant', game.ship.credits === creditsAfterClaim);
+
+    // Server landmark path: a peer's discovery charts the site WITHOUT a reward
+    poi.mine = false; poi.charted = false; poi.chartedBy = null;
+    game.ship.x = saved.x + 88888; // well away so detection can't re-claim it
+    const creditsBeforePeer = game.ship.credits;
+    applyDiscoveredPOIsFromServer({ [poi.id]: { pilot: 'Peer', at: 1 } });
+    assert('a peer discovery charts the site as a landmark', poi.charted === true && poi.chartedBy === 'Peer');
+    assert('a peer discovery grants no reward and no personal claim',
+        poi.mine === false && game.ship.credits === creditsBeforePeer);
+
+    // Restore — discovery moved the ship, paid out, and stowed cargo
+    game.ship.x = saved.x; game.ship.y = saved.y;
+    game.ship.velocity.x = saved.vx; game.ship.velocity.y = saved.vy;
+    game.ship.credits = saved.credits; game.ship.cargo = saved.cargo;
+    game.ship.mods = saved.mods;
+    game.pilot.xp = saved.xp; game.pilot.rank = saved.rank;
+    game.pilot.pendingPerkChoices = saved.pending;
+    game.pilot.discoveredPOIs = saved.discovered;
+    poi.mine = saved.mine; poi.charted = saved.charted; poi.chartedBy = saved.chartedBy;
+    game.paused = saved.paused;
+    updateUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

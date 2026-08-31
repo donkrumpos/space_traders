@@ -174,6 +174,7 @@ class CharacterManager {
         game.pilot = this.character.pilot;
         if (!game.pilot.grudges) game.pilot.grudges = {};
         if (!game.pilot.crew) game.pilot.crew = [];
+        if (!Array.isArray(game.pilot.discoveredPOIs)) game.pilot.discoveredPOIs = [];
         reapplyPerkEffects();
         updateFactionUI();
 
@@ -209,6 +210,9 @@ class CharacterManager {
 
         // Apply world state (economy, missions, hazards)
         this.applyWorldToGame();
+
+        // Restore this pilot's personal POI discoveries onto the runtime sites
+        if (typeof applyLocalDiscoveries === 'function') applyLocalDiscoveries();
 
         console.log("Character data applied to game state");
     }

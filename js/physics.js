@@ -36,6 +36,9 @@ function update() {
         }
     });
 
+    // Discover points of interest by flying within their range (js/exploration.js)
+    if (typeof updatePOIDetection === 'function') updatePOIDetection();
+
     // Variable rotation system for combat precision
     updateRotationSystem();
 

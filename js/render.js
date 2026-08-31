@@ -287,6 +287,9 @@ function render() {
         }
     });
 
+    // Draw discoverable points of interest (charted landmarks + "?" contacts)
+    if (typeof renderPOIs === 'function') renderPOIs(ctx, game.camera);
+
     // Draw asteroid fields and floating cargo
     renderAsteroids(ctx, game.camera);
     renderDrops(ctx, game.camera);

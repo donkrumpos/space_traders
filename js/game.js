@@ -65,6 +65,7 @@ const game = {
     camera: { x: 0, y: 0 },
     keys: {},
     planets: [],
+    pois: [],
     stars: [],
     projectiles: [],
     nearPlanet: null,
@@ -113,6 +114,9 @@ function init() {
         ...p,
         size: 20
     }));
+
+    // Initialize discoverable points of interest (js/exploration.js)
+    if (typeof loadPOIs === 'function') loadPOIs();
 
     // Initialize living economy and world hazards
     initEconomy();

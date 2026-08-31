@@ -9,11 +9,15 @@ import config from './config.mjs';
 // Side-effect imports set the globals (same files, no fork — PROTOCOL.md
 // "Economy sim extraction").
 await import('../js/sim/planets.js');
+await import('../js/sim/pois.js');
 await import('../js/sim/economy-core.js');
 const SIM_PLANETS = globalThis.SIM_PLANETS;
+const SIM_POIS = globalThis.SIM_POIS || [];
 const EconomyCore = globalThis.EconomyCore;
 
 const metaByName = new Map(SIM_PLANETS.map(p => [p.name, p]));
+// Valid POI ids — reject discovery reports for anything not in the roster
+const POI_IDS = new Set(SIM_POIS.map(p => p.id));
 
 // A board is one offers[] array: delivery offers plus (sometimes) a bounty
 // entry (type:'bounty') — one generateMissionOffers roll covers both.
@@ -26,7 +30,9 @@ function rollBoard(meta) {
 // --- World state: restore from SQLite when present, fresh otherwise --------
 // Merge per planet so a roster change (new planet) still boots cleanly.
 
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {} };
+// discoveredPOIs: { poiId: { pilot, at } } — the galaxy-wide charter record,
+// first-write-wins. Persisted in the singleton world snapshot like grudges.
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {} };
 
 {
     let saved = null;
@@ -43,6 +49,7 @@ const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {} }
             || rollBoard(meta);
     }
     if (saved && saved.grudges) world.grudges = saved.grudges;
+    if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
     // An event that was live at shutdown resumes with its remaining time
     // (endsAt is a server-side wall-clock field added on top of timeLeft).
     if (saved && saved.marketEvent && saved.marketEvent.endsAt > Date.now()) {
@@ -168,7 +175,8 @@ export function worldSnapshotMessage() {
         markets: world.markets,
         marketEvent: world.marketEvent,
         missionBoards: world.missionBoards,
-        grudges: world.grudges
+        grudges: world.grudges,
+        discoveredPOIs: world.discoveredPOIs
     };
 }
 
@@ -235,6 +243,22 @@ export function handleWorldMessage(ws, msg, send) {
             if (replacement) board.push(replacement);
             broadcast({ t: 'board.update', planet: msg.planet, offers: board });
             markDirty();
+            return true;
+        }
+
+        case 'poi.discover': {
+            // A pilot charted a point of interest. First charter wins galaxy-wide
+            // (later reports never overwrite the name); the broadcast makes the
+            // site a landmark on every pilot's map. The pilot name comes from the
+            // authenticated handshake (ws.pilot), never a payload field.
+            const id = typeof msg.id === 'string' ? msg.id : null;
+            if (!id || !POI_IDS.has(id)) return true; // unknown site — ignore
+            if (!world.discoveredPOIs[id]) {
+                world.discoveredPOIs[id] = { pilot: ws.pilot, at: Date.now() };
+                markDirty();
+            }
+            const rec = world.discoveredPOIs[id];
+            broadcast({ t: 'poi.discovered', id, pilot: rec.pilot, at: rec.at });
             return true;
         }
 

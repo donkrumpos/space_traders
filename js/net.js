@@ -103,6 +103,12 @@ const net = {
         const name = planet && planet.name ? planet.name : planet;
         net.send({ t: 'dock', planet: name });
     },
+    // Exploration: tell the server we charted a POI (fire-and-forget). The
+    // server records the FIRST charter galaxy-wide and broadcasts poi.discovered
+    // so the site becomes a landmark on every pilot's map.
+    discoverPOI(id) {
+        net.send({ t: 'poi.discover', id });
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -351,6 +357,10 @@ function netHandleMessage(msg) {
         case 'grudge.update':
             netApplyGrudges(msg.grudges, false);
             break;
+        // --- M5: exploration -------------------------------------------
+        case 'poi.discovered':
+            if (typeof applyPOIDiscovered === 'function') applyPOIDiscovered(msg);
+            break;
         // Unknown t: ignored (forward compatibility)
     }
 }
@@ -529,6 +539,11 @@ function netApplySnapshot(snap) {
     // pilot's doc yet (char.push races the snapshot), so solo-earned grudges
     // must survive until grudge.update arrives with the merged truth.
     if (snap.grudges) netApplyGrudges(snap.grudges, true);
+    // Charted POIs become shared landmarks (never a reward — reward is earned
+    // per-pilot by flying to the site).
+    if (snap.discoveredPOIs && typeof applyDiscoveredPOIsFromServer === 'function') {
+        applyDiscoveredPOIsFromServer(snap.discoveredPOIs);
+    }
 }
 
 function netApplyMarket(planetName, market) {
