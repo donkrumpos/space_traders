@@ -92,7 +92,7 @@ character via `importCharacter`-equivalent path. Local newer → push local up.
 **Offline fallback:** connect timeout 3s. On fail/close: `net.online=false`,
 game plays solo from localStorage exactly as today; reconnect attempts every
 30s; on reconnect re-handshake (sync rule runs again). NOTHING in solo boot
-may block on the network — `?verify` (92 assertions) must stay green with no
+may block on the network — `?verify` (117 assertions) must stay green with no
 server running.
 
 ### M2 — ghost presence
@@ -119,7 +119,7 @@ distinct color, minimap blip. Ghosts are NOT collidable (friendly fire off).
 
 | t | dir | payload |
 |---|-----|---------|
-| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges }` — sent as its own message immediately AFTER `welcome` (welcome stays M1-shaped, no snapshot field), and on `debug.snapshot` |
+| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges, discoveredPOIs }` — sent as its own message immediately AFTER `welcome` (welcome stays M1-shaped, no snapshot field), and on `debug.snapshot`. `discoveredPOIs` is M5 (see below) |
 | `trade` | c→s | `{ reqId, planet, good, side:'buy'\|'sell', qty }` |
 | `trade.result` | s→c | `{ reqId, ok, prices: {buy,sell} }` — client applies credits/cargo locally on ok |
 | `market.update` | s→c *broadcast* | `{ planet, market }` after any trade/drift/event |
@@ -203,7 +203,7 @@ rollMarketEvent(planetMetas), generateMissionOffers(meta, allMetas)). Both
 files are side-effect scripts setting globals (script tags in the browser
 loaded BEFORE game.js, `await import()` on the server — same files, no fork).
 Browser economy.js delegates to EconomyCore; solo behavior must stay
-identical (`?verify` 92/92 is the proof).
+identical (`?verify` 117/117 is the proof).
 
 Return shapes (locked at extraction, 2026-07-08): `makeMarket` returns
 `{ buy: {good: price}, sell: {good: price} }`; `drift`/`tradeImpact` mutate
@@ -429,6 +429,41 @@ discriminator everywhere is `id !== undefined` = server-owned.
 - **Console hook:** `window.netCombat()` →
   `{ enemies, traders, drops, lastTickN }` (plain snapshots with ids).
 
+### M5 — exploration (discoverable POIs, shared first-charter landmarks)
+
+Hidden points of interest out past the known planet cluster, defined in
+`js/sim/pois.js` (`globalThis.SIM_POIS`, same shared-file pattern as planets —
+loaded as a script tag in the browser and `await import()`ed on the server).
+A pilot **charts** a POI by flying within its `discoveryRadius`. Discovery is a
+shared, persistent fact; the reward is granted per-pilot (co-op friendly).
+
+| t | dir | payload |
+|---|-----|---------|
+| `poi.discover` | c→s | `{ id }` — "I charted this site." Pilot taken from the authenticated `ws.pilot`, NEVER a payload field. Fire-and-forget (no reqId), like `dock`. Unknown/invalid ids are ignored. |
+| `poi.discovered` | s→c *broadcast* | `{ id, pilot, at }` — the canonical charter. First-write-wins: the first pilot to report a site owns its name forever; later reports never overwrite it. Broadcast to ALL (incl. the sender, so a peer who beat them shows the right name). |
+
+- **`world.snapshot.discoveredPOIs`**: `{ id: { pilot, at } }` — the galaxy-wide
+  charter record, persisted in the singleton `world` JSON blob (rides the same
+  SQLite snapshot as grudges; no schema change). Applied client-side as
+  landmark state only (`poi.charted` + `poi.chartedBy`), NEVER as a reward.
+- **Two-flag model (client, `js/exploration.js`):** `poi.charted` (SHARED — the
+  site is a known landmark on the map) vs `poi.mine` (PER-PILOT — this pilot
+  personally reached it and claimed the reward; stored locally in
+  `game.pilot.discoveredPOIs`, so solo play persists and re-charts on load).
+  A peer's discovery charts a site for everyone but grants them nothing; each
+  pilot earns the reward by flying there themselves.
+- **Reward schema** (`poi.reward`, all optional — forward-compatible with the
+  quest/RPG milestone): `{ credits, relics, xp, mod, lore, questSeed }`. `relics`
+  cap to hold space (overflow pays out); `mod` grants a one-off ship mod if new;
+  `lore` writes a ship-log line; `questSeed` is recorded on `game.pilot.questSeeds`
+  as a rail for the future quest system (grants nothing yet).
+- **Detection** rides the alive-path proximity loop (`js/physics.js`), never
+  while paused or dead. Sensor range = the minimap range (perks/mods like
+  `long_range_scanner` / `whisper_coil` scale it, so exploration gear does
+  double duty): an uncharted site inside sensor range shows as a pulsing "?"
+  contact; charted sites draw as their archetype icon on all three map surfaces.
+- **Console hooks:** `window.listPOIs()`, `window.warpToPOI(id)`.
+
 ## verify-net.mjs (the gate)
 
 Node script at repo root. Uses `puppeteer-core` with
@@ -455,7 +490,7 @@ MULTIPLAYER.md):
 Assertions land as `PASS/FAIL [suite] name` lines + final `VERIFY-NET-PASS
 n/n`; process exit code 0/1. Milestones enable suites incrementally — the
 harness must run green at every milestone for the suites that exist so far.
-Solo gate stays: `?verify` 92/92 via the documented chrome-headless-shell
+Solo gate stays: `?verify` 117/117 via the documented chrome-headless-shell
 one-liner, with NO server running.
 
 ## Client integration points (from the architecture map)
