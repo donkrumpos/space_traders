@@ -29,22 +29,27 @@ persistent living world"** wire section. TEST-PLAN.md Part 1 is the new
 playtest hand-off (incl. VERIFY_DEBUG console commands to force windows/
 occupations without waiting 12-24h).
 
-**Next session (user-requested, 2026-08-31 playtest):** UI milestone,
-console-first — the target is the **Iceswitch** (son's germ-shape wooden
-handheld; full spec in the sibling repo:
-`~/Documents/Projects/reliquary/knowledge/electronics/germ-shape-console.md`,
-incl. its prior "Phase 2.5 family games kiosk" plan). Hard constraints:
-**480×320 landscape** (Waveshare 3.5" SPI — frame-copy pipe, expect 15-30fps
-ceiling), Pi Zero 2W 512MB (WPE WebKit/`cog` kiosk, not Chromium), 12-14 GPIO
-buttons as keycodes via `gpio-keys` (+capacitive touch). Plan agreed with
-user: (1) redesign UI console-first at 480×320 — full-screen canvas,
-large-type HUD, button-toggled overlays; scales up to desktop, worth it
-regardless; (2) the per-frame perf backlog (updateUI innerHTML rebuilds,
-shadowBlur, gradient allocs, getElementById/frame) becomes MANDATORY for the
-Zero 2W; (3) separate short spike on real hardware (`cog` at 480×320,
-measure combat fps) decides native vs board-upgrade vs desktop-only. Also
-fun: control-scheme design session with the son (game uses ~10 keys, germ
-has 12-14 buttons).
+**Next session (user-requested, 2026-08-31 playtest): compact-UI milestone.**
+PORT DECISION SETTLED (user chose, 2026-08-31): **Space Traders stays a
+laptop/desktop game.** The Iceswitch (son's germ-shape wooden handheld, Pi
+Zero 2W + 480×320 SPI screen — full spec in the sibling repo:
+`~/Documents/Projects/reliquary/knowledge/electronics/germ-shape-console.md`)
+gets **Arthur-scale original games instead** (its own Phase 2 Pygame plan),
+which match its hardware. The port stays a parked, zero-cost option: a
+one-bench-session `cog` fps spike at 480×320 could reopen it; no hardware
+purchase unless that spike fails AND the port is still wanted (then a
+Pi-Zero-FOOTPRINT board ~$25-40, NOT a Pi 4 — the PowerBoost 1000C's 1A
+output and the carved cavity rule the big boards out).
+
+The UI milestone itself is unchanged and its driver is the DESKTOP: the user
+wants the game compact enough to run **two windows side by side on one
+screen** (family testing, and it just plays better small). Design target: a
+layout that works at roughly half-screen (~700×900 or smaller) — full-screen
+canvas, HUD overlays toggled instead of the permanent stacked sidebar. If it
+happens to also work near 480×320, the console option stays warm for free,
+but that's a bonus, not a requirement. Fold in the per-frame UI perf backlog
+(updateUI innerHTML rebuilds, full-map canvas realloc, ~25 getElementById/
+frame, shadowBlur + gradient allocs) — same code, same milestone.
 
 **Other milestone candidates** (pick after playtest): quest chains off the
 questSeed rails (Ossuary dig-quest); death broadcast + death chronicle
