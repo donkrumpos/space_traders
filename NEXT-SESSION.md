@@ -30,13 +30,28 @@ mechanic survives — records suite still asserts it). New solo `now` suite
 ?verify 178/178 (was 165), verify-net 136/136.** TEST-PLAN.md Part 0 has a
 "Slice 3" subsection.
 
-**NEXT: family playtest of the whole redesigned sidebar** (TEST-PLAN.md Part
-0 — the wall test, the glance test, the derelict-tease moment). Watchlist:
-state flicker when skirting the 900u/600u edges (thresholds may need
-hysteresis if it thrashes); does anyone miss the old always-on nav text;
-Slice 2 carryovers (badges pulling the eye, tab-flipping to compare, tab-row
-growth as progression vs noise). After playtest verdict: merge + themisto
-deploy (branch carries M5+M6 server changes — see "Deploy first" below).
+**NEXT SESSION (user-requested at sync): a RIFF session — push the
+visual-over-text optimization into the rest of the sections.** The structure
+milestone is done (vitals band / Now zone / Records tabs), but the Records
+*pages themselves* are still text walls: Ship (mods + log lines), Missions
+(text list), Crew (text list), Rep (text list), Galaxy Log (text lines),
+Ledger (text rows) — plus other surfaces like the trade dialog and full map
+if the riff reaches. Same working rhythm as the sidebar milestone: riff/
+diagnose first (what could each section encode as VISUALS — icons, bars,
+color, glyph language — instead of sentences), mock up 2-3 directions, pin
+forks with the user, THEN build in verified slices. This is a design-first
+session, not a build-first one. The existing glyph vocabulary (POI kinds,
+faction colors, goods colors, ⚑/✦/☠) is the raw material — extend it, don't
+invent a parallel one.
+
+**Still queued: family playtest of the whole redesigned sidebar**
+(TEST-PLAN.md Part 0 — the wall test, the glance test, the derelict-tease
+moment). Watchlist: state flicker when skirting the 900u/600u edges
+(thresholds may need hysteresis if it thrashes); does anyone miss the old
+always-on nav text; Slice 2 carryovers (badges pulling the eye, tab-flipping
+to compare, tab-row growth as progression vs noise). After playtest verdict:
+merge + themisto deploy (branch carries M5+M6 server changes — see "Deploy
+first" below).
 
 (Fifth-session record follows.)
 
