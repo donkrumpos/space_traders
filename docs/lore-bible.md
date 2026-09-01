@@ -171,10 +171,11 @@ Deepmaw). Meridian Deep's dispossessed harvest crews. Amphibious-raised,
 they fly like divers — patient, then sudden. They want their reefs back;
 the Guild pretends not to remember whose reefs they were.
 
-**Meridian Guild** — the lawful remnant: the Combine's medical division
-gone native, now the closest thing to a benevolent institution the reach
-has. Friendly reputation content lives here when the rep system grows a
-positive side.
+**Meridian Guild** — the "lawful" remnant: the Combine's medical division
+gone native. Not benevolent — just the gang whose hostage is healthcare.
+They trade mercy at Guild prices and are owed favors on every world, which
+is a currency no cartel can raid. Friendly reputation content lives here
+when the rep system grows a positive side.
 
 *Rent:* grudge-weighted occupations gain narrative gravity (the Choir
 occupying a precursor site is a *pilgrimage*; Rustfang occupying a cache is
@@ -278,10 +279,37 @@ breadcrumbs for future quest chains.
    is real (deaths are real in this game); despair is not.
 6. **Rent or cut.** New lore states what mechanic, glyph, quest, or event
    it feeds, or it doesn't go in this file.
+7. **No empires. Ever.** Power in the reach is local, personal, and named
+   after a person or a grievance — a compound, a crew, a guild, a debt.
+   Nothing lore-side may introduce a fleet, a senate, or a chosen one.
+   The player is a freelancer making their way through other people's
+   errands, and endgame power means *your name in the chronicle*, not a
+   throne. (Tone anchor: Mad Max in space — the Combine was the oil
+   company, the reach is the junkyard, and the gasoline is ghosts.)
 
 ---
 
-## 9. Open hooks (deliberately unwritten)
+## 9. Player factions (the MMO north star)
+
+When the multiplayer world is ready for it, **players can found their own
+faction** — and the lore already dictates how, via rule 4: a faction is
+not a flag, it is a *want*. Founding one means declaring the errand
+(what does your crew want that the reach owes it?), and the founding is a
+naming-event: chronicled, broadcast, permanent — the same machinery that
+lets a planet earn its name lets a family crew enter world history.
+
+The seams already exist in code, unplanned but real: grudges are keyed by
+faction name as plain data, occupations reference factions as data
+(combat-core takes faction maps passed in, never globals), and the
+chronicle is the reach's social ladder. A player faction is ultimately a
+row in the same table the Rustfang live in — with a human grievance
+instead of an authored one.
+
+*Rent:* the MMO milestone's design seed; keeps every faction-system slice
+between now and then honest (never hardcode the three authored cartels as
+the only possible factions).
+
+## 10. Open hooks (deliberately unwritten)
 
 - Mining Stations 1–6 and Tech Hub Beta — fates unassigned.
 - What the Combine's last survey season found in the Ossuary Dig.
