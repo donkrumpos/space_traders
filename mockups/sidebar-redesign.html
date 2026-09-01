@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Traders — Sidebar Redesign Mockups</title>
+<style>
+  :root{
+    --bg:#000; --panel:#002200; --panel2:#001800; --edge:#0a5a0a; --edge-soft:#063806;
+    --green:#00ff00; --cyan:#00ffff; --dim:#5a7a5a; --dimmer:#3a4a3a;
+    --gold:#ffdd44; --amber:#ffaa00; --red:#ff4d4d; --blue:#44aaff; --ok:#55cc66;
+    --font:'Courier New',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#050805;color:var(--green);font-family:var(--font);}
+
+  /* ---- chrome / switcher ---- */
+  header{padding:12px 16px;border-bottom:1px solid var(--edge);background:#020402;position:sticky;top:0;z-index:50}
+  header h1{margin:0 0 8px;font-size:15px;color:var(--cyan);letter-spacing:.5px}
+  .switch{display:flex;gap:6px;flex-wrap:wrap}
+  .switch button{font-family:var(--font);background:#021002;color:var(--dim);border:1px solid var(--edge);
+    padding:6px 12px;cursor:pointer;font-size:12px;border-radius:3px}
+  .switch button:hover{color:var(--green);border-color:var(--green)}
+  .switch button.active{background:#063806;color:#dfffdf;border-color:var(--green);box-shadow:0 0 10px #00ff0044}
+  .blurb{margin:8px 0 0;font-size:12px;color:var(--dim);max-width:900px;line-height:1.5}
+  .blurb b{color:var(--gold)}
+
+  /* ---- stage: mock canvas + sidebar ---- */
+  #stage{display:flex;height:calc(100vh - 96px);min-height:520px}
+  #canvasWrap{position:relative;flex:1;min-width:0;overflow:hidden;
+    background:radial-gradient(ellipse at 60% 40%, #04140a 0%, #010301 70%);border:2px solid var(--edge);margin:8px}
+  #canvasWrap .stars{position:absolute;inset:0}
+  #canvasWrap .lbl{position:absolute;left:10px;bottom:10px;color:var(--dimmer);font-size:11px}
+  /* a mock ship + planet drawn with divs */
+  .planet{position:absolute;border-radius:50%}
+  .ship{position:absolute;left:50%;top:52%;width:0;height:0;transform:translate(-50%,-50%) rotate(18deg);
+    border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:22px solid var(--green);
+    filter:drop-shadow(0 0 6px #00ff0088)}
+  .enemy{position:absolute;width:8px;height:8px;background:var(--red);border-radius:50%;box-shadow:0 0 8px var(--red)}
+
+  /* mini-map corner */
+  .minimap{position:absolute;top:10px;right:10px;width:130px;height:130px;background:#001100;border:1px solid var(--edge);
+    display:flex;align-items:center;justify-content:center;color:var(--dimmer);font-size:10px}
+
+  /* floating action banner used by A & C */
+  .actionBanner{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);
+    background:#052905;border:1px solid var(--green);border-radius:5px;padding:8px 16px;text-align:center;
+    box-shadow:0 0 18px #00ff0033}
+  .actionBanner .k{color:#010;background:var(--green);border-radius:3px;padding:1px 6px;font-weight:bold}
+  .actionBanner .m{color:#bfffbf;font-size:13px;font-weight:bold;letter-spacing:.5px}
+  .actionBanner small{display:block;color:var(--dim);margin-top:3px}
+
+  /* ---- generic sidebar shell ---- */
+  .sidebar{width:320px;flex-shrink:0;overflow-y:auto;margin:8px 8px 8px 0;border:2px solid var(--edge);
+    background:#001100;padding:0}
+  .sidebar.narrow{width:172px}
+  .sidebar::-webkit-scrollbar{width:8px}.sidebar::-webkit-scrollbar-thumb{background:var(--edge)}
+
+  /* =========================================================
+     VARIANT: CURRENT (faithful reproduction of today)
+     ========================================================= */
+  .cur .panel{border:1px solid #00ff00;margin:10px;padding:10px;background:#002200}
+  .cur .panel h3{margin:0 0 10px;color:#00ffff;font-size:14px}
+  .cur .row{font-size:13px;margin:2px 0}
+  .cur .cargo{display:flex;justify-content:space-between;margin:5px 0;font-size:13px}
+  .cur .muted{color:#666}
+  .cur .lrow{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}
+
+  /* =========================================================
+     shared gauge components (A & B)
+     ========================================================= */
+  .vitals{background:#02180a;border-bottom:2px solid var(--edge);padding:10px 12px;position:sticky;top:0;z-index:5}
+  .vhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .rankchip{font-size:12px;color:var(--gold)}
+  .credits{font-size:20px;color:var(--gold);font-weight:bold;text-shadow:0 0 8px #ffdd4433;letter-spacing:.5px}
+  .credits::before{content:"$";font-size:13px;opacity:.7}
+  .xpbar{height:3px;background:#123;border-radius:2px;margin:2px 0 10px;overflow:hidden}
+  .xpbar>i{display:block;height:100%;background:#5b9bff}
+
+  .gauge{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:8px;margin:6px 0;font-size:12px}
+  .gauge .ico{text-align:center;font-size:13px;opacity:.9}
+  .gauge .track{height:12px;background:#0a1a0a;border:1px solid var(--edge-soft);border-radius:2px;overflow:hidden;position:relative}
+  .gauge .track>i{display:block;height:100%;transition:width .3s}
+  .gauge .num{font-size:11px;color:#cfe;min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
+  .seg{display:flex;gap:2px}.seg>i{flex:1;height:12px;background:#0a1a0a;border:1px solid var(--edge-soft)}
+
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:11px;padding:3px 7px;border-radius:3px;border:1px solid var(--edge);background:#031803;color:#bfe}
+  .chip.warn{border-color:var(--amber);color:var(--amber)}
+  .chip.hot{border-color:var(--red);color:var(--red)}
+
+  /* =========================================================
+     VARIANT A: tabbed lower drawer
+     ========================================================= */
+  .tabs{display:flex;border-bottom:1px solid var(--edge);background:#010e01;position:sticky;top:0;z-index:4}
+  .tabs button{flex:1;font-family:var(--font);background:none;border:none;border-right:1px solid var(--edge-soft);
+    color:var(--dim);padding:8px 2px;font-size:11px;cursor:pointer;position:relative}
+  .tabs button:last-child{border-right:none}
+  .tabs button.on{color:#dfffdf;background:#042804;box-shadow:inset 0 -2px 0 var(--green)}
+  .tabs button .badge{position:absolute;top:3px;right:6px;background:var(--amber);color:#000;border-radius:8px;
+    font-size:9px;padding:0 4px;font-weight:bold}
+  .tabbody{padding:10px 12px;font-size:12px}
+  .tabpage{display:none}.tabpage.on{display:block}
+  .tabpage h4{margin:0 0 6px;color:var(--cyan);font-size:12px;text-transform:uppercase;letter-spacing:1px}
+
+  .list-row{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dotted var(--edge-soft)}
+  .list-row:last-child{border-bottom:none}
+  .prog{height:4px;background:#0a1a0a;border-radius:2px;margin-top:3px;overflow:hidden}.prog>i{display:block;height:100%;background:var(--ok)}
+  .logline{font-size:11px;color:#9db;padding:2px 0;border-left:2px solid var(--edge);padding-left:6px;margin:3px 0}
+
+  /* =========================================================
+     VARIANT B: grouped dashboard w/ accordion records
+     ========================================================= */
+  .zone-h{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;
+    margin:0;padding:8px 12px 4px;border-top:1px solid var(--edge-soft)}
+  .now{padding:4px 12px 10px}
+  .nowcard{background:#052905;border:1px solid var(--green);border-radius:4px;padding:8px;margin:6px 0;font-size:12px;
+    box-shadow:0 0 12px #00ff0022}
+  .nowcard .k{color:#010;background:var(--green);border-radius:3px;padding:1px 5px;font-weight:bold;font-size:11px}
+  .mission{padding:6px 0;font-size:12px;border-bottom:1px dotted var(--edge-soft)}
+  .mission:last-child{border:none}
+  .acc{border-top:1px solid var(--edge-soft)}
+  .acc>summary{list-style:none;cursor:pointer;padding:8px 12px;font-size:12px;display:flex;justify-content:space-between;
+    align-items:center;color:#bfe}
+  .acc>summary::-webkit-details-marker{display:none}
+  .acc>summary:hover{background:#031803}
+  .acc>summary .sum{color:var(--dim);font-size:11px}
+  .acc[open]>summary{color:#dfffdf;background:#042004}
+  .acc .accbody{padding:2px 12px 10px;font-size:12px}
+  .tw{color:var(--dim)}.hostile{color:var(--red)}.friendly{color:var(--ok)}
+
+  /* =========================================================
+     VARIANT C: cockpit cluster (narrow) + overlays
+     ========================================================= */
+  .arc{text-align:center;margin:8px 0}
+  .arcnum{font-size:13px}
+  .iconcol{display:flex;flex-direction:column;gap:6px;padding:10px}
+  .iconbtn{display:flex;align-items:center;gap:8px;font-family:var(--font);background:#021002;color:#bfe;
+    border:1px solid var(--edge);border-radius:4px;padding:8px 10px;cursor:pointer;font-size:12px;text-align:left}
+  .iconbtn:hover{border-color:var(--green);color:#dfffdf;background:#042804}
+  .iconbtn .bg{margin-left:auto;background:var(--amber);color:#000;border-radius:8px;font-size:9px;padding:0 5px;font-weight:bold}
+  .overlay{position:absolute;inset:0;background:rgba(0,8,0,.82);display:none;align-items:center;justify-content:center;z-index:20}
+  .overlay.show{display:flex}
+  .overlay .card{width:min(460px,80%);background:#001400;border:2px solid var(--green);border-radius:6px;padding:16px;
+    box-shadow:0 0 30px #00ff0033}
+  .overlay .card h3{margin:0 0 10px;color:var(--cyan);display:flex;justify-content:space-between}
+  .overlay .card .x{cursor:pointer;color:var(--dim)}
+  .overlay .card .x:hover{color:var(--green)}
+
+  .note{color:var(--dim);font-size:11px;padding:10px 12px;border-top:1px solid var(--edge-soft);line-height:1.5}
+
+  /* recommended: contextual Now zone + state switcher */
+  .statebar{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;background:#010e01;border-bottom:1px solid var(--edge-soft)}
+  .statebar button{font-family:var(--font);font-size:10px;background:#021002;color:var(--dim);
+    border:1px solid var(--edge-soft);border-radius:3px;padding:3px 7px;cursor:pointer}
+  .statebar button.on{color:#010;background:var(--green);border-color:var(--green);font-weight:bold}
+  .nowzone{padding:8px 12px;min-height:120px;border-bottom:2px solid var(--edge)}
+  .nowzone .ctx-h{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin:0 0 6px;
+    display:flex;justify-content:space-between}
+  .poi{display:flex;align-items:center;gap:8px;font-size:14px;margin:2px 0}
+  .poi .sym{font-size:18px}
+  .lore{color:#b9a6e0;font-style:italic;font-size:11px;margin:6px 0;border-left:2px solid #cc99ff55;padding-left:8px}
+  .big{font-weight:bold;font-size:14px;letter-spacing:.5px}
+  .keys{margin-top:6px;font-size:11px;color:var(--dim)}
+  .keys b{color:#010;background:var(--green);border-radius:3px;padding:1px 5px}
+  .emerg{color:var(--red);font-weight:bold}
+</style>
+</head>
+<body>
+<header>
+  <h1>SPACE TRADERS — sidebar redesign · click to compare</h1>
+  <div class="switch">
+    <button data-v="rec" class="active">★ Recommended · Contextual Hybrid</button>
+    <button data-v="cur">Current (today)</button>
+    <button data-v="a">A · Gauge HUD + Tabs</button>
+    <button data-v="b">B · Grouped Dashboard</button>
+    <button data-v="c">C · Cockpit Cluster</button>
+  </div>
+  <p class="blurb" id="blurb"></p>
+</header>
+
+<div id="stage">
+  <!-- ===================== MOCK CANVAS ===================== -->
+  <div id="canvasWrap">
+    <div class="stars" id="stars"></div>
+    <div class="planet" style="left:64%;top:30%;width:70px;height:70px;background:radial-gradient(circle at 35% 30%,#2a6,#063);box-shadow:0 0 22px #0a83"></div>
+    <div class="planet" style="left:22%;top:66%;width:34px;height:34px;background:radial-gradient(circle at 35% 30%,#a63,#420)"></div>
+    <div class="ship"></div>
+    <div class="enemy" style="left:44%;top:40%"></div>
+    <div class="enemy" style="left:48%;top:46%"></div>
+    <div class="enemy" style="left:41%;top:49%"></div>
+    <div class="minimap">STRATEGIC NAV</div>
+    <div class="lbl">the canvas is the star — panels serve glances</div>
+
+    <!-- floating action banner (A & C use it; hidden for cur/b) -->
+    <div class="actionBanner" id="actionBanner" style="display:none">
+      <span class="m">DOCKING RANGE</span>
+      <small>Press <span class="k">SPACE</span> to dock with Meridian Station</small>
+    </div>
+
+    <!-- variant C overlay demo -->
+    <div class="overlay" id="cOverlay">
+      <div class="card">
+        <h3><span id="cOvTitle">Navigation</span> <span class="x" onclick="document.getElementById('cOverlay').classList.remove('show')">✕ ESC</span></h3>
+        <div id="cOvBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== CURRENT ===================== -->
+  <aside class="sidebar cur" id="v-cur">
+    <div class="panel">
+      <h3>Ship Status</h3>
+      <div class="row" style="color:#ffdd44">Rank: ✦ Wing Commander</div>
+      <div class="row" style="color:#88bbff;font-size:11px">XP 420 / 600</div>
+      <div class="row">Credits: $12480</div>
+      <div class="row">Fuel: <span style="color:#ffaa00">180</span>/500</div>
+      <div class="row">Hull: 72/100</div>
+      <div class="row">Shield: <span style="color:#44aaff">15</span>/20</div>
+      <div class="row">Cargo: 7/10</div>
+      <div class="row">Missiles: 3/5</div>
+      <div class="row">Weapon: Twin Lv2 · heat 45%</div>
+      <div class="row" style="color:#ffcc00">Bounty streak ×1.5 (3 kills)</div>
+    </div>
+    <div class="panel">
+      <h3>The Ship</h3>
+      <div class="row">Gjallarhorn</div>
+      <div class="row" style="color:#8ab">Songbird Antenna · Reliquary Hold</div>
+      <div class="row muted" style="font-size:11px;margin-top:6px">Log: charted Ember Reach · sold 12 ore</div>
+    </div>
+    <div class="panel">
+      <h3>Cargo Hold</h3>
+      <div class="cargo"><span>Ore</span><span>3</span></div>
+      <div class="cargo"><span>Textiles</span><span>2</span></div>
+      <div class="cargo"><span>Parts</span><span>2</span></div>
+    </div>
+    <div class="panel">
+      <h3>Navigation</h3>
+      <div class="row">Position: (4210, -1832)</div>
+      <div class="row">Sector: Frontier Reach</div>
+      <div class="row" style="color:#00ff00;font-weight:bold;margin-top:6px">DOCKING RANGE</div>
+      <div class="row" style="color:#ffff00">Press SPACE to dock with Meridian Station</div>
+    </div>
+    <div class="panel">
+      <h3>Missions</h3>
+      <div class="lrow"><span>5 Ore → Mining 7</span><span style="color:#ffaa00">3/5 · $600</span></div>
+      <div class="lrow"><span>☠ Redjaw — near Frontier</span><span style="color:#ff6666">$800</span></div>
+    </div>
+    <div class="panel">
+      <h3>Crew</h3>
+      <div class="row">Sparks — Engineer</div>
+      <div class="row">Vex — Gunner</div>
+    </div>
+    <div class="panel">
+      <h3>Reputation</h3>
+      <div class="row" style="color:#ff6666">Rustfang Cartel — Hostile</div>
+      <div class="row" style="color:#66cc88">Meridian Guild — Friendly</div>
+    </div>
+    <div class="panel">
+      <h3>Galaxy Log</h3>
+      <div class="row muted" style="font-size:11px">Foggy charted Site 4 · Arthur bagged a warlord · market crash @ Mining 7</div>
+    </div>
+    <div class="panel">
+      <h3>Trade Ledger</h3>
+      <div class="lrow"><span>Meridian · Ore</span><span style="color:#88ff88">buy $18</span></div>
+      <div class="lrow"><span>Mining 7 · Ore</span><span style="color:#ffaa00">sell $41</span></div>
+    </div>
+    <div class="panel">
+      <h3>Ship Upgrades</h3>
+      <div class="row">Engines Lv2 · Shields Lv1 · Cargo Lv2</div>
+      <div class="row">Fuel Lv1 · Hull Lv2 · Weapons Lv2</div>
+    </div>
+  </aside>
+
+  <!-- ===================== A: GAUGE HUD + TABS ===================== -->
+  <aside class="sidebar" id="v-a" style="display:none">
+    <div class="vitals">
+      <div class="vhead"><span class="rankchip">✦ Wing Commander</span><span class="credits">12,480</span></div>
+      <div class="xpbar"><i style="width:70%"></i></div>
+      <div class="gauge"><span class="ico" style="color:var(--amber)">⛽</span><div class="track"><i style="width:36%;background:var(--amber)"></i></div><span class="num">180/500</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--ok)">❤</span><div class="track"><i style="width:72%;background:var(--ok)"></i></div><span class="num">72/100</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--blue)">🛡</span><div class="track"><i style="width:75%;background:var(--blue)"></i></div><span class="num">15/20</span></div>
+      <div class="gauge"><span class="ico">▦</span><div class="track"><i style="width:70%;background:#5aa"></i></div><span class="num">7/10</span></div>
+      <div class="chips">
+        <span class="chip">✷ Twin Lv2</span>
+        <span class="chip warn">heat 45%</span>
+        <span class="chip">◈ Missiles 3</span>
+        <span class="chip">⚔ streak ×1.5</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="on" data-tab="nav">Nav</button>
+      <button data-tab="cargo">Cargo</button>
+      <button data-tab="miss">Miss<span class="badge">2</span></button>
+      <button data-tab="ship">Ship</button>
+      <button data-tab="log">Log</button>
+      <button data-tab="rec">More</button>
+    </div>
+    <div class="tabbody">
+      <div class="tabpage on" data-page="nav">
+        <h4>Navigation</h4>
+        <div class="list-row"><span>Sector</span><span style="color:#cfe">Frontier Reach</span></div>
+        <div class="list-row"><span>Position</span><span style="color:#8ab">4210, -1832</span></div>
+        <div class="list-row"><span>Nearest</span><span style="color:var(--cyan)">Meridian · 40u E</span></div>
+        <div class="nowcard" style="margin-top:8px"><span class="k">SPACE</span> dock with Meridian Station</div>
+      </div>
+      <div class="tabpage" data-page="cargo">
+        <h4>Cargo Hold · 7/10</h4>
+        <div class="list-row"><span>Ore</span><span>3</span></div>
+        <div class="list-row"><span>Textiles</span><span>2</span></div>
+        <div class="list-row"><span>Parts</span><span>2</span></div>
+      </div>
+      <div class="tabpage" data-page="miss">
+        <h4>Missions · 2</h4>
+        <div class="list-row"><span>5 Ore → Mining 7</span><span style="color:var(--amber)">$600</span></div>
+        <div class="prog"><i style="width:60%"></i></div>
+        <div class="list-row" style="margin-top:6px"><span>☠ Redjaw · near Frontier</span><span style="color:var(--red)">$800</span></div>
+      </div>
+      <div class="tabpage" data-page="ship">
+        <h4>Gjallarhorn</h4>
+        <div class="list-row"><span>Mods</span><span style="color:#8ab">Songbird · Reliquary Hold</span></div>
+        <div class="list-row"><span>Upgrades</span><span style="color:#8ab">Eng2 Shd1 Car2 Wpn2</span></div>
+      </div>
+      <div class="tabpage" data-page="log">
+        <h4>Ship Log</h4>
+        <div class="logline">Charted Ember Reach — first light</div>
+        <div class="logline">Sold 12 ore at Mining 7</div>
+        <div class="logline">Repaired hull at Meridian</div>
+      </div>
+      <div class="tabpage" data-page="rec">
+        <h4>Records</h4>
+        <div class="list-row"><span>🛰 Reputation</span><span class="hostile">1 hostile</span></div>
+        <div class="list-row"><span>👥 Crew</span><span style="color:#8ab">Sparks · Vex</span></div>
+        <div class="list-row"><span>💹 Ledger</span><span style="color:#8ab">2 stations</span></div>
+        <div class="list-row"><span>📜 Galaxy Log</span><span style="color:var(--amber)">3 new</span></div>
+      </div>
+    </div>
+    <p class="note">Vitals are always-on gauges (pinned, never scroll). Everything else is one tab at a time — the wall becomes a finite panel. Action prompts float over the canvas, not buried in Nav text.</p>
+  </aside>
+
+  <!-- ===================== B: GROUPED DASHBOARD ===================== -->
+  <aside class="sidebar" id="v-b" style="display:none">
+    <div class="vitals">
+      <div class="vhead"><span class="rankchip">✦ Wing Commander</span><span class="credits">12,480</span></div>
+      <div class="xpbar"><i style="width:70%"></i></div>
+      <div class="gauge"><span class="ico" style="color:var(--amber)">⛽</span><div class="track"><i style="width:36%;background:var(--amber)"></i></div><span class="num">180/500</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--ok)">❤</span><div class="track"><i style="width:72%;background:var(--ok)"></i></div><span class="num">72/100</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--blue)">🛡</span><div class="track"><i style="width:75%;background:var(--blue)"></i></div><span class="num">15/20</span></div>
+      <div class="gauge"><span class="ico">▦</span><div class="track"><i style="width:70%;background:#5aa"></i></div><span class="num">7/10</span></div>
+      <div class="chips">
+        <span class="chip">✷ Twin Lv2</span><span class="chip warn">heat 45%</span>
+        <span class="chip">◈ Missiles 3</span><span class="chip">⚔ ×1.5</span>
+      </div>
+    </div>
+
+    <p class="zone-h">Now · Frontier Reach</p>
+    <div class="now">
+      <div class="nowcard"><span class="k">SPACE</span> dock with Meridian Station <span style="color:var(--dim)">· 40u E</span></div>
+      <div class="mission">5 Ore → Mining 7 <span style="float:right;color:var(--amber)">$600</span><div class="prog"><i style="width:60%"></i></div></div>
+      <div class="mission">☠ Redjaw — near Frontier <span style="float:right;color:var(--red)">$800</span></div>
+    </div>
+
+    <p class="zone-h">Records</p>
+    <details class="acc">
+      <summary>👥 Crew <span class="sum">Sparks · Vex</span></summary>
+      <div class="accbody"><div class="list-row"><span>Sparks</span><span class="tw">Engineer</span></div><div class="list-row"><span>Vex</span><span class="tw">Gunner</span></div></div>
+    </details>
+    <details class="acc" open>
+      <summary>🛰 Reputation <span class="sum"><span class="hostile">1 hostile</span> · 1 friendly</span></summary>
+      <div class="accbody"><div class="list-row"><span>Rustfang Cartel</span><span class="hostile">Hostile</span></div><div class="list-row"><span>Meridian Guild</span><span class="friendly">Friendly</span></div></div>
+    </details>
+    <details class="acc">
+      <summary>💹 Trade Ledger <span class="sum">2 stations</span></summary>
+      <div class="accbody"><div class="list-row"><span>Meridian · Ore</span><span style="color:var(--ok)">buy $18</span></div><div class="list-row"><span>Mining 7 · Ore</span><span style="color:var(--amber)">sell $41</span></div></div>
+    </details>
+    <details class="acc">
+      <summary>📜 Galaxy Log <span class="sum" style="color:var(--amber)">3 new</span></summary>
+      <div class="accbody"><div class="logline">Foggy charted Site 4</div><div class="logline">Arthur bagged a warlord</div><div class="logline">Market crash @ Mining 7</div></div>
+    </details>
+    <details class="acc">
+      <summary>⚙ Ship & Upgrades <span class="sum">Gjallarhorn</span></summary>
+      <div class="accbody"><div class="list-row"><span>Mods</span><span class="tw">Songbird · Reliquary Hold</span></div><div class="list-row"><span>Levels</span><span class="tw">Eng2 Shd1 Car2 Wpn2</span></div></div>
+    </details>
+    <p class="note">Everything stays visible — but grouped into <b>Vitals / Now / Records</b>, and the rarely-touched records collapse to one scannable line each (expand on click). Hierarchy by grouping + color, not tabs.</p>
+  </aside>
+
+  <!-- ===================== C: COCKPIT CLUSTER ===================== -->
+  <aside class="sidebar narrow" id="v-c" style="display:none">
+    <div class="vitals" style="text-align:center">
+      <div class="rankchip">✦ Wing Cmdr</div>
+      <div class="credits" style="font-size:18px">12,480</div>
+      <div class="gauge" style="grid-template-columns:16px 1fr"><span class="ico" style="color:var(--amber)">⛽</span><div class="seg"><i style="background:var(--amber)"></i><i style="background:var(--amber)"></i><i></i><i></i><i></i></div></div>
+      <div class="gauge" style="grid-template-columns:16px 1fr"><span class="ico" style="color:var(--ok)">❤</span><div class="seg"><i style="background:var(--ok)"></i><i style="background:var(--ok)"></i><i style="background:var(--ok)"></i><i style="background:var(--ok)"></i><i></i></div></div>
+      <div class="gauge" style="grid-template-columns:16px 1fr"><span class="ico" style="color:var(--blue)">🛡</span><div class="seg"><i style="background:var(--blue)"></i><i style="background:var(--blue)"></i><i style="background:var(--blue)"></i><i style="background:var(--blue)"></i></div></div>
+      <div class="gauge" style="grid-template-columns:16px 1fr"><span class="ico">▦</span><div class="seg"><i style="background:#5aa"></i><i style="background:#5aa"></i><i style="background:#5aa"></i><i></i></div></div>
+      <div class="chips" style="justify-content:center"><span class="chip warn">heat 45%</span></div>
+    </div>
+    <div class="iconcol">
+      <button class="iconbtn" onclick="cOpen('Navigation','<b>Frontier Reach</b> · 4210,-1832<br>Nearest: Meridian 40u E<br><br>DOCKING RANGE — SPACE to dock')">🧭 Nav</button>
+      <button class="iconbtn" onclick="cOpen('Cargo · 7/10','Ore ×3<br>Textiles ×2<br>Parts ×2')">▦ Cargo</button>
+      <button class="iconbtn" onclick="cOpen('Missions','5 Ore → Mining 7 · $600 (3/5)<br>☠ Redjaw near Frontier · $800')">◈ Missions <span class="bg">2</span></button>
+      <button class="iconbtn" onclick="cOpen('Ship — Gjallarhorn','Mods: Songbird · Reliquary Hold<br>Upgrades: Eng2 Shd1 Car2 Wpn2')">⚙ Ship</button>
+      <button class="iconbtn" onclick="cOpen('Reputation','Rustfang Cartel — Hostile<br>Meridian Guild — Friendly')">🛰 Rep <span class="bg" style="background:var(--red)">!</span></button>
+      <button class="iconbtn" onclick="cOpen('Galaxy Log','Foggy charted Site 4<br>Arthur bagged a warlord<br>Market crash @ Mining 7')">📜 Log <span class="bg">3</span></button>
+    </div>
+    <p class="note">Narrowest — gauges only. Deep info lives behind icon buttons that open overlays over the canvas (like the M map already does). Biggest canvas, most console-like; the boldest build & the biggest departure. <b>Try the buttons.</b></p>
+  </aside>
+
+  <!-- ===================== RECOMMENDED: CONTEXTUAL HYBRID ===================== -->
+  <aside class="sidebar" id="v-rec" style="display:none">
+    <div class="vitals">
+      <div class="vhead"><span class="rankchip">✦ Wing Commander</span><span class="credits">12,480</span></div>
+      <div class="xpbar"><i style="width:70%"></i></div>
+      <div class="gauge"><span class="ico" style="color:var(--amber)">⛽</span><div class="track"><i style="width:36%;background:var(--amber)"></i></div><span class="num">180/500</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--ok)">❤</span><div class="track"><i style="width:72%;background:var(--ok)"></i></div><span class="num">72/100</span></div>
+      <div class="gauge"><span class="ico" style="color:var(--blue)">🛡</span><div class="track"><i style="width:75%;background:var(--blue)"></i></div><span class="num">15/20</span></div>
+      <div class="gauge"><span class="ico">▦</span><div class="track"><i style="width:70%;background:#5aa"></i></div><span class="num">7/10</span></div>
+      <div class="chips">
+        <span class="chip">✷ Twin Lv2</span><span class="chip warn">heat 45%</span>
+        <span class="chip">◈ Missiles 3</span><span class="chip">⚔ ×1.5</span>
+      </div>
+    </div>
+
+    <div class="statebar">
+      <span style="color:var(--dim);font-size:10px;align-self:center;margin-right:2px">SITUATION →</span>
+      <button class="on" data-state="cruise">Cruising</button>
+      <button data-state="derelict">Near derelict</button>
+      <button data-state="dock">Docking range</button>
+      <button data-state="combat">In combat</button>
+      <button data-state="fuel">Low fuel</button>
+      <button data-state="docked">Docked</button>
+    </div>
+
+    <div class="nowzone" id="nowzone"><!-- filled by JS per state --></div>
+
+    <div class="tabs" id="rec-tabs">
+      <button class="on" data-tab="ship">Ship</button>
+      <button data-tab="log">Log</button>
+      <button data-tab="rep">Rep<span class="badge" style="background:var(--red)">!</span></button>
+      <button data-tab="ledger">Ledger</button>
+      <button data-tab="up">Upgrades</button>
+    </div>
+    <div class="tabbody">
+      <div class="tabpage on" data-page="ship"><h4>Gjallarhorn</h4>
+        <div class="list-row"><span>Mods</span><span style="color:#8ab">Songbird · Reliquary Hold</span></div></div>
+      <div class="tabpage" data-page="log"><h4>Ship Log</h4>
+        <div class="logline">Charted Ember Reach</div><div class="logline">Sold 12 ore at Mining 7</div></div>
+      <div class="tabpage" data-page="rep"><h4>Reputation</h4>
+        <div class="list-row"><span>Rustfang Cartel</span><span class="hostile">Hostile</span></div>
+        <div class="list-row"><span>Meridian Guild</span><span class="friendly">Friendly</span></div></div>
+      <div class="tabpage" data-page="ledger"><h4>Trade Ledger</h4>
+        <div class="list-row"><span>Meridian · Ore</span><span style="color:var(--ok)">buy $18</span></div>
+        <div class="list-row"><span>Mining 7 · Ore</span><span style="color:var(--amber)">sell $41</span></div></div>
+      <div class="tabpage" data-page="up"><h4>Upgrades</h4>
+        <div class="list-row"><span>Levels</span><span style="color:#8ab">Eng2 Shd1 Car2 Fuel1 Hull2 Wpn2</span></div></div>
+    </div>
+    <p class="note"><b>The recommendation.</b> Pinned gauges (always) + a <b>context-driven Now zone</b> that swaps with your situation — click the SITUATION buttons above. Near a derelict it shows salvage &amp; lore, <i>not</i> market prices; docked it becomes the trade summary. Reference (ship/log/rep/ledger/upgrades) stays tucked in tabs, identical in every state.</p>
+  </aside>
+</div>
+
+<script>
+  // starfield
+  const stars=document.getElementById('stars');
+  let s='';for(let i=0;i<90;i++){const x=Math.random()*100,y=Math.random()*100,o=Math.random()*.6+.15,sz=Math.random()<.1?2:1;
+    s+=`<span style="position:absolute;left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;background:#9fb;opacity:${o};border-radius:50%"></span>`;}
+  stars.innerHTML=s;
+
+  const blurbs={
+    rec:"<b>★ Recommended — Contextual Hybrid.</b> Pinned gauges you never lose + a Now zone that reads your situation and shows only what matters there (your derelict idea) + reference tucked in tabs. Combines A's finite height and B's always-visible context. <b>Click the SITUATION buttons in the sidebar</b> to watch the Now zone change.",
+    cur:"<b>Current.</b> Ten identical green boxes with identical cyan headers, stacked. Life-or-death vitals look the same as the Trade Ledger. Everything is text you must read; nothing is a gauge you scan. Reference panels (ledger, upgrades, rep, crew, log) sit permanently in the scroll, pushing vitals off-screen. This is the wall.",
+    a:"<b>A · Gauge HUD + Tabs.</b> Vitals leave the scroll entirely → a pinned gauge cluster (bars + icons + color). Everything else is ONE tab at a time, so the sidebar has a finite height. Action prompts float over the canvas. Best pure-legibility win; the biggest structural change to how info is reached.",
+    b:"<b>B · Grouped Dashboard.</b> Keeps the 'see everything at once' feel but imposes three zones — Vitals / Now / Records — with color + iconography, and collapses rarely-used records to one scannable line each. Lightest-touch, closest to today, least risk. Still one long column when everything's expanded.",
+    c:"<b>C · Cockpit Cluster.</b> Narrow gauge stack; deep panels move OUT of the sidebar into overlays behind icon buttons (like the map on M). Maximum canvas, most console-like (keeps the Iceswitch option warm). Boldest build, biggest departure from today's habits."
+  };
+  document.getElementById('blurb').innerHTML=blurbs.rec;
+
+  const banner=document.getElementById('actionBanner');
+  function show(v){
+    ['rec','cur','a','b','c'].forEach(k=>document.getElementById('v-'+k).style.display=(k===v?'':'none'));
+    document.querySelectorAll('.switch button').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
+    document.getElementById('blurb').innerHTML=blurbs[v];
+    // A & C float the action prompt; rec floats it only in cruise/dock states
+    banner.style.display=(v==='a'||v==='c')?'':'none';
+    document.getElementById('cOverlay').classList.remove('show');
+    if(v==='rec'){const on=document.querySelector('#v-rec .statebar button.on');setState(on?on.dataset.state:'cruise');}
+  }
+  document.querySelectorAll('.switch button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+  // A tabs
+  document.querySelectorAll('#v-a .tabs button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#v-a .tabs button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('#v-a .tabpage').forEach(p=>p.classList.toggle('on',p.dataset.page===b.dataset.tab));
+  });
+
+  // C overlays
+  function cOpen(title,html){
+    document.getElementById('cOvTitle').textContent=title;
+    document.getElementById('cOvBody').innerHTML=html;
+    document.getElementById('cOverlay').classList.add('show');
+  }
+  window.cOpen=cOpen;
+
+  // ---- Recommended: contextual Now zone ----
+  const NOW={
+    cruise:`<p class="ctx-h"><span>Cruising · Frontier Reach</span><span>4210, -1832</span></p>
+      <div class="big" style="color:var(--cyan)">Nearest: Meridian · 40u E</div>
+      <div style="color:var(--dim);margin-top:4px">Also nearby: Ember Reach (180)</div>
+      <div class="keys">Press <b>M</b> for map</div>`,
+    derelict:`<p class="ctx-h"><span style="color:#cc99ff">Sensor contact</span><span>320u NE</span></p>
+      <div class="poi"><span class="sym" style="color:#cc99ff">⬡</span><span class="big">The Wraith Cache</span></div>
+      <div style="color:#cc99ff;font-size:11px">Derelict · uncharted · salvage ready</div>
+      <div class="lore">"…the hull still hums where the crew should be."</div>
+      <div class="keys">Fly through to <b>chart</b> it — no market data here</div>`,
+    dock:`<p class="ctx-h"><span style="color:var(--green)">Docking range</span></p>
+      <div class="big" style="color:var(--green)">Meridian Station</div>
+      <div style="color:var(--dim);margin-top:4px">Agricultural · Meridian Guild (friendly)</div>
+      <div class="keys">Press <b>SPACE</b> to dock</div>`,
+    combat:`<p class="ctx-h"><span class="emerg">In combat</span><span style="color:var(--gold)">streak ×1.5</span></p>
+      <div class="poi"><span class="sym" style="color:var(--red)">☠</span><span class="big">Redjaw</span><span style="color:var(--red);margin-left:auto">$800</span></div>
+      <div style="color:var(--red);font-size:11px">3 hostiles · nearest 210u</div>
+      <div class="emerg" style="font-size:11px;margin-top:6px">✖ SHIELDS DOWN</div>
+      <div class="keys"><b>X</b> lasers · <b>C</b> missile · <b>Z</b> switch</div>`,
+    fuel:`<p class="ctx-h"><span class="emerg">⚠ Emergency power</span></p>
+      <div class="emerg big">Fuel exhausted — solar sail crawl</div>
+      <div style="color:var(--amber);font-size:11px;margin-top:4px">Nearest fuel: Meridian · 40u E</div>
+      <div class="keys">Limp to a station or hail for a tow</div>`,
+    docked:`<p class="ctx-h"><span style="color:var(--cyan)">Docked · Meridian Station</span></p>
+      <div class="list-row"><span>Ore</span><span style="color:var(--ok)">buy $18</span></div>
+      <div class="list-row"><span>Textiles</span><span style="color:var(--amber)">sell $54</span></div>
+      <div class="keys" style="margin-top:8px"><b>ENTER</b> full trade · refuel · shipyard · missions</div>`
+  };
+  function setState(s){
+    document.getElementById('nowzone').innerHTML=NOW[s]||NOW.cruise;
+    document.querySelectorAll('#v-rec .statebar button').forEach(b=>b.classList.toggle('on',b.dataset.state===s));
+    // float the canvas banner only for cruise/dock (an actual on-canvas prompt)
+    banner.style.display=(document.getElementById('v-rec').style.display!=='none' && (s==='cruise'||s==='dock'))?'':'none';
+  }
+  document.querySelectorAll('#v-rec .statebar button').forEach(b=>b.onclick=()=>setState(b.dataset.state));
+  document.querySelectorAll('#rec-tabs button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#rec-tabs button').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('#v-rec .tabpage').forEach(p=>p.classList.toggle('on',p.dataset.page===b.dataset.tab));
+  });
+  setState('cruise');
+  show('rec'); // default to the recommendation
+</script>
+</body>
+</html>

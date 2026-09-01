@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ship Bay — design, outfit, power</title>
+<style>
+  :root{
+    --bg:#050805;--panel:#001100;--edge:#0a5a0a;--edge-soft:#063806;
+    --green:#00ff00;--cyan:#00ffff;--dim:#5a7a5a;--gold:#ffdd44;
+    --amber:#ffaa00;--red:#ff4d4d;--blue:#44aaff;--ok:#55cc66;--relic:#cc99ff;--tech:#00ffff;
+    --font:'Courier New',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--green);font-family:var(--font);
+    display:flex;min-height:100vh;font-size:13px}
+  .schemcol{width:420px;flex-shrink:0;border-right:2px solid var(--edge);padding:16px 18px;position:sticky;top:0;height:100vh;overflow:auto}
+  .listcol{flex:1;padding:16px 22px;max-width:720px}
+  h1{font-size:16px;color:var(--cyan);margin:0 0 2px}
+  .sub{color:var(--dim);font-size:12px;margin:0 0 12px}
+  svg{width:100%;max-width:360px;height:auto;display:block;margin:0 auto;overflow:visible}
+
+  /* budgets */
+  .budget{margin:10px 0}
+  .budget .lab{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+  .budget .lab b{color:#dfffdf}
+  .track{height:16px;background:#0a1a0a;border:1px solid var(--edge-soft);border-radius:3px;overflow:hidden;position:relative}
+  .track>i{display:block;height:100%;transition:width .25s}
+  .track .tick{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff8}
+  .over{color:var(--red);font-weight:bold}
+
+  /* component groups */
+  .grp{margin:16px 0 6px;font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;
+    border-bottom:1px solid var(--edge-soft);padding-bottom:4px}
+  .comp{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:start;
+    padding:9px 10px;margin:6px 0;border:1px solid var(--edge-soft);border-radius:5px;background:#02140a}
+  .comp.off{opacity:.5}
+  .comp.empty{border-style:dashed;background:none;color:var(--dim)}
+  .dot{width:10px;height:10px;border-radius:50%;margin-top:3px}
+  .comp .nm{color:#dfffdf;font-weight:bold}
+  .comp .src{color:var(--dim);font-size:11px}
+  .comp .src b{color:var(--amber)}
+  .comp .fx{font-size:11px;margin-top:3px}
+  .comp .fx .good{color:var(--ok)}
+  .comp .fx .bad{color:var(--red)}
+  .comp .meta{text-align:right;font-size:11px;white-space:nowrap}
+  .comp .meta .pw{color:var(--gold)}
+  .comp .meta .by{color:#8ab}
+  .comp button{font-family:var(--font);background:#031803;color:#bfe;border:1px solid var(--edge);
+    border-radius:3px;padding:3px 8px;cursor:pointer;font-size:11px;margin-top:5px}
+  .comp button:hover{border-color:var(--green);color:#fff}
+
+  .install{border:1px solid var(--edge);border-radius:6px;padding:12px 14px;margin:16px 0;background:#02100a}
+  .install h3{margin:0 0 8px;font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+  .msg{margin-top:8px;font-size:12px;min-height:18px}
+  .msg.err{color:var(--red)}.msg.ok{color:var(--ok)}
+  .econ{margin-top:20px;padding:12px 14px;border-top:1px solid var(--edge-soft);color:var(--dim);
+    font-size:12px;line-height:1.6}
+  .econ b{color:var(--amber)} .econ code{color:#bfe}
+  .lvl{color:var(--relic)}
+</style>
+</head>
+<body>
+  <!-- ===== SCHEMATIC (the detail view of the same ship) ===== -->
+  <div class="schemcol">
+    <h1>◆ SHIP BAY — Gjallarhorn</h1>
+    <p class="sub">Pelican Freighter · design &amp; outfit</p>
+    <svg viewBox="0 0 240 320" id="ship">
+      <path d="M120 6 C186 34 206 128 200 218 C196 270 150 300 120 300 C90 300 44 270 40 218 C34 128 54 34 120 6 Z"
+            fill="none" stroke="var(--blue)" stroke-width="4" stroke-opacity="0.6"/>
+      <path d="M120 20 L150 74 L156 182 L138 262 L120 280 L102 262 L84 182 L90 74 Z"
+            fill="#04140a" stroke="var(--ok)" stroke-width="2.5"/>
+      <polygon points="120,20 134,60 106,60" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+      <path d="M84 160 L64 186 L70 248 L92 232 Z" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+      <path d="M156 160 L176 186 L170 248 L148 232 Z" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+      <circle cx="120" cy="90" r="10" fill="#0a2a14" stroke="var(--cyan)" stroke-width="2"/>
+      <g id="bayGrid"></g>
+      <!-- slot markers (filled by JS, colored to match component list) -->
+      <g id="markers"></g>
+      <text x="120" y="120" fill="var(--dim)" font-size="7" text-anchor="middle">CARGO</text>
+    </svg>
+    <p class="sub" style="text-align:center;margin-top:8px">Slot dots match the component list →<br>filled bay grid = current cargo</p>
+  </div>
+
+  <!-- ===== COMPONENTS + BUDGETS ===== -->
+  <div class="listcol">
+    <div class="budget">
+      <div class="lab"><span>⚡ REACTOR — <b id="coreName">Ember Cell</b> <span class="src" style="color:var(--dim)">(Ferrovolt Ore)</span></span>
+        <span><span id="drawN">10</span> / <b id="outN">12</b> drawn</span></div>
+      <div class="track"><i id="powBar" style="background:var(--gold)"></i></div>
+    </div>
+    <div class="budget">
+      <div class="lab"><span>▦ HULL BAYS</span><span><span id="bayN">9</span> / <b id="bayMax">12</b> used</span></div>
+      <div class="track"><i id="bayBar" style="background:#5aa"></i></div>
+    </div>
+
+    <div id="list"></div>
+
+    <div class="install">
+      <h3>Available at this shipyard — mind the budgets</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="tryInstall('aegis')">Install “Aegis-II Emitter” (+30 shield · draws 6⚡ · 1 bay)</button>
+        <button onclick="swapCore()">Swap core → “Fusion Torus” (outputs 20⚡ · 3 bays)</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div class="econ">
+      <b>The production chain:</b> components are refined at factories from the same market goods you trade —
+      the <b>Ferrovolt Ore</b> in your core is the ore you buy and sell; <b>Cognition Cores</b> become droid brains;
+      <b>Panacea Vials</b> stock the med bay; <b>Precursor Relics</b> make exotic tech. Raw goods can't bolt onto a
+      hull — <code>ore → refinery → capacitor → install</code>. No "levels": you're the designer, gated by
+      <span class="lvl">power</span> and <span class="lvl">space</span>.
+    </div>
+  </div>
+
+<script>
+  const $=id=>document.getElementById(id);
+  const NS='http://www.w3.org/2000/svg';
+
+  // component model — the real game lore, given slots + power
+  let coreOut=12;
+  const comps=[
+    {grp:'Core systems',nm:'Ember Cell',src:'Ferrovolt Ore',role:'reactor',out:12,pw:0,by:2,color:'#ffdd44',
+      fx:[['Outputs 12⚡ to the whole ship','good']],part:[120,214],fixed:true},
+    {grp:'Core systems',nm:"Saint Elmo's Capacitor",src:'Ferrovolt Ore',role:'shield',pw:3,by:1,color:'#44aaff',
+      fx:[['+15 shield','good'],['hums a hymn when it charges','']],part:[120,286],on:true,toggle:true},
+    {grp:'Core systems',nm:'Ion Thrusters',src:'Ferrovolt Ore',role:'engine',pw:3,by:1,color:'#55cc66',
+      fx:[['thrust 3.2','good']],part:[74,208],on:true,toggle:true},
+    {grp:'Core systems',nm:"Old Grinner's Cannon Bore",src:'Precursor-forged',role:'weapon',pw:2,by:1,color:'#ff6688',
+      fx:[['+15% laser damage','good'],['+15% heat','bad']],part:[120,46],on:true,toggle:true},
+    {grp:'Core systems',nm:'Reef Recycler',src:'Panacea Vials',role:'life',pw:1,by:1,color:'#66ff99',
+      fx:[['life support · crew stay alive','good']],part:[120,90],on:true,toggle:true},
+
+    {grp:'Cargo',nm:'Reliquary Hold',src:'Precursor Relics',role:'cargo',pw:0,by:2,color:'#cc99ff',
+      fx:[['fireproof relic hold — cargo survives a wreck','good']],part:[108,150]},
+    {grp:'Cargo',nm:'Vex-Pattern Compressor',src:'Repair Kits',role:'cargo',pw:0,by:1,color:'#88ffee',
+      fx:[['+6 cargo','good'],['runs lasers 10% hotter','bad']],part:[132,150]},
+
+    {grp:'Crew & droids',nm:'Berth — Sparks (Engineer)',src:'Glowgrain',role:'crew',pw:0,by:1,color:'#ffaa00',
+      fx:[['repairs subsystems faster','good']],part:[96,168]},
+    {grp:'Crew & droids',nm:'Gunner Station — Vex',src:'—',role:'crew',pw:1,by:1,color:'#ffaa00',
+      fx:[['independent turret fire','good']],part:[144,168],on:true,toggle:true},
+    {grp:'Crew & droids',nm:'Droid socket — empty',src:'takes Cognition Cores',role:'droid',empty:true,by:1,part:[120,132],
+      fx:[['install a Nav Droid (autopilot) or AI Gunner','']]},
+    {grp:'Med',nm:'Med bay — empty',src:'takes Panacea Vials',role:'med',empty:true,by:1,part:[120,240],
+      fx:[['a bacta tank heals hull over time','']]},
+  ];
+
+  // cargo grid (current load 7/10)
+  (function(){const g=$('bayGrid');const x0=104,y0=126,cw=14,ch=15,gap=3;
+    for(let r=0;r<5;r++)for(let c=0;c<2;c++){const i=r*2+c;const rect=document.createElementNS(NS,'rect');
+      rect.setAttribute('x',x0+c*(cw+gap));rect.setAttribute('y',y0+r*(ch+gap));
+      rect.setAttribute('width',cw);rect.setAttribute('height',ch);rect.setAttribute('rx',2);
+      const filled=i<7;rect.setAttribute('fill',filled?(i<2?'var(--relic)':'var(--ok)'):'#081808');
+      rect.setAttribute('stroke',filled?'var(--green)':'var(--edge-soft)');rect.setAttribute('stroke-width','1');
+      g.appendChild(rect);}})();
+
+  function draw(){
+    // schematic markers
+    const mg=$('markers');mg.innerHTML='';
+    comps.forEach(c=>{if(!c.part)return;
+      const dot=document.createElementNS(NS,'circle');
+      dot.setAttribute('cx',c.part[0]);dot.setAttribute('cy',c.part[1]);dot.setAttribute('r',c.empty?4:5);
+      dot.setAttribute('fill',c.empty?'none':(c.on===false?'#333':c.color));
+      dot.setAttribute('stroke',c.empty?'var(--dim)':'#000');dot.setAttribute('stroke-width','1');
+      if(c.empty)dot.setAttribute('stroke-dasharray','2 2');
+      mg.appendChild(dot);});
+
+    // list grouped
+    const L=$('list');L.innerHTML='';let lastGrp='';
+    comps.forEach((c,idx)=>{
+      if(c.grp!==lastGrp){const h=document.createElement('div');h.className='grp';h.textContent=c.grp;L.appendChild(h);lastGrp=c.grp;}
+      const row=document.createElement('div');
+      row.className='comp'+(c.empty?' empty':'')+(c.on===false?' off':'');
+      const fx=c.fx.map(f=>`<span class="${f[1]}">${f[0]}</span>`).join(' · ');
+      row.innerHTML=`
+        <span class="dot" style="background:${c.empty?'transparent':(c.on===false?'#333':c.color)};${c.empty?'border:1px dashed var(--dim)':''}"></span>
+        <div>
+          <div class="nm">${c.nm}</div>
+          <div class="src">${c.role==='reactor'?'source':'built from'} <b>${c.src}</b></div>
+          <div class="fx">${fx}</div>
+          ${c.toggle?`<button data-i="${idx}" class="tog">${c.on===false?'▷ power on':'▮ power off'}</button>`:''}
+        </div>
+        <div class="meta">${c.out?`<div class="pw">+${c.out}⚡</div>`:c.pw?`<div class="pw">−${c.pw}⚡</div>`:'<div class="pw" style="color:var(--dim)">0⚡</div>'}<div class="by">${c.by} bay${c.by>1?'s':''}</div></div>`;
+      L.appendChild(row);
+    });
+    L.querySelectorAll('.tog').forEach(b=>b.onclick=()=>{const c=comps[+b.dataset.i];c.on=!(c.on!==false);draw();});
+
+    // budgets
+    const draw_=comps.filter(c=>c.on!==false&&c.pw).reduce((a,c)=>a+c.pw,0);
+    const bays=comps.filter(c=>!c.empty).reduce((a,c)=>a+c.by,0);
+    $('drawN').textContent=draw_;$('outN').textContent=coreOut;
+    $('coreName').textContent=comps.find(c=>c.role==='reactor').nm;
+    const over=draw_>coreOut;
+    $('drawN').className=over?'over':'';
+    $('powBar').style.width=Math.min(100,draw_/coreOut*100)+'%';
+    $('powBar').style.background=over?'var(--red)':draw_/coreOut>0.85?'var(--amber)':'var(--gold)';
+    $('bayN').textContent=bays;$('bayMax').textContent=12;
+    $('bayBar').style.width=Math.min(100,bays/12*100)+'%';
+    $('bayBar').style.background=bays>12?'var(--red)':'#5aa';
+    return {draw_,bays};
+  }
+
+  function freePower(){return coreOut-comps.filter(c=>c.on!==false&&c.pw).reduce((a,c)=>a+c.pw,0);}
+  function freeBays(){return 12-comps.filter(c=>!c.empty).reduce((a,c)=>a+c.by,0);}
+
+  window.tryInstall=function(what){
+    const m=$('msg');
+    if(what==='aegis'){
+      const needPw=6,needBy=1;
+      if(freeBays()<needBy){m.className='msg err';m.textContent='✖ No free bay — remove something first.';return;}
+      if(freePower()<needPw){m.className='msg err';
+        m.textContent=`✖ Insufficient power: Aegis-II draws 6⚡, only ${freePower()}⚡ free. Swap to a bigger core, or power a system down.`;return;}
+      // install: replace the capacitor
+      const s=comps.find(c=>c.role==='shield');s.nm='Aegis-II Emitter';s.src='Ferrovolt Ore + Precursor Relics';s.pw=6;
+      s.fx=[['+30 shield','good'],['thicker envelope — drains slower','good']];s.on=true;
+      m.className='msg ok';m.textContent='✔ Aegis-II installed — shields hold far longer. Watch your power headroom.';
+      draw();
+    }
+  };
+  window.swapCore=function(){
+    coreOut=20;const r=comps.find(c=>c.role==='reactor');r.nm='Fusion Torus';r.src='Precursor Relics';r.out=20;r.by=3;
+    $('msg').className='msg ok';$('msg').textContent='✔ Fusion Torus online — 20⚡. Now the Aegis-II fits with headroom to spare.';
+    draw();
+  };
+
+  draw();
+</script>
+</body>
+</html>

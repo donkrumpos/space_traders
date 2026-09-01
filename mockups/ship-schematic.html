@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ship Schematic — one image, all the state</title>
+<style>
+  :root{
+    --bg:#050805;--panel:#001100;--edge:#0a5a0a;--edge-soft:#063806;
+    --green:#00ff00;--cyan:#00ffff;--dim:#5a7a5a;--gold:#ffdd44;
+    --amber:#ffaa00;--red:#ff4d4d;--blue:#44aaff;--ok:#55cc66;--relic:#cc99ff;
+    --font:'Courier New',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--green);font-family:var(--font);display:flex;min-height:100vh}
+  .left{flex:1;padding:20px 26px;max-width:560px}
+  .right{width:360px;flex-shrink:0;border-left:2px solid var(--edge);background:var(--panel);padding:0}
+  h1{font-size:16px;color:var(--cyan);margin:0 0 4px}
+  p.lede{color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 18px}
+  p.lede b{color:var(--gold)}
+
+  /* controls */
+  .ctl{border:1px solid var(--edge-soft);border-radius:5px;padding:12px 14px;margin:10px 0;background:#02140a}
+  .ctl h3{margin:0 0 10px;font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+  .rowc{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:12px}
+  .rowc label{width:96px;color:#bfe}
+  input[type=range]{flex:1;accent-color:var(--green)}
+  .val{width:64px;text-align:right;font-variant-numeric:tabular-nums;color:#cfe}
+  button{font-family:var(--font);background:#031803;color:#bfe;border:1px solid var(--edge);
+    border-radius:4px;padding:6px 10px;cursor:pointer;font-size:12px}
+  button:hover{border-color:var(--green);color:#dfffdf}
+  button.on{background:var(--red);border-color:var(--red);color:#fff}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* the HUD panel on the right — schematic + numerics */
+  .hud-title{color:var(--cyan);font-size:13px;padding:12px 14px 6px;border-bottom:1px solid var(--edge-soft);
+    display:flex;justify-content:space-between}
+  .hud-title .name{color:#dfffdf}
+  .schem{padding:6px 10px 2px;display:flex;justify-content:center}
+  svg{width:100%;max-width:300px;height:auto;overflow:visible}
+
+  /* numerics strip under the schematic — the digits for planning */
+  .nums{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;padding:6px 16px 12px;font-size:12px}
+  .nums .n{display:flex;justify-content:space-between}
+  .nums .k{color:var(--dim)}
+  .nums .v{font-variant-numeric:tabular-nums;color:#cfe}
+  .legend{padding:6px 16px 14px;font-size:10px;color:var(--dim);line-height:1.6;border-top:1px solid var(--edge-soft)}
+  .legend b{color:#bfe}
+
+  /* damage flash */
+  @keyframes redflash{0%,100%{opacity:.15}50%{opacity:.9}}
+  .flash{animation:redflash 0.7s ease-in-out infinite}
+  .badge-c{fill:#021002;stroke:var(--green);stroke-width:1.5}
+  .badge-t{fill:#cfe;font:bold 11px var(--font);text-anchor:middle;dominant-baseline:central}
+</style>
+</head>
+<body>
+  <div class="left">
+    <h1>SHIP SCHEMATIC — one image does the work of four panels</h1>
+    <p class="lede">Your idea, built. The picture <b>is</b> the readout: subsystem <b>level badges</b>, a <b>cargo bay that fills cell-by-cell</b>, a <b>shield envelope</b> that thins as it drops, and hull / engines / life-support that <b>flash red exactly where you're hit</b>. Drag and toggle below — watch the same image carry all of it. (This is a vector sketch; swap in drawn / pixel art later — it never rotates, so no rotation-frame cost.)</p>
+
+    <div class="ctl">
+      <h3>Integrity</h3>
+      <div class="rowc"><label>Hull</label><input id="hull" type="range" min="0" max="100" value="72"><span class="val" id="hullV">72 / 100</span></div>
+      <div class="rowc"><label>Shield</label><input id="shield" type="range" min="0" max="20" value="15"><span class="val" id="shieldV">15 / 20</span></div>
+      <div class="rowc"><label>Fuel</label><input id="fuel" type="range" min="0" max="500" value="180"><span class="val" id="fuelV">180 / 500</span></div>
+    </div>
+
+    <div class="ctl">
+      <h3>Cargo bay · fills the grid</h3>
+      <div class="rowc"><label>Units</label><input id="cargo" type="range" min="0" max="10" value="7"><span class="val" id="cargoV">7 / 10</span></div>
+      <div class="rowc" style="color:var(--dim);font-size:11px">Cells fill in order — relics show violet, goods green.</div>
+    </div>
+
+    <div class="ctl">
+      <h3>Subsystem damage · flashes on the diagram</h3>
+      <div class="btnrow">
+        <button id="d-engines">Knock out Engines</button>
+        <button id="d-life">Knock out Life Support</button>
+        <button id="d-weapon">Weapon overheat</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <h3>Upgrade levels · badges on each part</h3>
+      <div class="rowc"><label>Engines</label><input id="lvl-eng" type="range" min="1" max="5" value="2"><span class="val" id="lvl-engV">Lv 2</span></div>
+      <div class="rowc"><label>Weapons</label><input id="lvl-wpn" type="range" min="1" max="5" value="2"><span class="val" id="lvl-wpnV">Lv 2</span></div>
+      <div class="rowc"><label>Shields</label><input id="lvl-shd" type="range" min="1" max="5" value="1"><span class="val" id="lvl-shdV">Lv 1</span></div>
+      <div class="rowc"><label>Cargo</label><input id="lvl-car" type="range" min="1" max="5" value="2"><span class="val" id="lvl-carV">Lv 2</span></div>
+    </div>
+  </div>
+
+  <!-- ============ THE HUD PANEL ============ -->
+  <div class="right">
+    <div class="hud-title"><span class="name">◆ Gjallarhorn</span><span style="color:var(--gold)">✦ Wing Cmdr</span></div>
+    <div class="schem">
+      <svg viewBox="0 0 240 300" id="ship">
+        <!-- shield envelope -->
+        <path id="shieldEnv" d="M120 6 C186 34 206 120 200 210 C196 262 150 292 120 292 C90 292 44 262 40 210 C34 120 54 34 120 6 Z"
+              fill="none" stroke="var(--blue)" stroke-width="3" stroke-opacity="0.7"/>
+        <!-- hull body -->
+        <path id="hullBody" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+              fill="#04140a" stroke="var(--ok)" stroke-width="2.5"/>
+        <!-- hull damage overlay (red, flashes when low) -->
+        <path id="hullDmg" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+              fill="var(--red)" fill-opacity="0" stroke="none"/>
+
+        <!-- nose / weapon mount -->
+        <polygon id="weaponMount" points="120,20 134,58 106,58" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+        <!-- missiles pips -->
+        <g id="missiles"></g>
+
+        <!-- engines: two nacelles -->
+        <path id="engL" d="M84 150 L64 175 L70 235 L92 220 Z" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+        <path id="engR" d="M156 150 L176 175 L170 235 L148 220 Z" fill="#06210f" stroke="var(--green)" stroke-width="2"/>
+        <!-- thruster glow -->
+        <ellipse id="thrL" cx="79" cy="236" rx="8" ry="4" fill="var(--amber)" opacity="0.8"/>
+        <ellipse id="thrR" cx="161" cy="236" rx="8" ry="4" fill="var(--amber)" opacity="0.8"/>
+
+        <!-- cargo bay grid (2 cols x 5 rows) -->
+        <g id="cargoGrid"></g>
+        <text x="120" y="104" fill="var(--dim)" font-size="8" text-anchor="middle" font-family="var(--font)">CARGO</text>
+
+        <!-- life support core -->
+        <circle id="lifeCore" cx="120" cy="86" r="10" fill="#0a2a14" stroke="var(--cyan)" stroke-width="2"/>
+        <circle id="lifeCoreDmg" cx="120" cy="86" r="10" fill="var(--red)" fill-opacity="0"/>
+
+        <!-- fuel tank spine -->
+        <rect x="114" y="196" width="12" height="52" rx="3" fill="#0a1a0a" stroke="var(--edge)" stroke-width="1.5"/>
+        <rect id="fuelFill" x="114" y="196" width="12" height="52" rx="3" fill="var(--amber)"/>
+
+        <!-- badges (added by JS): weapon, engines x2, shield, cargo -->
+        <g id="badges"></g>
+      </svg>
+    </div>
+
+    <!-- the digits, for planning -->
+    <div class="nums">
+      <div class="n"><span class="k">Hull</span><span class="v" id="nHull">72 / 100</span></div>
+      <div class="n"><span class="k">Shield</span><span class="v" id="nShield">15 / 20</span></div>
+      <div class="n"><span class="k">Fuel</span><span class="v" id="nFuel">180 / 500</span></div>
+      <div class="n"><span class="k">Cargo</span><span class="v" id="nCargo">7 / 10</span></div>
+      <div class="n"><span class="k">Missiles</span><span class="v" id="nMiss">3 / 5</span></div>
+      <div class="n"><span class="k">Weapon</span><span class="v" id="nWpn">Twin Lv2</span></div>
+    </div>
+    <div class="legend">
+      <b>Badges</b> = upgrade level per part · <b>bay grid</b> = cargo (violet = relics) · <b>blue envelope</b> = shields · <b>red flash</b> = the exact part taking damage. One glance tells you what's wrong and where.
+    </div>
+  </div>
+
+<script>
+  const $=id=>document.getElementById(id);
+  const NS='http://www.w3.org/2000/svg';
+
+  // ---- cargo grid ----
+  const bay={x0:100,y0:112,cols:2,rows:5,cw:18,ch:22,gap:4};
+  const cells=[];
+  (function(){
+    const g=$('cargoGrid');
+    for(let r=0;r<bay.rows;r++)for(let c=0;c<bay.cols;c++){
+      const rect=document.createElementNS(NS,'rect');
+      rect.setAttribute('x',bay.x0+c*(bay.cw+bay.gap));
+      rect.setAttribute('y',bay.y0+r*(bay.ch+bay.gap));
+      rect.setAttribute('width',bay.cw);rect.setAttribute('height',bay.ch);
+      rect.setAttribute('rx',2);
+      rect.setAttribute('fill','#081808');rect.setAttribute('stroke','var(--edge-soft)');rect.setAttribute('stroke-width','1');
+      g.appendChild(rect);cells.push(rect);
+    }
+  })();
+
+  // ---- missiles pips ----
+  function drawMissiles(n){
+    const g=$('missiles');g.innerHTML='';
+    for(let i=0;i<5;i++){
+      const c=document.createElementNS(NS,'circle');
+      c.setAttribute('cx',108+i*6);c.setAttribute('cy',48);c.setAttribute('r',2);
+      c.setAttribute('fill',i<n?'var(--gold)':'#333');g.appendChild(c);
+    }
+  }
+
+  // ---- badge helper ----
+  function badge(x,y,txt){
+    const g=document.createElementNS(NS,'g');
+    const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',9);c.setAttribute('class','badge-c');
+    const t=document.createElementNS(NS,'text');
+    t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('class','badge-t');t.textContent=txt;
+    g.appendChild(c);g.appendChild(t);return g;
+  }
+  function drawBadges(){
+    const g=$('badges');g.innerHTML='';
+    g.appendChild(badge(120,40,$('lvl-wpn').value)); // weapon nose
+    g.appendChild(badge(74,200,$('lvl-eng').value));  // engine L
+    g.appendChild(badge(166,200,$('lvl-eng').value)); // engine R
+    g.appendChild(badge(120,150,$('lvl-car').value)); // cargo
+    g.appendChild(badge(120,270,$('lvl-shd').value)); // shield (tail)
+  }
+
+  function hullColor(pct){return pct>66?'var(--ok)':pct>33?'var(--amber)':'var(--red)';}
+
+  function render(){
+    // hull
+    const h=+$('hull').value;
+    $('hullV').textContent=h+' / 100';$('nHull').textContent=h+' / 100';
+    $('hullBody').setAttribute('stroke',hullColor(h));
+    // red overlay grows + flashes as hull drops
+    const dmg=$('hullDmg');
+    dmg.setAttribute('fill-opacity', h>66?0 : (0.12+(66-h)/66*0.35).toFixed(2));
+    dmg.classList.toggle('flash', h<=33);
+
+    // shield envelope
+    const s=+$('shield').value, sMax=20;
+    $('shieldV').textContent=s+' / '+sMax;$('nShield').textContent=s+' / '+sMax;
+    const env=$('shieldEnv');
+    env.setAttribute('stroke-opacity', s<=0?0.05 : (0.25+s/sMax*0.6).toFixed(2));
+    env.setAttribute('stroke-width', s<=0?1.5 : (2+s/sMax*2.5).toFixed(1));
+    env.setAttribute('stroke', s<=0?'#335':'var(--blue)');
+
+    // fuel tank fill (bottom-anchored)
+    const f=+$('fuel').value, fMax=500, fh=52*(f/fMax);
+    $('fuelV').textContent=f+' / '+fMax;$('nFuel').textContent=f+' / '+fMax;
+    $('fuelFill').setAttribute('y',196+(52-fh));$('fuelFill').setAttribute('height',fh);
+    $('fuelFill').setAttribute('fill', f<50?'var(--red)':f<125?'var(--amber)':'#d9902a');
+
+    // cargo grid fill
+    const cg=+$('cargo').value;
+    $('cargoV').textContent=cg+' / 10';$('nCargo').textContent=cg+' / 10';
+    cells.forEach((cell,i)=>{
+      if(i<cg){cell.setAttribute('fill', i<2?'var(--relic)':'var(--ok)');cell.setAttribute('stroke','var(--green)');}
+      else{cell.setAttribute('fill','#081808');cell.setAttribute('stroke','var(--edge-soft)');}
+    });
+
+    // level readouts
+    ['eng','wpn','shd','car'].forEach(k=>$('lvl-'+k+'V').textContent='Lv '+$('lvl-'+k).value);
+    $('nWpn').textContent='Twin Lv'+$('lvl-wpn').value;
+    drawBadges();
+  }
+
+  // subsystem toggles
+  function bindToggle(btn,onFn){
+    let on=false;
+    $(btn).onclick=()=>{on=!on;$(btn).classList.toggle('on',on);onFn(on);};
+  }
+  bindToggle('d-engines',on=>{
+    ['engL','engR'].forEach(id=>{$(id).setAttribute('stroke',on?'var(--red)':'var(--green)');$(id).classList.toggle('flash',on);});
+    ['thrL','thrR'].forEach(id=>$(id).setAttribute('opacity',on?0.1:0.8));
+  });
+  bindToggle('d-life',on=>{
+    $('lifeCore').setAttribute('stroke',on?'var(--red)':'var(--cyan)');
+    $('lifeCoreDmg').setAttribute('fill-opacity',on?0.5:0);
+    $('lifeCoreDmg').classList.toggle('flash',on);
+  });
+  bindToggle('d-weapon',on=>{
+    $('weaponMount').setAttribute('stroke',on?'var(--red)':'var(--green)');
+    $('weaponMount').setAttribute('fill',on?'#3a0a0a':'#06210f');
+    $('weaponMount').classList.toggle('flash',on);
+    $('nWpn').style.color=on?'var(--red)':'#cfe';
+    $('nWpn').textContent=on?'OVERHEATED':'Twin Lv'+$('lvl-wpn').value;
+  });
+
+  ['hull','shield','fuel','cargo','lvl-eng','lvl-wpn','lvl-shd','lvl-car'].forEach(id=>$(id).oninput=render);
+  drawMissiles(3);render();
+</script>
+</body>
+</html>
