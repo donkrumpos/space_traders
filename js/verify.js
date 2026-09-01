@@ -972,6 +972,47 @@ VERIFY_SUITES.now = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.icons = (assert) => {
+    // Goods glyph language (visual-language Slice A): one drawn symbol per
+    // good in the injected sprite, rendered only through goodIcon(), and
+    // present on every surface that names a good.
+    const ship = game.ship;
+    const saved = { cargo: { ...ship.cargo }, missions: game.missions, ledger: economy.ledger };
+
+    const goodKeys = Object.keys(goods);
+    assert('sprite carries one symbol per good',
+        document.querySelectorAll('#glyphSprite symbol').length === goodKeys.length &&
+        goodKeys.every(g => document.getElementById('g-' + g)));
+    assert('goodIcon renders a use of the right symbol',
+        goodIcon('relics').includes('href="#g-relics"') &&
+        goodIcon('relics').includes('<title>Precursor Relics</title>'));
+    assert('unknown goods degrade to a colored square, not a hole',
+        goodIcon('nonsense') === '' && !goodIcon('nonsense').includes('<use'));
+
+    ship.cargo = { materials: 3 };
+    updateUI();
+    assert('cargo manifest leads with the glyph',
+        document.getElementById('cargoManifest').innerHTML.includes('#g-materials'));
+
+    economy.ledger = { 'Verify Port': { buy: { food: 12 }, sell: { technology: 55 } } };
+    updateLedgerUI();
+    const ledgerHtml = document.getElementById('ledgerList').innerHTML;
+    assert('ledger rows carry glyphs for both sides',
+        ledgerHtml.includes('#g-food') && ledgerHtml.includes('#g-technology'));
+
+    game.missions = [{ type: 'delivery', qty: 2, goodType: 'medicine', dest: 'Verify Port', reward: 100 }];
+    updateMissionsUI();
+    assert('delivery missions carry the cargo glyph',
+        document.getElementById('missionList').innerHTML.includes('#g-medicine'));
+
+    ship.cargo = saved.cargo;
+    game.missions = saved.missions;
+    economy.ledger = saved.ledger;
+    updateMissionsUI();
+    updateLedgerUI();
+    updateUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

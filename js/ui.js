@@ -242,7 +242,7 @@ function updateSchematic(els) {
         // Compact manifest under the numerics strip (what, not just how much)
         const manifest = Object.keys(goods)
             .filter(type => (ship.cargo[type] || 0) > 0)
-            .map(type => `<span style="color:${goods[type].color}">■</span> ${ship.cargo[type]} ${goods[type].name}`)
+            .map(type => `${goodIcon(type)} ${ship.cargo[type]} ${goods[type].name}`)
             .join(' · ');
         vHtml('manifest', els.cargoManifest, manifest);
     }

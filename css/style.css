@@ -356,6 +356,15 @@ body {
     50% { opacity: 0.35; }
 }
 
+/* Goods glyphs (visual-language Slice A) — inline drawn icons from the
+   #glyphSprite symbol sheet; js/icons.js goodIcon() is the only producer. */
+.gicon {
+    width: 16px;
+    height: 16px;
+    vertical-align: -3px;
+    margin-right: 3px;
+}
+
 .cargo-item {
     display: flex;
     justify-content: space-between;

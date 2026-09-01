@@ -123,10 +123,10 @@ function updateLedgerUI() {
         const eventMark = economy.marketEvent && economy.marketEvent.planetName === name ? ' ⚡' : '';
         html += `<div style="color:#00ffff; margin-top:6px;">${name}${eventMark}</div>`;
         Object.keys(entry.buy).forEach(g => {
-            html += `<div class="ledger-row"><span>${goods[g].name}</span><span style="color:#88ff88;">buy $${entry.buy[g]}</span></div>`;
+            html += `<div class="ledger-row"><span>${goodIcon(g)}${goods[g].name}</span><span style="color:#88ff88;">buy $${entry.buy[g]}</span></div>`;
         });
         Object.keys(entry.sell).forEach(g => {
-            html += `<div class="ledger-row"><span>${goods[g].name}</span><span style="color:#ffaa00;">sell $${entry.sell[g]}</span></div>`;
+            html += `<div class="ledger-row"><span>${goodIcon(g)}${goods[g].name}</span><span style="color:#ffaa00;">sell $${entry.sell[g]}</span></div>`;
         });
     });
     html += `<div style="color:#555; margin-top:6px; font-size:10px;">Prices as of last visit</div>`;
@@ -201,7 +201,7 @@ function updateMissionsUI() {
         }
         const have = game.ship.cargo[m.goodType] || 0;
         const ready = have >= m.qty;
-        return `<div class="ledger-row"><span>${m.qty} ${goods[m.goodType].name} → ${m.dest}</span>
+        return `<div class="ledger-row"><span>${goodIcon(m.goodType)}${m.qty} ${goods[m.goodType].name} → ${m.dest}</span>
             <span style="color:${ready ? '#00ff88' : '#ffaa00'};">${Math.min(have, m.qty)}/${m.qty} · $${m.reward}</span></div>`;
     }).join('');
     updateRecordsTabs(); // tab badge shows the active count
@@ -231,7 +231,7 @@ function updateMissionBoardUI(planet) {
     }
     if (planet.missionOffers && planet.missionOffers.length > 0) {
         html += planet.missionOffers.map(o => `<div class="trade-item">
-            <span>${o.qty} ${goods[o.goodType].name} → ${o.dest}<br>
+            <span>${goodIcon(o.goodType)}${o.qty} ${goods[o.goodType].name} → ${o.dest}<br>
                 <small style="color:#888;">Pays $${o.reward} on delivery</small></span>
             <button onclick="acceptMission('${o.id}')" ${logFull ? 'disabled' : ''}>Accept</button>
         </div>`).join('');

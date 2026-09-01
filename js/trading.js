@@ -169,7 +169,7 @@ function updateBuyingSectionUI() {
                     : price < base * 0.95 ? ' <span style="color:#66ff66;">▼</span>' : '';
         const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         buyingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}${illegal}</span>
+            <span>${goodIcon(goodType)}${goods[goodType].name}${illegal}</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="buyGood('${goodType}', 1)">+1</button>
@@ -199,7 +199,7 @@ function updateSellingSectionUI() {
         const off = playerHas === 0 ? 'disabled' : '';
         const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         sellingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}${illegal} (You have: ${playerHas})</span>
+            <span>${goodIcon(goodType)}${goods[goodType].name}${illegal} (You have: ${playerHas})</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="sellGood('${goodType}', 1)" ${off}>-1</button>
