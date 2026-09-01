@@ -5,7 +5,7 @@ on this branch: **UI legibility Slice 1** (the ship-schematic Vitals band,
 Part 0), **Persistent World** ("The World Remembers and Moves", Part 1), and
 **Exploration** (the seven POIs, Part 2). **Nothing is merged to `main` or
 deployed to themisto yet.** Both automated gates are green (solo `?verify`
-154/154, `node verify-net.mjs` 136/136); this doc is for the things a machine
+165/165, `node verify-net.mjs` 136/136); this doc is for the things a machine
 can't judge — how it *feels*.
 
 ---
@@ -51,8 +51,42 @@ number —
    now one. Does the top of the sidebar still fit on your screens?
 
 Nothing about combat/trading behavior changed — this is the HUD around it.
-Slice 2 (Records tabs) and Slice 3 (the contextual "Now" zone) come next per
+Slice 3 (the contextual "Now" zone) comes next per
 `mockups/sidebar-redesign.html`.
+
+## Slice 2 — the Records tabs (built 2026-09-01, after your first look)
+
+Your note — "the side drawer still has a lot of information that seems
+overwhelming" — was about the panel stack *below* the schematic. That stack
+(The Ship / Missions / Crew / Reputation / Galaxy Log / Trade Ledger) is now
+**one tabbed Records area**: a small tab row, one panel showing at a time.
+The Navigation panel sits above it, untouched — it becomes the contextual
+"Now" zone in Slice 3.
+
+- **A fresh Cadet sees three tabs** (Ship / Missions / Ledger). Crew, Rep,
+  and Log tabs only appear once those records exist (a berth, a grudge, a
+  chronicle entry) — same rule that used to show/hide their panels.
+- **Hiding a panel never hides news** — tabs carry badges: Missions shows
+  the active-contract count, Rep shows how many factions hold grudges (red),
+  Galaxy Log shows the unseen-entries count, which clears when you actually
+  open the Log tab.
+- **Your tab choice sticks** across sessions (per browser). Until you pick
+  one, it defaults to Missions when contracts are active, else Ship.
+
+What to check (feel, not function):
+
+1. **The wall test.** Undock and look at the sidebar: vitals + Navigation +
+   one small tabbed panel. Does the drawer finally feel scannable instead of
+   overwhelming? That was the complaint this slice answers.
+2. **News still reaches you.** Have someone chart a site or break a raid
+   while your Records is on Ship: does the Log badge pull your eye? Accept a
+   contract, switch to Ledger — does the Missions count keep you oriented?
+3. **Tabs appearing over a career.** Start a fresh pilot (incognito window):
+   three tabs. Hire crew → Crew tab appears. Break a raid → Rep tab appears
+   with a red count. Does the growing tab row read as progression or noise?
+4. **Anything you miss?** The old stack showed everything at once; if you
+   find yourself flipping tabs to compare (say, ledger prices against
+   mission cargo), that's real feedback — say so.
 
 ---
 

@@ -782,6 +782,86 @@ VERIFY_SUITES.vitals = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.records = (assert) => {
+    // Records tabs (UI Slice 2): the reference panels share one tabbed area.
+    // Tab visibility mirrors each page's inline "has content" display signal;
+    // .rec-on marks the selected page; badges keep news visible while its
+    // panel is hidden. The pages' own display semantics are asserted by the
+    // factions/crew/chronicle suites — this one covers the tab layer.
+    const tab = key => document.getElementById('recTab-' + key);
+    const badge = key => document.getElementById('recBadge-' + key);
+    const page = id => document.getElementById(id);
+    const saved = {
+        missions: game.missions, grudges: game.pilot.grudges,
+        entries: chronicle.entries.slice(), lastSeen: chronicle.lastSeen
+    };
+    const now = Date.now();
+
+    assert('permanent records always earn a tab',
+        tab('ship').style.display !== 'none' &&
+        tab('missions').style.display !== 'none' &&
+        tab('ledger').style.display !== 'none');
+
+    selectRecordsTab('ledger');
+    assert('selected page is the one shown',
+        page('ledgerPanel').classList.contains('rec-on') &&
+        getComputedStyle(page('ledgerPanel')).display !== 'none' &&
+        !page('shipPanel').classList.contains('rec-on') &&
+        getComputedStyle(page('shipPanel')).display === 'none');
+    assert('selection persists for the next session',
+        localStorage.getItem('space_trader_records_tab') === 'ledger');
+
+    // Attention cues: hiding the missions panel never hides the count
+    game.missions = [{ type: 'bounty', name: 'Test Mark', nearPlanet: 'X', reward: 100 }];
+    updateMissionsUI();
+    assert('missions tab badges the active count',
+        badge('missions').textContent === '1' && badge('missions').style.display !== 'none');
+    game.missions = [];
+    updateMissionsUI();
+    assert('missions badge clears with the log', badge('missions').style.display === 'none');
+
+    // Conditional tabs ride their record's content signal
+    game.pilot.grudges = { 'Rustfang Cartel': 2, 'Iron Shoal': 1 };
+    updateFactionUI();
+    assert('rep tab appears with grudges held',
+        tab('rep').style.display !== 'none' && badge('rep').textContent === '2');
+    selectRecordsTab('rep');
+    assert('rep page selectable once available',
+        page('factionPanel').classList.contains('rec-on') &&
+        getComputedStyle(page('factionPanel')).display !== 'none');
+    game.pilot.grudges = {};
+    updateFactionUI();
+    assert('cleared grudges retire the rep tab and fall back',
+        tab('rep').style.display === 'none' &&
+        !page('factionPanel').classList.contains('rec-on') &&
+        (page('shipPanel').classList.contains('rec-on') || page('missionsPanel').classList.contains('rec-on')));
+
+    // Galaxy Log: unseen count rides the tab; reading the log clears it
+    setChronicleLastSeen(now - 3600 * 1000);
+    applyChronicleSnapshot([
+        { at: now - 2 * 3600 * 1000, kind: 'market.event', label: 'old news', planet: 'X' },
+        { at: now - 60 * 1000, kind: 'poi.charted', pilot: 'Peer', poi: 'p', name: 'Site' }
+    ]);
+    assert('log tab appears with entries and badges the unseen count',
+        tab('log').style.display !== 'none' && badge('log').textContent === '1');
+    selectRecordsTab('log');
+    assert('reading the log clears its unseen badge',
+        page('chroniclePanel').classList.contains('rec-on') &&
+        badge('log').style.display === 'none');
+
+    // Restore — and the stored tab preference back to something permanent
+    game.missions = saved.missions;
+    game.pilot.grudges = saved.grudges;
+    chronicle.entries = saved.entries;
+    chronicle.lastSeen = saved.lastSeen;
+    updateMissionsUI();
+    updateFactionUI();
+    updateChroniclePanelUI();
+    selectRecordsTab('ship');
+    assert('restored state leaves a permanent tab selected',
+        page('shipPanel').classList.contains('rec-on'));
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

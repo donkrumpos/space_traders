@@ -187,6 +187,7 @@ function updateMissionsUI() {
     if (!el) return;
     if (!game.missions || game.missions.length === 0) {
         el.innerHTML = '<div style="color:#666;">None — check station mission boards</div>';
+        updateRecordsTabs(); // tab badge shows the active count
         return;
     }
     el.innerHTML = game.missions.map(m => {
@@ -203,6 +204,7 @@ function updateMissionsUI() {
         return `<div class="ledger-row"><span>${m.qty} ${goods[m.goodType].name} → ${m.dest}</span>
             <span style="color:${ready ? '#00ff88' : '#ffaa00'};">${Math.min(have, m.qty)}/${m.qty} · $${m.reward}</span></div>`;
     }).join('');
+    updateRecordsTabs(); // tab badge shows the active count
 }
 
 function updateMissionBoardUI(planet) {

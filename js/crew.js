@@ -128,6 +128,7 @@ function updateCrewPanelUI() {
     const slots = crewSlots();
     if (crew.length === 0 && slots === 0) {
         panel.style.display = 'none';
+        updateRecordsTabs(); // no berths, no Crew tab
         return;
     }
     panel.style.display = 'block';
@@ -145,6 +146,7 @@ function updateCrewPanelUI() {
         : slots < 3 ? ' — third berth at Star Marshal' : '';
     const berths = `<div style="color:#666; font-size:10px;">Berths: ${crew.length}/${slots}${hint}</div>`;
     list.innerHTML = (rows || '<div style="color:#666;">Empty bunks — check station bars</div>') + berths;
+    updateRecordsTabs(); // Crew tab appears with the first berth
 }
 
 // Station bar section inside the trading panel

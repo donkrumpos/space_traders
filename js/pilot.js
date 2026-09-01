@@ -287,6 +287,7 @@ function updateFactionUI() {
     const held = Object.keys(grudges).filter(name => grudges[name] > 0);
     if (held.length === 0) {
         panel.style.display = 'none';
+        updateRecordsTabs(); // Rep tab retires with the last grudge
         return;
     }
     panel.style.display = 'block';
@@ -295,6 +296,7 @@ function updateFactionUI() {
         return `<div class="ledger-row"><span>${name}</span>
             <span style="color:${tier.color};">${tier.label} ×${grudges[name]}</span></div>`;
     }).join('');
+    updateRecordsTabs(); // Rep tab appears/badges with held grudges
 }
 
 window.grantXP = function(amount) {

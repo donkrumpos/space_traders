@@ -457,3 +457,139 @@ function updateUI() {
 
     vHtml('nearby', els.nearbyObjects, html);
 }
+// ---------------------------------------------------------------------------
+// Records tabs — the reference panels (Ship / Missions / Crew / Rep / Log /
+// Ledger) collapsed to one tabbed area, one page visible at a time (UI Slice
+// 2, mockups/sidebar-redesign.html ★ Contextual Hybrid).
+//
+// Two visibility layers, deliberately separate:
+//   - each page's inline style.display stays "this record has content", set
+//     by that panel's own update function (verify.js asserts on it, and the
+//     tab row derives which tabs exist from it — a fresh Cadet sees three
+//     tabs, not six);
+//   - the .rec-on class is "this is the selected tab", layered on in CSS.
+// Hiding a panel must never hide news, so tabs carry attention cues: active
+// mission count, held-grudge count, and the Galaxy Log's unseen count (which
+// clears when you actually look at the log).
+//
+// Event-driven (called from the panels' update functions, not per-frame),
+// but keeps the vitals pattern anyway: cached refs + last-value guards.
+// ---------------------------------------------------------------------------
+const RECORDS_TAB_KEY = 'space_trader_records_tab';
+const RECORDS_PAGE_IDS = {
+    ship: 'shipPanel', missions: 'missionsPanel', crew: 'crewPanel',
+    rep: 'factionPanel', log: 'chroniclePanel', ledger: 'ledgerPanel'
+};
+const records = { els: null, selected: null, userChose: false, logViewedAt: 0, last: {} };
+
+function recordsEls() {
+    if (!records.els) {
+        records.els = { tabs: {}, badges: {}, pages: {} };
+        Object.keys(RECORDS_PAGE_IDS).forEach(key => {
+            records.els.tabs[key] = document.getElementById('recTab-' + key);
+            records.els.badges[key] = document.getElementById('recBadge-' + key);
+            records.els.pages[key] = document.getElementById(RECORDS_PAGE_IDS[key]);
+        });
+    }
+    return records.els;
+}
+
+// Conditional records reuse the page's inline display as the "has content"
+// signal; Ship / Missions / Ledger always earn a tab
+function recordsTabAvailable(key, els) {
+    if (key === 'crew' || key === 'rep' || key === 'log') {
+        return els.pages[key] && els.pages[key].style.display !== 'none';
+    }
+    return true;
+}
+
+function recordsDefaultTab() {
+    const active = typeof game !== 'undefined' && game.missions && game.missions.length > 0;
+    return active ? 'missions' : 'ship';
+}
+
+function recordsBadgeCounts() {
+    const counts = { missions: 0, rep: 0, log: 0 };
+    if (typeof game !== 'undefined' && game.missions) counts.missions = game.missions.length;
+    if (typeof game !== 'undefined' && game.pilot && game.pilot.grudges) {
+        counts.rep = Object.keys(game.pilot.grudges).filter(n => game.pilot.grudges[n] > 0).length;
+    }
+    if (typeof chronicleUnseen === 'function') {
+        counts.log = chronicleUnseen().filter(e => e.at > records.logViewedAt).length;
+    }
+    return counts;
+}
+
+function selectRecordsTab(key, byUser = true) {
+    const els = recordsEls();
+    if (!els.pages[key] || !recordsTabAvailable(key, els)) return;
+    records.selected = key;
+    if (byUser) {
+        records.userChose = true;
+        try { localStorage.setItem(RECORDS_TAB_KEY, key); } catch (e) { /* private mode */ }
+    }
+    if (key === 'log') {
+        // Looking at the log is what clears its unseen badge
+        const entries = (typeof chronicle !== 'undefined' && chronicle.entries) || [];
+        if (entries.length > 0) records.logViewedAt = entries[entries.length - 1].at;
+    }
+    updateRecordsTabs();
+}
+window.selectRecordsTab = selectRecordsTab;
+
+function updateRecordsTabs() {
+    const els = recordsEls();
+    if (!els.tabs.ship) return;
+
+    if (records.selected === null) {
+        // First call: last session's tab if the player ever picked one,
+        // else the sensible default (Missions when any active, else Ship)
+        let stored = null;
+        try { stored = localStorage.getItem(RECORDS_TAB_KEY); } catch (e) { /* private mode */ }
+        if (stored && els.pages[stored]) {
+            records.selected = stored;
+            records.userChose = true;
+        } else {
+            records.selected = recordsDefaultTab();
+        }
+    }
+
+    // Until the player picks a tab themselves, follow the default rule — a
+    // restored character's missions land after boot, so Ship upgrades to
+    // Missions once contracts exist. A vanished tab (rep with grudges
+    // cleared, stored tab whose record is empty this session) falls back too.
+    if (!records.userChose || !recordsTabAvailable(records.selected, els)) {
+        records.selected = recordsDefaultTab();
+    }
+
+    const counts = recordsBadgeCounts();
+    Object.keys(els.tabs).forEach(key => {
+        const tab = els.tabs[key];
+        if (!tab) return;
+        const avail = recordsTabAvailable(key, els);
+        const tabDisplay = avail ? 'block' : 'none';
+        if (records.last['tab_' + key] !== tabDisplay) {
+            records.last['tab_' + key] = tabDisplay;
+            tab.style.display = tabDisplay;
+        }
+        const on = avail && records.selected === key;
+        if (records.last['on_' + key] !== on) {
+            records.last['on_' + key] = on;
+            tab.classList.toggle('on', on);
+            els.pages[key].classList.toggle('rec-on', on);
+        }
+        const badge = els.badges[key];
+        if (badge) {
+            const text = counts[key] > 0 ? String(counts[key]) : '';
+            if (records.last['badge_' + key] !== text) {
+                records.last['badge_' + key] = text;
+                badge.textContent = text;
+                badge.style.display = text ? 'inline-block' : 'none';
+            }
+        }
+    });
+}
+
+// One page must be selected from the first frame, saved character or not
+// (scripts sit at the end of body, so the markup exists at eval time)
+updateRecordsTabs();

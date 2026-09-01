@@ -103,6 +103,7 @@ function updateChroniclePanelUI() {
     if (!panel || !list) return;
     if (chronicle.entries.length === 0) {
         panel.style.display = 'none';
+        updateRecordsTabs();
         return;
     }
     panel.style.display = 'block';
@@ -112,6 +113,7 @@ function updateChroniclePanelUI() {
         return `<div style="font-size:10px; margin-top:3px; color:${fresh ? '#ffdd88' : '#8899aa'};">` +
             `${formatChronicleEntry(e)} <span style="color:#556677;">· ${chronicleTimeAgo(e.at)}</span></div>`;
     }).join('');
+    updateRecordsTabs(); // Log tab appears with the first entry; badge = unseen
 }
 
 // Relative timestamps drift while the panel sits open; a slow re-render keeps

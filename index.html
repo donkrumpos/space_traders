@@ -88,13 +88,6 @@
                 <div id="systemsLine" style="display: none; color: #ff5555;"></div>
             </div>
 
-            <div class="panel" id="shipPanel">
-                <h3>The Ship</h3>
-                <div id="shipIdentity"><span style="color:#666;">— unnamed —</span></div>
-                <div id="shipModsList"></div>
-                <div id="shipLogList"></div>
-            </div>
-
             <div class="panel">
                 <h3>Navigation</h3>
                 <div>Position: (<span id="posX">0</span>, <span id="posY">0</span>)</div>
@@ -102,32 +95,51 @@
                 <div id="nearbyObjects"></div>
             </div>
 
-            <div class="panel">
-                <h3>Missions</h3>
-                <div id="missionList">
-                    <div style="color:#666;">None — check station mission boards</div>
+            <!-- Records: the reference panels (Ship / Missions / Crew / Rep /
+                 Log / Ledger) collapsed to one tab at a time (UI Slice 2,
+                 mockups/sidebar-redesign.html ★ Contextual Hybrid). The page
+                 divs keep their historical ids AND inline style.display as the
+                 "this record has content" signal — verify.js asserts on it and
+                 the tab row derives visibility from it; which page is actually
+                 SHOWN is the .rec-on class, layered on top in CSS. -->
+            <div class="panel" id="recordsPanel">
+                <div id="recordsTabs">
+                    <button id="recTab-ship" onclick="selectRecordsTab('ship')">Ship</button>
+                    <button id="recTab-missions" onclick="selectRecordsTab('missions')">Missions<span class="rec-badge" id="recBadge-missions" style="display: none;"></span></button>
+                    <button id="recTab-crew" style="display: none;" onclick="selectRecordsTab('crew')">Crew</button>
+                    <button id="recTab-rep" style="display: none;" onclick="selectRecordsTab('rep')">Rep<span class="rec-badge rec-badge-red" id="recBadge-rep" style="display: none;"></span></button>
+                    <button id="recTab-log" style="display: none;" onclick="selectRecordsTab('log')">Log<span class="rec-badge" id="recBadge-log" style="display: none;"></span></button>
+                    <button id="recTab-ledger" onclick="selectRecordsTab('ledger')">Ledger</button>
                 </div>
-            </div>
 
-            <div class="panel" id="crewPanel" style="display: none;">
-                <h3>Crew</h3>
-                <div id="crewList"></div>
-            </div>
+                <div class="rec-page" id="shipPanel">
+                    <div id="shipIdentity"><span style="color:#666;">— unnamed —</span></div>
+                    <div id="shipModsList"></div>
+                    <div id="shipLogList"></div>
+                </div>
 
-            <div class="panel" id="factionPanel" style="display: none;">
-                <h3>Reputation</h3>
-                <div id="factionList"></div>
-            </div>
+                <div class="rec-page" id="missionsPanel">
+                    <div id="missionList">
+                        <div style="color:#666;">None — check station mission boards</div>
+                    </div>
+                </div>
 
-            <div class="panel" id="chroniclePanel" style="display: none;">
-                <h3>Galaxy Log</h3>
-                <div id="chronicleList"></div>
-            </div>
+                <div class="rec-page" id="crewPanel" style="display: none;">
+                    <div id="crewList"></div>
+                </div>
 
-            <div class="panel">
-                <h3>Trade Ledger</h3>
-                <div id="ledgerList">
-                    <div style="color:#666;">Dock at stations to record prices</div>
+                <div class="rec-page" id="factionPanel" style="display: none;">
+                    <div id="factionList"></div>
+                </div>
+
+                <div class="rec-page" id="chroniclePanel" style="display: none;">
+                    <div id="chronicleList"></div>
+                </div>
+
+                <div class="rec-page" id="ledgerPanel">
+                    <div id="ledgerList">
+                        <div style="color:#666;">Dock at stations to record prices</div>
+                    </div>
                 </div>
             </div>
 

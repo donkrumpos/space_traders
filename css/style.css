@@ -211,6 +211,74 @@ body {
     color: #00ffff;
 }
 
+/* Records tabs (UI Slice 2) — the reference panels share one tabbed area.
+   A page's inline style.display means "this record has content" (set by its
+   own update function, asserted by verify.js); .rec-on means "selected tab"
+   and is the layer that actually shows a page, so the two never fight. */
+#recordsPanel {
+    padding: 0;
+}
+
+#recordsTabs {
+    display: flex;
+    background: #001a00;
+    border-bottom: 1px solid #0a4a0a;
+}
+
+#recordsTabs button {
+    flex: 1;
+    position: relative;
+    font-family: inherit;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #77aa77;
+    background: none;
+    border: none;
+    border-right: 1px solid #0a3a0a;
+    padding: 7px 2px 6px;
+    cursor: pointer;
+}
+
+#recordsTabs button:last-child {
+    border-right: none;
+}
+
+#recordsTabs button:hover {
+    color: #ccffcc;
+}
+
+#recordsTabs button.on {
+    color: #dfffdf;
+    background: #042804;
+    box-shadow: inset 0 -2px 0 #00ff00;
+}
+
+.rec-badge {
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    background: #ffaa00;
+    color: #000000;
+    border-radius: 8px;
+    font-size: 8px;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.rec-badge-red {
+    background: #ff5555;
+    color: #ffffff;
+}
+
+#recordsPanel .rec-page {
+    padding: 10px;
+}
+
+#recordsPanel .rec-page:not(.rec-on) {
+    display: none !important;
+}
+
 .cargo-item {
     display: flex;
     justify-content: space-between;
