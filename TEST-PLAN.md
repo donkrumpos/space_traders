@@ -60,8 +60,8 @@ Your note — "the side drawer still has a lot of information that seems
 overwhelming" — was about the panel stack *below* the schematic. That stack
 (The Ship / Missions / Crew / Reputation / Galaxy Log / Trade Ledger) is now
 **one tabbed Records area**: a small tab row, one panel showing at a time.
-The Navigation panel sits above it, untouched — it becomes the contextual
-"Now" zone in Slice 3.
+The Navigation panel above it became the contextual "Now" zone in Slice 3
+(next section).
 
 - **A fresh Cadet sees three tabs** (Ship / Missions / Ledger). Crew, Rep,
   and Log tabs only appear once those records exist (a berth, a grudge, a
@@ -87,6 +87,44 @@ What to check (feel, not function):
 4. **Anything you miss?** The old stack showed everything at once; if you
    find yourself flipping tabs to compare (say, ledger prices against
    mission cargo), that's real feedback — say so.
+
+---
+
+## Slice 3 — the contextual Now zone (built 2026-09-01; completes the redesign)
+
+The Navigation panel — the last un-redesigned piece — is now a **Now zone**:
+it reads your situation and shows only what matters there, recoloring its
+label (and in danger, its border) so the state change registers before the
+words do. One state at a time, priority order: **engaged > docked > combat >
+fuel emergency > docking range > event > near-site > cruising** (docked
+outranks combat because the station shields you — the fight outside is noise
+until you undock; combat outranks the empty tank because the vitals band
+already shows the fuel while shot-dodging needs the hostile picture).
+
+- **Cruising** — position, nearest planet + heading, "M for map".
+- **Sensor contact** (within 600u of a site) — the site's glyph, name,
+  charter credit, salvage/occupation status, and its lore line. *No market
+  data* — the dark stays the dark. An **uncharted** contact shows only
+  "? Unknown contact" + bearing: the name stays a discovery reward.
+- **Docking range** — station name, type, "SPACE to dock".
+- **In combat** (hostile within 900u) — hostile count + nearest range, the
+  bounty target's name + price if a boss is in the fight, your streak, a
+  blinking SHIELDS DOWN alarm, and the weapon keys.
+- **Emergency power / solar sail** — fuel banner + nearest fuel stop heading.
+- **Docked** — station name + type (this used to live inside the nav text).
+
+What to check (feel, not function):
+
+1. **The glance test.** Fly a loop: undock → cruise → brush a derelict →
+   pick a fight → dock. Does the panel always show the thing you'd have
+   asked for, and nothing else? Any state where you miss the old info?
+2. **State flicker.** Skirting the edge of a fight or a site, does the zone
+   thrash between states annoyingly? (Thresholds are tunable: 900u combat,
+   600u site.)
+3. **The derelict moment.** Approaching an uncharted "?" contact, does the
+   sidebar tease build the moment or spoil it?
+4. **Shields-down alarm.** Mid-fight with shields stripped — does the blink
+   pull your eye in time to matter?
 
 ---
 

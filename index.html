@@ -88,11 +88,19 @@
                 <div id="systemsLine" style="display: none; color: #ff5555;"></div>
             </div>
 
-            <div class="panel">
-                <h3>Navigation</h3>
-                <div>Position: (<span id="posX">0</span>, <span id="posY">0</span>)</div>
-                <div>Sector: <span id="sector">Deep Space</span></div>
-                <div id="nearbyObjects"></div>
+            <!-- Now zone (UI Slice 3, mockups/sidebar-redesign.html ★
+                 Contextual Hybrid): the old Navigation panel, rebuilt as a
+                 state-driven readout. data-now names the current situation
+                 (engaged / docked / combat / fuel / dockrange / event / poi /
+                 cruise) and drives the accent color; the body swaps to show
+                 only what matters in that situation. Filled by updateNowZone()
+                 in js/ui.js every tick, guarded writes only. -->
+            <div class="panel" id="nowZone" data-now="cruise">
+                <div id="nowHead">
+                    <span id="nowLabel">CRUISING</span>
+                    <span id="nowPos">(<span id="posX">0</span>, <span id="posY">0</span>)</span>
+                </div>
+                <div id="nowBody"></div>
             </div>
 
             <!-- Records: the reference panels (Ship / Missions / Crew / Rep /

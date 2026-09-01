@@ -862,6 +862,116 @@ VERIFY_SUITES.records = (assert) => {
         page('shipPanel').classList.contains('rec-on'));
 };
 
+VERIFY_SUITES.now = (assert) => {
+    // The Now zone (UI Slice 3): the old Navigation panel reads the situation
+    // and shows only what matters there. Force each state, assert the zone
+    // swaps (data-now + body content), and check the priority order:
+    // engaged > docked > combat > fuel > dockrange > event > poi > cruise.
+    const ship = game.ship;
+    const zone = document.getElementById('nowZone');
+    const body = document.getElementById('nowBody');
+    const saved = {
+        fuel: ship.fuel, emergencyFuel: ship.emergencyFuel, shield: ship.shield,
+        enemies: game.enemies, pois: game.pois,
+        isDocked: game.isDocked, isEngaged: game.isEngaged,
+        inDockingRange: game.inDockingRange, nearPlanet: game.nearPlanet,
+        currentPlanet: game.currentPlanet, streak: game.combatStreak,
+        evRange: typeof eventSystem !== 'undefined' && eventSystem.inEventRange,
+        evNear: typeof eventSystem !== 'undefined' && eventSystem.nearEvent
+    };
+
+    // Neutral baseline: nothing near, tank full → cruising
+    game.enemies = []; game.pois = [];
+    game.isDocked = false; game.isEngaged = false;
+    game.inDockingRange = false; game.nearPlanet = null;
+    ship.fuel = Math.max(ship.fuel, 100);
+    if (typeof eventSystem !== 'undefined') { eventSystem.inEventRange = false; eventSystem.nearEvent = null; }
+    updateUI();
+    assert('quiet space reads as cruising',
+        zone.getAttribute('data-now') === 'cruise' &&
+        body.textContent.includes('Nearest:') && body.innerHTML.includes('for map'));
+
+    // Near a POI: uncharted = a teasing contact, no name spoiler
+    const poi = { id: 'vt', name: 'Verify Hulk', kind: 'derelict', x: ship.x + 300, y: ship.y,
+                  dist: 300, inSensor: true, charted: false, mine: false, blurb: 'A test derelict.' };
+    game.pois = [poi];
+    updateUI();
+    assert('uncharted contact teases without spoiling the name',
+        zone.getAttribute('data-now') === 'poi' &&
+        body.textContent.includes('Unknown contact') && !body.textContent.includes('Verify Hulk'));
+
+    // Charted = name, glyph, charter credit, lore line — no market data
+    poi.charted = true; poi.chartedBy = 'Tester';
+    updateUI();
+    assert('charted site shows name, glyph, and charter',
+        body.textContent.includes('Verify Hulk') && body.textContent.includes('⬡') &&
+        body.textContent.includes('charted by Tester') && body.textContent.includes('300u E'));
+    assert('site lore line rides along', body.textContent.includes('A test derelict.'));
+
+    // Salvage window and occupation both surface on the card
+    poi.mine = true; poi.nextSalvageAt = Date.now() - 1000;
+    updateUI();
+    assert('ready cache reads salvage ready', body.textContent.includes('salvage ready'));
+    poi.occupation = { faction: 'Rustfang Cartel', color: '#ff5555' };
+    updateUI();
+    assert('occupied site flies the ⚑ instead of salvage',
+        body.textContent.includes('Occupied by Rustfang Cartel') && !body.textContent.includes('salvage ready'));
+
+    // Docking range outranks the POI card
+    game.inDockingRange = true; game.nearPlanet = game.planets[0];
+    updateUI();
+    assert('docking range owns the zone with SPACE prompt',
+        zone.getAttribute('data-now') === 'dockrange' &&
+        body.textContent.includes(game.planets[0].name) && body.innerHTML.includes('SPACE'));
+
+    // Combat outranks everything undocked; boss, count, range, weapon keys
+    game.enemies = [
+        { x: ship.x + 200, y: ship.y, isBoss: false, tierName: 'Scout' },
+        { x: ship.x + 400, y: ship.y, isBoss: true, tierName: 'Warlord Redjaw', reward: 800 }
+    ];
+    updateUI();
+    assert('hostiles in range flip the zone to combat',
+        zone.getAttribute('data-now') === 'combat' &&
+        body.textContent.includes('2 hostiles') && body.textContent.includes('nearest 200u'));
+    assert('bounty target and weapon keys shown',
+        body.textContent.includes('Warlord Redjaw') && body.textContent.includes('$800') &&
+        body.innerHTML.includes('>X<'));
+    ship.shield = 0;
+    updateUI();
+    assert('shields-down alarm fires in combat', body.textContent.includes('SHIELDS DOWN'));
+    ship.shield = saved.shield;
+
+    // Fuel emergency (no hostiles left): banner + nearest fuel stop
+    game.enemies = [];
+    ship.fuel = 0; ship.emergencyFuel = 10;
+    updateUI();
+    assert('dry tank turns the zone into the fuel emergency',
+        zone.getAttribute('data-now') === 'fuel' &&
+        body.textContent.includes('emergency power') && body.textContent.includes('Nearest fuel:'));
+    ship.emergencyFuel = 0;
+    updateUI();
+    assert('spent emergency reserve reads solar sail', body.textContent.includes('solar sail'));
+    ship.fuel = saved.fuel; ship.emergencyFuel = saved.emergencyFuel;
+
+    // Docked is modal: it outranks combat and fuel both
+    game.enemies = saved.enemies && saved.enemies.length ? saved.enemies
+        : [{ x: ship.x + 100, y: ship.y, isBoss: false, tierName: 'Scout' }];
+    game.isDocked = true; game.currentPlanet = game.planets[0];
+    updateUI();
+    assert('docked outranks the fight outside',
+        zone.getAttribute('data-now') === 'docked' &&
+        body.textContent.includes(game.planets[0].name));
+
+    // Restore
+    ship.fuel = saved.fuel; ship.emergencyFuel = saved.emergencyFuel; ship.shield = saved.shield;
+    game.enemies = saved.enemies; game.pois = saved.pois;
+    game.isDocked = saved.isDocked; game.isEngaged = saved.isEngaged;
+    game.inDockingRange = saved.inDockingRange; game.nearPlanet = saved.nearPlanet;
+    game.currentPlanet = saved.currentPlanet; game.combatStreak = saved.streak;
+    if (typeof eventSystem !== 'undefined') { eventSystem.inEventRange = saved.evRange; eventSystem.nearEvent = saved.evNear; }
+    updateUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

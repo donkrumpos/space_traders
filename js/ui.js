@@ -80,7 +80,7 @@ function vitalsEls() {
         ['pilotRank', 'xpLine', 'credits', 'fuel', 'fuelMax', 'hull', 'hullMax',
          'shieldVal', 'shieldMax', 'cargoUsed', 'cargoMax', 'missiles', 'missilesMax',
          'weaponMode', 'laserHeat', 'streakLine', 'powerupLine', 'systemsLine',
-         'cargoManifest', 'posX', 'posY', 'nearbyObjects',
+         'cargoManifest', 'posX', 'posY', 'nowZone', 'nowLabel', 'nowBody',
          'svShieldEnv', 'svHullBody', 'svHullDmg', 'svWeaponMount', 'svMissilePips',
          'svEngL', 'svEngR', 'svThrL', 'svThrR', 'svEngLWrap', 'svEngRWrap',
          'svLifeCore', 'svLifeCoreDmg', 'svCargoGrid', 'svFuelTank', 'svFuelFill'
@@ -361,101 +361,211 @@ function updateUI() {
     vText('posX', els.posX, Math.floor(ship.x));
     vText('posY', els.posY, Math.floor(ship.y));
 
-    // Nearby-objects panel: composed as one string, written only on change
-    let html = '';
+    updateNowZone(els, ship);
+}
 
-    // Emergency mode warning (highest priority)
-    if (isEmergencyMode) {
-        html += `<div style="color: #ff4444; font-weight: bold; text-align: center; margin-bottom: 10px;">⚠️ EMERGENCY POWER ⚠️</div>`;
-        html += `<div style="color: #ff8800; text-align: center; margin-bottom: 10px;">Weak thrust only - find fuel immediately!</div>`;
+// ---------------------------------------------------------------------------
+// Now zone (UI Slice 3, mockups/sidebar-redesign.html ★ Contextual Hybrid):
+// the old Navigation panel, rebuilt to read the situation and show ONLY what
+// matters there. One state at a time, resolved in this priority order:
+//
+//   engaged > docked > combat > fuel emergency > docking range > event >
+//   near-POI > cruising
+//
+// Rationale for the deviations from the mockup's suggested order (combat >
+// fuel > docked): engaged/docked are modal — you're parked, shielded by the
+// station, and combat/fuel readouts are noise until you leave; between the
+// hazards, combat outranks fuel because the vitals band already shows the
+// empty tank while shot-dodging needs the hostile picture NOW.
+//
+// Runs every physics tick, so detection is cheap (one pass over enemies, one
+// over pois — both small, squared distances, results into a reused scratch
+// object) and all writes go through the guarded vText/vHtml/vAttr helpers.
+// ---------------------------------------------------------------------------
+const NOW_COMBAT_RANGE2 = 900 * 900; // hostiles inside this = you're in combat
+const NOW_POI_RANGE = 600;           // a site inside this owns the zone
+const NOW_LABELS = {
+    engaged:   'ENGAGED',
+    docked:    'DOCKED',
+    combat:    'IN COMBAT',
+    fuel:      'EMERGENCY POWER',
+    dockrange: 'DOCKING RANGE',
+    event:     'EVENT DETECTED',
+    poi:       'SENSOR CONTACT',
+    cruise:    'CRUISING'
+};
+const nowScan = { hostiles: 0, nearestD2: Infinity, boss: null, poi: null, poiD: Infinity };
+
+function nowCompass(dx, dy) {
+    const degrees = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    if (degrees >= 337.5 || degrees < 22.5) return 'E';
+    if (degrees < 67.5) return 'SE';
+    if (degrees < 112.5) return 'S';
+    if (degrees < 157.5) return 'SW';
+    if (degrees < 202.5) return 'W';
+    if (degrees < 247.5) return 'NW';
+    if (degrees < 292.5) return 'N';
+    return 'NE';
+}
+
+function nowDetectState(ship) {
+    if (game.isEngaged) return 'engaged';
+    if (game.isDocked) return 'docked';
+
+    nowScan.hostiles = 0; nowScan.nearestD2 = Infinity; nowScan.boss = null;
+    const enemies = game.enemies;
+    if (enemies) {
+        for (let i = 0; i < enemies.length; i++) {
+            const e = enemies[i];
+            const dx = e.x - ship.x, dy = e.y - ship.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > NOW_COMBAT_RANGE2) continue;
+            nowScan.hostiles++;
+            if (d2 < nowScan.nearestD2) nowScan.nearestD2 = d2;
+            if (e.isBoss && !nowScan.boss) nowScan.boss = e;
+        }
     }
+    if (nowScan.hostiles > 0) return 'combat';
 
-    // Check for active engagement first
-    if (game.isEngaged) {
-        html += `<div style="color: #ffaa00; font-weight: bold;">ENGAGED with ${game.currentEvent.name}</div>`;
-        html += `<div style="color: #ffff00;">Use side panel for choices | ESC or movement keys to disengage</div>`;
-    } else if (game.isDocked) {
-        html += `<div style="color: #00ffff; font-weight: bold;">DOCKED at ${game.currentPlanet.name}</div>`;
-        html += `<div style="color: #ffff00;">Press ESC or movement keys for emergency undock</div>`;
-    } else if (game.inDockingRange && game.nearPlanet) {
-        // Priority 1: Planet docking (highest priority)
-        html += `<div style="color: #00ff00; font-weight: bold;">DOCKING RANGE</div>`;
-        html += `<div style="color: #ffff00;">Press SPACE to dock with ${game.nearPlanet.name}</div>`;
+    if (ship.fuel <= 0) return 'fuel';
+    if (game.inDockingRange && game.nearPlanet) return 'dockrange';
+    if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) return 'event';
 
-        // Show event as secondary option if present
-        if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) {
-            const event = eventSystem.nearEvent;
-            html += `<div style="color: #888888; font-size: 10px; margin-top: 5px;">Also nearby: ${event.name}</div>`;
-            html += `<div style="color: #ffaa88; font-size: 10px;">Press E to ${event.interactionText}</div>`;
+    nowScan.poi = null; nowScan.poiD = Infinity;
+    const pois = game.pois;
+    if (pois) {
+        for (let i = 0; i < pois.length; i++) {
+            const p = pois[i];
+            // poi.dist is maintained by updatePOIDetection() each tick;
+            // uncharted sites outside sensor range stay fogged (no spoilers)
+            if (p.dist <= NOW_POI_RANGE && p.dist < nowScan.poiD && (p.charted || p.inSensor)) {
+                nowScan.poi = p; nowScan.poiD = p.dist;
+            }
         }
-    } else if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) {
-        // Priority 2: Event interaction (only when no planet docking available)
-        const event = eventSystem.nearEvent;
-        html += `<div style="color: #ffaa00; font-weight: bold;">EVENT DETECTED</div>`;
-        html += `<div style="color: #ffff00;">Press SPACE to ${event.interactionText}</div>`;
-        html += `<div style="color: #cccccc; font-size: 10px;">${event.description}</div>`;
-        if (event.fuelCost > 0) {
-            const canAfford = ship.fuel >= event.fuelCost;
-            const color = canAfford ? '#88ff88' : '#ff8888';
-            html += `<div style="color: ${color};">Fuel cost: ${event.fuelCost}</div>`;
+    }
+    if (nowScan.poi) return 'poi';
+
+    return 'cruise';
+}
+
+function updateNowZone(els, ship) {
+    const state = nowDetectState(ship);
+    vAttr('nowState', els.nowZone, 'data-now', state);
+    vText('nowLabel', els.nowLabel, NOW_LABELS[state]);
+
+    let html = '';
+    if (state === 'engaged') {
+        html += `<div class="now-big" style="color:#ffaa00">${game.currentEvent.name}</div>`;
+        html += `<div class="now-dim">Use the side panel to choose</div>`;
+        html += `<div class="now-keys"><b>ESC</b> or move to disengage</div>`;
+
+    } else if (state === 'docked') {
+        const planet = game.currentPlanet;
+        html += `<div class="now-big">${planet.name}</div>`;
+        if (planet.type) {
+            html += `<div class="now-dim">${planet.type.charAt(0).toUpperCase()}${planet.type.slice(1)} station</div>`;
         }
-    } else {
-        // Show nearest planet information
+        html += `<div class="now-keys"><b>SPACE</b> / <b>ESC</b> to undock</div>`;
+
+    } else if (state === 'combat') {
+        const streak = game.combatStreak || 0;
+        if (streak > 1) {
+            const mult = Math.min(1 + 0.25 * (streak - 1), 3);
+            html += `<div class="now-dim" style="color:#ffcc00">streak ×${mult.toFixed(2).replace(/0$/, '')}</div>`;
+        }
+        if (nowScan.boss) {
+            html += `<div class="now-big" style="color:#ff4444">☠ ${nowScan.boss.tierName || 'Warlord'}` +
+                (nowScan.boss.reward ? ` <span style="color:#ffdd44">$${Math.round(nowScan.boss.reward)}</span>` : '') + `</div>`;
+        }
+        const range = Math.floor(Math.sqrt(nowScan.nearestD2));
+        html += `<div class="now-dim" style="color:#ff8888">${nowScan.hostiles} hostile${nowScan.hostiles === 1 ? '' : 's'} · nearest ${range}u</div>`;
+        if (ship.shield <= 0 && ship.shieldMax > 0) {
+            html += `<div class="now-alarm">✖ SHIELDS DOWN</div>`;
+        }
+        html += `<div class="now-keys"><b>X</b> lasers · <b>C</b> missile · <b>Z</b> switch</div>`;
+
+    } else if (state === 'fuel') {
+        const sail = ship.emergencyFuel <= 0;
+        html += sail
+            ? `<div class="now-alarm">Fuel exhausted — solar sail crawl</div>`
+            : `<div class="now-alarm">Fuel exhausted — emergency power</div>` +
+              `<div class="now-dim" style="color:#ff8800">Weak thrust only — find fuel now</div>`;
         const nearest = getDistanceToNearest();
         if (nearest.planet) {
-            const distance = Math.floor(nearest.distance);
-            const dx = nearest.planet.x - ship.x;
-            const dy = nearest.planet.y - ship.y;
-            const angle = Math.atan2(dy, dx);
+            html += `<div class="now-dim" style="color:#ffaa00">Nearest fuel: ${nearest.planet.name} · ` +
+                `${Math.floor(nearest.distance)}u ${nowCompass(nearest.planet.x - ship.x, nearest.planet.y - ship.y)}</div>`;
+        }
+        html += `<div class="now-keys">Limp to any station to refuel</div>`;
 
-            // Convert angle to compass direction
-            let direction = '';
-            const degrees = (angle * 180 / Math.PI + 360) % 360;
-            if (degrees >= 337.5 || degrees < 22.5) direction = 'E';
-            else if (degrees >= 22.5 && degrees < 67.5) direction = 'SE';
-            else if (degrees >= 67.5 && degrees < 112.5) direction = 'S';
-            else if (degrees >= 112.5 && degrees < 157.5) direction = 'SW';
-            else if (degrees >= 157.5 && degrees < 202.5) direction = 'W';
-            else if (degrees >= 202.5 && degrees < 247.5) direction = 'NW';
-            else if (degrees >= 247.5 && degrees < 292.5) direction = 'N';
-            else direction = 'NE';
-
-            html += `<div style="color: #00ffff;">Nearest: ${nearest.planet.name}</div>`;
-            html += `<div style="color: #888888;">Distance: ${distance} units ${direction}</div>`;
+    } else if (state === 'dockrange') {
+        const planet = game.nearPlanet;
+        html += `<div class="now-big" style="color:#00ff00">${planet.name}</div>`;
+        if (planet.type) {
+            html += `<div class="now-dim">${planet.type.charAt(0).toUpperCase()}${planet.type.slice(1)} station</div>`;
+        }
+        html += `<div class="now-keys"><b>SPACE</b> to dock</div>`;
+        if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent) {
+            html += `<div class="now-dim">Also here: ${eventSystem.nearEvent.name} — <b>E</b> to ${eventSystem.nearEvent.interactionText}</div>`;
         }
 
-        // Show nearby planets within 200 units
-        let nearbyCount = 0;
+    } else if (state === 'event') {
+        const event = eventSystem.nearEvent;
+        html += `<div class="now-big" style="color:#ffaa00">${event.name}</div>`;
+        html += `<div class="now-dim">${event.description}</div>`;
+        if (event.fuelCost > 0) {
+            html += `<div class="now-dim" style="color:${ship.fuel >= event.fuelCost ? '#88ff88' : '#ff8888'}">Fuel cost: ${event.fuelCost}</div>`;
+        }
+        html += `<div class="now-keys"><b>SPACE</b> to ${event.interactionText}</div>`;
+
+    } else if (state === 'poi') {
+        const poi = nowScan.poi;
+        const dist = Math.floor(poi.dist);
+        const dir = nowCompass(poi.x - ship.x, poi.y - ship.y);
+        if (!poi.charted) {
+            // Uncharted tease — the render layer shows only a "?" ping, so the
+            // zone must not spoil the name before the fly-in discovery moment
+            html += `<div class="now-big" style="color:#cc99ff">? Unknown contact</div>`;
+            html += `<div class="now-dim">${dist}u ${dir} · origin unknown</div>`;
+            html += `<div class="now-keys">Fly in to investigate</div>`;
+        } else {
+            const kind = poiKind(poi);
+            html += `<div class="now-big" style="color:${kind.color}">${kind.symbol} ${poi.name}</div>`;
+            let status = `${kind.label} · ${dist}u ${dir}`;
+            if (poi.chartedBy) status += ` · charted by ${poi.chartedBy}`;
+            html += `<div class="now-dim">${status}</div>`;
+            if (poi.occupation) {
+                html += `<div class="now-dim" style="color:${poi.occupation.color || '#ff5555'}">⚑ Occupied by ${poi.occupation.faction} — drive them out</div>`;
+            } else if (poi.mine) {
+                const eta = typeof poiSalvageEtaText === 'function' ? poiSalvageEtaText(poi) : null;
+                if (eta) html += `<div class="now-dim" style="color:#ffcc44">✦ ${eta}</div>`;
+            } else {
+                html += `<div class="now-keys">Fly in to survey the site</div>`;
+            }
+            if (poi.blurb) html += `<div class="now-lore">${poi.blurb}</div>`;
+        }
+
+    } else { // cruise
+        const nearest = getDistanceToNearest();
+        if (nearest.planet) {
+            html += `<div class="now-big">Nearest: ${nearest.planet.name}</div>`;
+            html += `<div class="now-dim">${Math.floor(nearest.distance)}u ${nowCompass(nearest.planet.x - ship.x, nearest.planet.y - ship.y)}</div>`;
+        }
+        let alsoNearby = '';
         game.planets.forEach(planet => {
-            const distance = Math.sqrt(
-                Math.pow(ship.x - planet.x, 2) +
-                Math.pow(ship.y - planet.y, 2)
-            );
-
-            if (distance < 200 && planet !== nearest.planet) {
-                if (nearbyCount === 0) {
-                    html += `<div style="color: #666666; margin-top: 5px;">Also nearby:</div>`;
-                }
-                html += `<div style="color: #666666;">${planet.name} (${Math.floor(distance)})</div>`;
-                nearbyCount++;
-            }
+            if (planet === nearest.planet) return;
+            const dx = planet.x - ship.x, dy = planet.y - ship.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < 200 * 200) alsoNearby += `${alsoNearby ? ' · ' : ''}${planet.name} (${Math.floor(Math.sqrt(d2))})`;
         });
-
-        // Event system status
+        if (alsoNearby) html += `<div class="now-dim" style="color:#666666">Also nearby: ${alsoNearby}</div>`;
         if (typeof eventSystem !== 'undefined') {
-            const distanceToNextEvent = eventSystem.eventTriggerDistance - eventSystem.travelDistance;
-            if (distanceToNextEvent < 100 && distanceToNextEvent > 0) {
-                html += `<div style="color: #ffaa00; margin-top: 5px;">🌟 Event imminent</div>`;
-            } else if (eventSystem.eventCooldown > 0) {
-                html += `<div style="color: #666666; margin-top: 2px;">Event cooldown: ${Math.ceil(eventSystem.eventCooldown/60)}s</div>`;
-            }
+            const toNext = eventSystem.eventTriggerDistance - eventSystem.travelDistance;
+            if (toNext < 100 && toNext > 0) html += `<div class="now-dim" style="color:#ffaa00">🌟 Event imminent</div>`;
         }
-
-        // Navigation hint
-        html += `<div style="color: #444444; margin-top: 5px;">Press M for map</div>`;
+        html += `<div class="now-keys"><b>M</b> for map</div>`;
     }
 
-    vHtml('nearby', els.nearbyObjects, html);
+    vHtml('nowBody', els.nowBody, html);
 }
 // ---------------------------------------------------------------------------
 // Records tabs — the reference panels (Ship / Missions / Crew / Rep / Log /
