@@ -1,5 +1,45 @@
 # Next Session Roadmap
 
+State as of 2026-09-01 (sixth session — **UI milestone Slice 3 BUILT — the
+sidebar redesign is COMPLETE**): the contextual Now zone is live on
+`feature/exploration-poi` (commit 95fef7e, pushed; still NOT merged, NOT
+deployed — nothing server-side changed). The Navigation panel — the last
+un-redesigned piece — is now state-driven per the ★ Contextual Hybrid: the
+sidebar reads sticky vitals band → Now zone → tabbed Records, and the
+milestone's original complaint (a wall of same-looking text panels) has no
+surviving panel.
+
+Mechanics worth knowing cold: `updateNowZone()` (bottom-ish of js/ui.js)
+resolves ONE state per tick in priority order **engaged > docked > combat >
+fuel emergency > docking range > event > near-POI > cruising** — deliberately
+deviating from the mockup's suggested order (combat > fuel > docked) because
+docked is modal/station-shielded (the fight outside is noise) and the vitals
+band already shows the empty tank mid-fight. Thresholds: hostile within 900u
+= combat, site within 600u = sensor contact (both tunable consts at the top
+of the block). An UNCHARTED contact shows only "? Unknown contact" + bearing
+— the name stays a fly-in discovery reward (matches the render layer's "?"
+ping); charted sites show glyph/name/charter/salvage-ETA/⚑occupation + lore,
+never market data. `data-now` on #nowZone drives the CSS accent (label +
+border recolor per state). Detection is per-tick cheap: one squared-distance
+pass over enemies and one over pois (poi.dist already maintained by
+updatePOIDetection), scratch object reused, all writes via the Slice 1
+guarded helpers. The dead `#sector` span is gone; #posX/#posY live in the
+zone header. Records tabs + vitals band untouched (the two-layer visibility
+mechanic survives — records suite still asserts it). New solo `now` suite
+(13 asserts) forces each state + the priority overrides. **Gates: solo
+?verify 178/178 (was 165), verify-net 136/136.** TEST-PLAN.md Part 0 has a
+"Slice 3" subsection.
+
+**NEXT: family playtest of the whole redesigned sidebar** (TEST-PLAN.md Part
+0 — the wall test, the glance test, the derelict-tease moment). Watchlist:
+state flicker when skirting the 900u/600u edges (thresholds may need
+hysteresis if it thrashes); does anyone miss the old always-on nav text;
+Slice 2 carryovers (badges pulling the eye, tab-flipping to compare, tab-row
+growth as progression vs noise). After playtest verdict: merge + themisto
+deploy (branch carries M5+M6 server changes — see "Deploy first" below).
+
+(Fifth-session record follows.)
+
 State as of 2026-09-01 (fifth session — **UI milestone Slice 2 BUILT**):
 the Records tabs are live on `feature/exploration-poi` (commit 9e4a4f2,
 pushed; still NOT merged, NOT deployed — nothing server-side changed). The
@@ -28,9 +68,8 @@ that matters). Verified visually in-browser via claude-in-chrome — note
 the browser caches style.css hard; a plain reload after pulling this
 slice shows all pages at once (stale CSS), hard-reload fixes it.
 
-**BUILD NEXT — Slice 3: the contextual "Now" zone** — the Navigation panel
-becomes state-driven (cruising / near-derelict / docking / combat /
-low-fuel / docked), spec in `mockups/sidebar-redesign.html`. Watchlist for
+**BUILD NEXT — Slice 3: the contextual "Now" zone** *(→ BUILT sixth session,
+see above)*. Watchlist for
 Slice 2 at playtest: do the badges actually pull the eye or get ignored;
 does anyone miss seeing ledger + missions at once (tab-flipping to compare
 would be real feedback); does the growing tab row over a career read as
