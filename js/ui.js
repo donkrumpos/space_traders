@@ -575,7 +575,7 @@ function updateNowZone(els, ship) {
 // Two visibility layers, deliberately separate:
 //   - each page's inline style.display stays "this record has content", set
 //     by that panel's own update function (verify.js asserts on it, and the
-//     tab row derives which tabs exist from it — a fresh Cadet sees three
+//     tab row derives which tabs exist from it — a fresh Deckhand sees three
 //     tabs, not six);
 //   - the .rec-on class is "this is the selected tab", layered on in CSS.
 // Hiding a panel must never hide news, so tabs carry attention cues: active

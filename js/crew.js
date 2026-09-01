@@ -143,7 +143,7 @@ function updateCrewPanelUI() {
     const hullLimited = currentHull().berths <= slots && currentHull().berths < crewRankSlots();
     const hint = hullLimited ? ' — a bigger hull adds bunks'
         : slots < 1 ? '' : slots < 2 ? ' — next berth at Captain'
-        : slots < 3 ? ' — third berth at Star Marshal' : '';
+        : slots < 3 ? ' — third berth at Chartbreaker' : '';
     const berths = `<div style="color:#666; font-size:10px;">Berths: ${crew.length}/${slots}${hint}</div>`;
     list.innerHTML = (rows || '<div style="color:#666;">Empty bunks — check station bars</div>') + berths;
     updateRecordsTabs(); // Crew tab appears with the first berth
