@@ -189,6 +189,35 @@ function updateTradingInterface(planet) {
     updateRepairCost();
 }
 
+// Deal vs your ledger (visual-language Slice C): each market row grades the
+// here-price against your own best recorded price at OTHER ports. No ledger
+// entry elsewhere, no bar — scouting is what builds your market sense.
+function dealLine(goodType, price, side) {
+    const planet = game.currentPlanet;
+    const best = ledgerBest(goodType, side, planet ? planet.name : null);
+    if (!best) return '';
+    let verdict, tag, flavor = '';
+    if (side === 'buy') {
+        if (price < best.price) { verdict = 'best'; tag = 'cheapest known'; flavor = 'buy here — this is the source'; }
+        else if (price <= best.price * 1.05) { verdict = 'near'; tag = 'near your best'; }
+        else { verdict = 'bad'; tag = 'worse than known'; flavor = 'you know a cheaper yard'; }
+    } else {
+        if (price > best.price) { verdict = 'best'; tag = 'best sell known'; flavor = 'sell here — nobody pays better'; }
+        else if (price >= best.price * 0.95) { verdict = 'near'; tag = 'near your best'; }
+        else { verdict = 'bad'; tag = 'worse than known'; flavor = 'haul it onward'; }
+    }
+    const span = Math.max(price, best.price) * 1.15;
+    const fillW = Math.round(price / span * 100);
+    const markL = Math.round(best.price / span * 100);
+    const fill = side === 'buy' ? (verdict === 'best' ? '#00ff00' : '#77aaaa') : '#ffaa00';
+    const bestLbl = side === 'buy' ? 'your best buy' : 'your best sell';
+    const title = `here $${price} · ${bestLbl} $${best.price} (${best.station})${flavor ? ' · ' + flavor : ''}`;
+    return `<div class="deal-line" data-good="${goodType}" data-verdict="${verdict}" title="${title}">
+        <span class="deal-track"><i style="width:${fillW}%;background:${fill};"></i><span class="deal-mark" style="left:${markL}%;"></span></span>
+        <span class="deal-tag ${verdict}">${tag}</span>
+    </div>`;
+}
+
 function updateBuyingSectionUI() {
     const buyingSection = document.getElementById('buyingSection');
     const planet = game.currentPlanet;
@@ -210,6 +239,7 @@ function updateBuyingSectionUI() {
                 <button onclick="buyGood('${goodType}', 5)">+5</button>
                 <button onclick="buyGood('${goodType}', 'max')">Max</button>
             </span>
+            ${dealLine(goodType, price, 'buy')}
         </div>`;
     });
 
@@ -240,6 +270,7 @@ function updateSellingSectionUI() {
                 <button onclick="sellGood('${goodType}', 5)" ${off}>-5</button>
                 <button onclick="sellGood('${goodType}', 'all')" ${off}>All</button>
             </span>
+            ${dealLine(goodType, price, 'sell')}
         </div>`;
     });
 }

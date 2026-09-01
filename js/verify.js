@@ -1087,6 +1087,90 @@ VERIFY_SUITES.districts = (assert) => {
     updateMissionsUI();
 };
 
+VERIFY_SUITES.deals = (assert) => {
+    // Ledger-fed deal bars (visual-language Slice C): market rows grade the
+    // here-price against YOUR best recorded price at OTHER ports; the Ledger
+    // tab regroups by good with the best-known price glowing. An empty ledger
+    // draws nothing — scouting is what builds your market sense.
+    const saved = { ledger: economy.ledger, currentPlanet: game.currentPlanet };
+    const planet = game.planets[0]; // Agricon Prime: produces food, demands 3 goods
+    game.currentPlanet = planet;
+    const buyEl = document.getElementById('buyingSection');
+    const sellEl = document.getElementById('sellingSection');
+
+    const gBuy = Object.keys(planet.produces)[0];
+    const gSell = Object.keys(planet.demands)[0];
+    const buyHere = getBuyPrice(planet, gBuy);
+    const sellHere = getSellPrice(planet, gSell);
+
+    // Empty ledger = no comparison anywhere
+    economy.ledger = {};
+    updateBuyingSectionUI();
+    updateSellingSectionUI();
+    assert('an empty ledger draws no deal bars',
+        buyEl.querySelectorAll('.deal-line').length === 0 &&
+        sellEl.querySelectorAll('.deal-line').length === 0);
+
+    // Scouted ledger: the here-port is recorded (must NOT compare against
+    // itself) plus one rival port that's worse both ways
+    economy.ledger[planet.name] = { buy: { [gBuy]: buyHere }, sell: { [gSell]: sellHere } };
+    economy.ledger['Verify Rival'] = {
+        buy: { [gBuy]: buyHere + 20 },
+        sell: { [gSell]: Math.max(1, sellHere - 20) }
+    };
+    updateBuyingSectionUI();
+    updateSellingSectionUI();
+    assert('a cheaper-than-known buy row reads cheapest known',
+        !!buyEl.querySelector(`.deal-line[data-good="${gBuy}"][data-verdict="best"]`) &&
+        buyEl.textContent.includes('cheapest known'));
+    assert('a better-than-known sell row reads best sell known',
+        !!sellEl.querySelector(`.deal-line[data-good="${gSell}"][data-verdict="best"]`) &&
+        sellEl.textContent.includes('best sell known'));
+    assert('a good never priced elsewhere shows no comparison',
+        buyEl.querySelectorAll('.deal-line').length === 1 &&
+        sellEl.querySelectorAll('.deal-line').length === 1);
+
+    // Flip the rival to beat the here-price — the row grades red
+    economy.ledger['Verify Rival'].buy[gBuy] = Math.max(1, buyHere - 20);
+    economy.ledger['Verify Rival'].sell[gSell] = sellHere + 20;
+    updateBuyingSectionUI();
+    updateSellingSectionUI();
+    assert('a pricier-than-known buy row reads worse than known',
+        !!buyEl.querySelector(`.deal-line[data-good="${gBuy}"][data-verdict="bad"]`) &&
+        buyEl.textContent.includes('worse than known'));
+    assert('a weaker-than-known sell row reads worse than known',
+        !!sellEl.querySelector(`.deal-line[data-good="${gSell}"][data-verdict="bad"]`));
+
+    // The Ledger tab as a chart: grouped by good, best price marked
+    economy.ledger = {
+        'Verify Port A': { buy: { food: 12 }, sell: { technology: 58 } },
+        'Verify Port B': { buy: { food: 19 }, sell: { technology: 41 } }
+    };
+    updateLedgerUI();
+    const led = document.getElementById('ledgerList');
+    const foodGroup = led.querySelector('.lgood[data-good="food"][data-side="buy"]');
+    const techGroup = led.querySelector('.lgood[data-good="technology"][data-side="sell"]');
+    assert('the ledger tab groups by good, a bar per station',
+        !!foodGroup && !!techGroup &&
+        foodGroup.querySelectorAll('.lrow').length === 2 &&
+        techGroup.querySelectorAll('.lrow').length === 2);
+    assert('the best-known price glows in each group',
+        foodGroup.querySelector('.lrow.best').getAttribute('data-station') === 'Verify Port A' &&
+        techGroup.querySelector('.lrow.best').getAttribute('data-station') === 'Verify Port A');
+    assert('every price stays visible on the chart',
+        led.textContent.includes('$12') && led.textContent.includes('$19') &&
+        led.textContent.includes('$58') && led.textContent.includes('$41'));
+
+    // Restore
+    economy.ledger = saved.ledger;
+    game.currentPlanet = saved.currentPlanet;
+    updateLedgerUI();
+    if (game.currentPlanet) {
+        updateBuyingSectionUI();
+        updateSellingSectionUI();
+    }
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

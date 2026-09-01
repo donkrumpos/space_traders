@@ -388,9 +388,106 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap; /* lets the deal-line drop to its own full-width row */
     margin: 10px 0;
     padding: 5px;
     border: 1px solid #004400;
+}
+
+/* Deal vs your ledger (Slice C): a bar under each market row grading the
+   here-price against your own best recorded elsewhere. No ledger, no bar. */
+.deal-line {
+    flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+.deal-track {
+    flex: 1;
+    height: 6px;
+    background: #03150a;
+    border: 1px solid #063806;
+    position: relative;
+}
+.deal-track i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.deal-mark {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: #ccffcc;
+    opacity: 0.7;
+}
+.deal-tag {
+    font-size: 9px;
+    color: #888;
+    white-space: nowrap;
+}
+.deal-tag.best {
+    color: #00ff00;
+    font-weight: bold;
+}
+.deal-tag.bad {
+    color: #ff4444;
+}
+
+/* The Ledger tab as a chart (Slice C): grouped by good, a bar per station,
+   the best-known price glowing. Same bars feed the market's deal column. */
+.lgood {
+    margin: 10px 0;
+}
+.lgood .lhead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+.lrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0 2px 22px;
+    font-size: 11px;
+}
+.lrow .lst {
+    width: 105px;
+    flex: none;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lrow .lbar {
+    flex: 1;
+    height: 7px;
+    background: #03150a;
+    border: 1px solid #063806;
+    position: relative;
+}
+.lrow .lbar i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.lrow .lval {
+    width: 44px;
+    flex: none;
+    text-align: right;
+}
+.lrow.best .lst {
+    color: #00ff00;
+}
+.lrow.best .lval {
+    color: #00ff00;
+    font-weight: bold;
 }
 
 /* Dock districts (visual-language Slice B) — the docked panel is two places

@@ -109,6 +109,24 @@ function recordLedger(planet) {
     updateLedgerUI();
 }
 
+// Your best-known price for a good across the ledger — the market sense that
+// scouting buys you. side 'buy' hunts the lowest, 'sell' the highest.
+// excludeStation keeps the port you're standing at out of its own comparison.
+// Returns { price, station } or null if you've never priced it elsewhere.
+function ledgerBest(goodType, side, excludeStation) {
+    let best = null;
+    Object.keys(economy.ledger).forEach(name => {
+        if (name === excludeStation) return;
+        const prices = economy.ledger[name][side];
+        const p = prices && prices[goodType];
+        if (p === undefined) return;
+        if (!best || (side === 'buy' ? p < best.price : p > best.price)) {
+            best = { price: p, station: name };
+        }
+    });
+    return best;
+}
+
 function updateLedgerUI() {
     const el = document.getElementById('ledgerList');
     if (!el) return;
@@ -117,19 +135,42 @@ function updateLedgerUI() {
         el.innerHTML = '<div style="color:#666;">Dock at stations to record prices</div>';
         return;
     }
+    // Grouped BY GOOD (visual-language Slice C): the question the ledger
+    // answers is "where do I take this cargo?" — a bar per station, best
+    // known price glowing. Sell groups lead; you hold cargo more than credits.
     let html = '';
-    names.forEach(name => {
-        const entry = economy.ledger[name];
-        const eventMark = economy.marketEvent && economy.marketEvent.planetName === name ? ' ⚡' : '';
-        html += `<div style="color:#00ffff; margin-top:6px;">${name}${eventMark}</div>`;
-        Object.keys(entry.buy).forEach(g => {
-            html += `<div class="ledger-row"><span>${goodIcon(g)}${goods[g].name}</span><span style="color:#88ff88;">buy $${entry.buy[g]}</span></div>`;
-        });
-        Object.keys(entry.sell).forEach(g => {
-            html += `<div class="ledger-row"><span>${goodIcon(g)}${goods[g].name}</span><span style="color:#ffaa00;">sell $${entry.sell[g]}</span></div>`;
+    Object.keys(goods).forEach(g => {
+        ['sell', 'buy'].forEach(side => {
+            const rows = [];
+            names.forEach(name => {
+                const p = economy.ledger[name][side][g];
+                if (p !== undefined) rows.push({ name, p });
+            });
+            if (rows.length === 0) return;
+            rows.sort((a, b) => side === 'buy' ? a.p - b.p : b.p - a.p);
+            const max = Math.max(...rows.map(r => r.p));
+            const bestP = rows[0].p;
+            const sideLbl = side === 'buy'
+                ? '<span style="color:#88ff88;">buy</span>'
+                : '<span style="color:#ffaa00;">sell</span>';
+            html += `<div class="lgood" data-good="${g}" data-side="${side}">
+                <div class="lhead">${goodIcon(g)}<span>${goods[g].name}</span>${sideLbl}</div>`;
+            rows.forEach(r => {
+                const best = r.p === bestP;
+                const eventMark = economy.marketEvent && economy.marketEvent.planetName === r.name ? ' ⚡' : '';
+                const w = Math.max(4, Math.round(r.p / max * 90));
+                const color = side === 'buy'
+                    ? (best ? '#00aa44' : '#3a5a3a')
+                    : (best ? '#ffaa00' : '#7a6a30');
+                html += `<div class="lrow${best ? ' best' : ''}" data-station="${r.name}">
+                    <span class="lst">${r.name}${eventMark}</span>
+                    <span class="lbar"><i style="width:${w}%;background:${color};"></i></span>
+                    <span class="lval">$${r.p}</span></div>`;
+            });
+            html += `</div>`;
         });
     });
-    html += `<div style="color:#555; margin-top:6px; font-size:10px;">Prices as of last visit</div>`;
+    html += `<div style="color:#555; margin-top:6px; font-size:10px;">Prices as of your last visit — the reach keeps trading without you</div>`;
     el.innerHTML = html;
 }
 
