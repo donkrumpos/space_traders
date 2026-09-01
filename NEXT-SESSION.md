@@ -1,5 +1,48 @@
 # Next Session Roadmap
 
+State as of 2026-09-01 (ninth session — **visual-language Slice C BUILT
+(ledger-fed deal bars)**): commit 8a2267d on `feature/exploration-poi`
+(pushed; still NOT merged, NOT deployed; nothing server-side changed). One
+commit:
+
+1. **Slice C — deal bars + the ledger as a chart (8a2267d).** Both surfaces
+   compare prices against YOUR OWN price memory (mockup §2's `.deal` column +
+   §3's chart):
+   - **Market deal bars** — every buy/sell row in the Dock district grows a
+     `.deal-line`: a track scaled to here-price vs your best recorded price at
+     OTHER ports, a `.deal-mark` where your best sits, and a tag ("cheapest
+     known" / "best sell known" green · "near your best" · "worse than known"
+     red). The `title` attr is the under-the-hood layer: here-price, your
+     best, which port, one junkyard-voice line. **Empty ledger = no bars, and
+     the here-port never compares against itself** — a good never priced
+     ELSEWHERE shows nothing; scouting builds market sense (designed reward).
+   - **The Ledger tab as a chart** — `updateLedgerUI` regroups `#ledgerList`
+     BY GOOD (sell groups before buy — you hold cargo more than credits): a
+     `.lrow` bar per station scaled to the group max, `.lrow.best` glowing
+     green, event ⚡ kept per station, every price still printed.
+   - Mechanics worth knowing cold: `ledgerBest(good, side, excludeStation)`
+     (economy.js) is the ONE comparator both surfaces share ('buy' = min,
+     'sell' = max over `economy.ledger`). `dealLine()` (trading.js) renders
+     inside the existing `updateBuyingSectionUI`/`updateSellingSectionUI`, so
+     bars rebuild on dock + after every trade — event-driven, no per-frame
+     work. `.trade-item` gained `flex-wrap: wrap` so the deal line drops to
+     its own full-width row (sell rows with long "(You have: n)" labels now
+     wrap their qty buttons below at sidebar width — looks intentional, fine).
+     CSS mirrors Slice B's gauge vocabulary (`.deal-track`/`.lbar` ≈
+     `.svc-track`). New solo `deals` suite (9 asserts). Verified visually
+     in-browser (claude-in-chrome): both surfaces match the mockup.
+
+**Gates at tip: solo ?verify 202/202 (was 193), verify-net 136/136.**
+
+**NEXT: build Slice D (interactive schematic + Ship-tab dissolution)** —
+mockup §4: mods pin onto the schematic slots (◈), the under-the-hood card is
+the only place numbers live, the Ship tab retires, the ship log's journal
+lines merge into the Log tab. Then the milestone is done → deploy to themisto
+(explicit, per RUNBOOK) and start MMO groundwork (player-founded factions,
+lore-bible §9).
+
+--- (eighth-session record follows) ---
+
 State as of 2026-09-01 (eighth session — **visual-language Slice B BUILT
 (dock districts) + rank language fully de-navied**): commits e2657a4..6ed051b
 on `feature/exploration-poi` (pushed; still NOT merged, NOT deployed; nothing
