@@ -1,5 +1,76 @@
 # Next Session Roadmap
 
+State as of 2026-09-01 (eighth session — **visual-language Slice B BUILT
+(dock districts) + rank language fully de-navied**): commits e2657a4..6ed051b
+on `feature/exploration-poi` (pushed; still NOT merged, NOT deployed; nothing
+server-side changed this session). Two commits:
+
+1. **Slice B — dock districts (45b9d1e).** The docked `tradingPanel` was nine
+   identically-cyan-headed sections in one scroll. It now splits into **two
+   districts by decision tempo** (mockups/dock-visual-language.html §2), and
+   docking always re-lands at the Dock:
+   - **The Dock** (default, `#district-dock`) — the seconds loop: a **services
+     icon strip** (`#servicesStrip`) of refuel / rearm / repair as three
+     gauge-buttons (each = a service glyph + a fill gauge tracking the live pool
+     level + the top-off cost + the action button), then market buy/sell (glyphed
+     by Slice A), mission board, crew for hire.
+   - **The Shipyard** (`#district-yard`) — the considered purchases (shipyard
+     hulls, ship upgrades, weapon systems, mechanic's bench) behind a deliberate
+     **"⇱ walk to the Shipyard"** door (`walkDistrict()`), greeted by a
+     junkyard-voice line ("nothing here is new — inherited, salvaged, or grown").
+     **"⇲ walk back"** returns. Burying the slow purchases is a feature (sheds
+     half the every-dock wall) and plants the future planet-map seed.
+   - Mechanics worth knowing cold: the 3 service symbols (`s-fuel`/`s-rearm`/
+     `s-repair`) live in a **SEPARATE `#serviceSprite`** (index.html), NOT in
+     icons.js's `#glyphSprite` — so the `icons` suite's goods-glyph count stays
+     8. `resetDistrict()` (trading.js) runs inside `updateTradingInterface()` so
+     every dock lands at the Dock (choice is non-persistent by design). Gauge
+     fills ride the existing `updateFuelCost`/`updateMissileCost`/
+     `updateRepairCost` via `setServiceGauge()` — event-driven, no per-frame.
+     ALL section ids preserved (`#shipyardSection #modsSection #crewSection
+     #missionBoard`, buy/sell, `#fuelCost/#missileCost/#repairCost` + buttons),
+     so the ships/mods/crew/escort suites are untouched. New solo `districts`
+     suite (9 asserts): dock lands on the Dock, door swaps to the Shipyard, both
+     districts render, service strip carries live costs + its three glyphs.
+2. **De-navy cleanup (6ed051b).** The rank ladder was de-navied in cc3ef06 but
+   three literals were missed and the developer caught the HUD still reading
+   "Cadet": index.html's `#pilotRank` placeholder (→ "· Deckhand", the real
+   rank-0 first paint), crew.js's berth hint ("third berth at Star Marshal" — a
+   deleted rank — → "Chartbreaker"), and a stale "Cadet" ui.js comment. Ranks
+   are stored as an index; no mechanics change. (Full ladder in pilot.js:
+   Deckhand/Runner/Pilot/Veteran/Ace/Captain/Shipmaster/Chartbreaker/Living
+   Legend — "Captain" is legit at rank 5.)
+
+**Gates at tip: solo ?verify 193/193 (was 184), verify-net 136/136.** Verified
+Slice B visually in-browser (claude-in-chrome): both districts render to spec,
+the door wraps cleanly at sidebar width (a narrow-width overflow was fixed,
+CSS-only). Developer confirmed it in their own browser: "much nicer."
+
+**DIRECTION PIVOT this session (developer, decided via AskUserQuestion): the
+target is FULL MMO and FAMILY PLAYTEST IS RETIRED.** This supersedes the
+"family as live-test guild" framing. Consequences for the workflow going
+forward (see the [[space-traders-direction]] memory):
+- **The two automated gates (solo `?verify` + `verify-net`) are the ONLY
+  quality bar.** Stop writing TEST-PLAN family-playtest sections and "family
+  playtest queued" backlog items. (TEST-PLAN.md still has legacy playtest
+  sections incl. the Slice B one added this session — harmless, retire on touch,
+  not worth a churn commit now.)
+- **Deploy to themisto when a milestone lands** (still explicit per RUNBOOK.md,
+  never auto) so the shared world stays live for the MMO push.
+- **Roadmap:** FINISH the visual-language slices first (they're polish the MMO
+  still wants), THEN pivot to MMO groundwork. **Build order: A glyphs ✓ →
+  B districts ✓ → C ledger-fed deal bars → D interactive schematic + Ship-tab
+  dissolution → MMO groundwork (player-founded factions, lore-bible §9).**
+
+**NEXT: build Slice C (ledger-fed deal bars)** — the market rows compare each
+price against YOUR ledger memory (empty ledger = no bars; scouting builds your
+market sense). Spec is in mockups/dock-visual-language.html §3 (the Ledger tab
+as a chart, grouped by good) and the market `.deal` column in §2. The ledger
+data already exists (economy.js `updateLedgerUI`, `economy.ledger` keyed by
+station; the `icons` suite exercises it). Then D (interactive schematic).
+
+--- (seventh-session record follows) ---
+
 State as of 2026-09-01 (seventh session — **visuals riff PINNED + glyph
 Slice A BUILT + the LORE BIBLE written**): commits c5939d1..cc3ef06 on
 `feature/exploration-poi` (pushed; still NOT merged, NOT deployed). Three
