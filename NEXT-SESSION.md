@@ -1,9 +1,38 @@
 # Next Session Roadmap
 
+State as of 2026-08-31 (fourth session — **UI milestone Slice 1 BUILT**):
+the ship-schematic Vitals band is live on `feature/exploration-poi`
+(commit 06be645, pushed; still NOT merged, NOT deployed). One drawn SVG ship
++ numerics strip replaced the Ship Status / Ship Upgrades / Cargo Hold panels
+and the systems-down text wall — number-free glance per
+docs/ship-design-vision.md §7: bay grid cells = cargoMax (filled in each
+good's own color, one-line manifest below), shield-envelope thickness =
+shield bank, nacelle/nose/tank size = upgrade levels (no Lv badges — the
+mockup's badges were dropped as contradicting §3), missile pips = tubes,
+damage flashes the exact part red, thruster glow follows live thrust.
+Regions are `data-slot` groups so the Ship Bay drops in later with no rework.
+Perf fold-in shipped in the same slice: updateUI() now runs on cached element
+refs + last-value-guarded writes (no per-frame getElementById/innerHTML;
+grid/pip geometry rebuilds only on capacity change; nearby-objects panel
+rewrites only when its HTML changes). All verify DOM ids live on in the
+numerics strip; NEW solo `vitals` suite asserts the encodings. **Gates: solo
+?verify 154/154 (was 144), verify-net 136/136.** TEST-PLAN.md Part 0 is the
+playtest hand-off (the five-second glance test is the one that matters).
+
+**BUILD NEXT — Slice 2: Records tabs; then Slice 3: the contextual "Now"
+zone** — both specified in `mockups/sidebar-redesign.html` (the ★ Contextual
+Hybrid). Watchlist for the schematic after family playtest: does the
+number-free glance actually beat reading digits; does losing "Level N" text
+hurt upgrade shopping; is the taller sticky vitals panel OK on small screens
+side-by-side; SNES-pixel art test on the schematic is still the queued
+first-custom-art experiment.
+
+(Third-session record follows — the design pass that specified all of this.)
+
 State as of 2026-08-31 (third session — **UI milestone DESIGNED, ready to
 build**): the confusing-sidebar milestone got a full information-design pass
-plus a much bigger vision riff. No game/server code changed this session (docs +
-mockups only, so gates were skipped) — **the next session BUILDS Slice 1.**
+plus a much bigger vision riff. No game/server code changed that session (docs +
+mockups only, so gates were skipped) — **Slice 1 is now built (see above).**
 
 **What this session produced (all on `feature/exploration-poi`, uncommitted →
 now committed):**
