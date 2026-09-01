@@ -14,8 +14,8 @@ globalThis.SIM_PLANETS = [
         demands: { technology: 200, luxury: 150, medicine: 160 },
         shipyard: ['skiff'],
         upgrades: {
-            cargo: { name: 'Cargo Bay Extension', baseCost: 500, description: 'Increases cargo capacity by 5 units' },
-            fuel_tank: { name: 'Extended Fuel Tank', baseCost: 800, description: 'Increases fuel capacity by 200 units' }
+            cargo: { name: 'Grain-Hopper Conversion', baseCost: 500, description: '+5 cargo — a silo retrofit that still smells faintly of harvest' },
+            fuel_tank: { name: 'Paddy-Barge Bladders', baseCost: 800, description: '+200 fuel — repurposed irrigation bladders, rinsed. Mostly.' }
         }
     },
     {
@@ -28,8 +28,8 @@ globalThis.SIM_PLANETS = [
         demands: { food: 180, luxury: 140, contraband: 220 },
         weaponSystems: ['double'],
         upgrades: {
-            hull: { name: 'Hull Reinforcement', baseCost: 1000, description: 'Increases hull strength by 50 points' },
-            engine: { name: 'Industrial Thrusters', baseCost: 1200, description: 'Faster acceleration (2s to max thrust) and improved fuel efficiency' }
+            hull: { name: 'Drum-Plate Cladding', baseCost: 1000, description: '+50 hull — off-cut seam plate, drilled to fit and proud of its welds' },
+            engine: { name: 'Gantry Lift Motors', baseCost: 1200, description: 'Faster acceleration (2s to max thrust) and a leaner burn — surplus ore-lift drivers off the Drum' }
         }
     },
     {
@@ -43,9 +43,9 @@ globalThis.SIM_PLANETS = [
         weaponSystems: ['spread'],
         shipyard: ['courier', 'gunship'],
         upgrades: {
-            shields: { name: 'Shield Generator', baseCost: 1500, description: 'Advanced shield system for protection' },
-            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency' },
-            weapons: { name: 'Advanced Targeting', baseCost: 1800, description: 'Improved laser damage and missile capacity' }
+            shields: { name: 'Foundry Shield Lattice', baseCost: 1500, description: 'A woven deflector lattice, foundry-fresh — the closest thing to new the reach sells' },
+            engine: { name: 'Fusion Drive', baseCost: 2000, description: 'Rapid acceleration (1s to max thrust) and superior fuel efficiency — Dreamworks-tuned' },
+            weapons: { name: 'Dreamworks Gunnery Core', baseCost: 1800, description: 'A cognition-grown targeting assist — improved laser damage and missile capacity. It hums when it locks.' }
         }
     },
     {
@@ -59,10 +59,10 @@ globalThis.SIM_PLANETS = [
         demands: { food: 300, technology: 280, materials: 250, luxury: 200, medicine: 280, parts: 150 },
         shipyard: ['gunship', 'freighter'],
         upgrades: {
-            shields: { name: 'Military Shields', baseCost: 3000, description: 'Military-grade defensive systems' },
-            hull: { name: 'Armor Plating', baseCost: 2500, description: 'Heavy combat armor for dangerous regions' },
-            engine: { name: 'Military Drive Core', baseCost: 4000, description: 'Instant acceleration (0.5s to max thrust) with maximum fuel efficiency' },
-            weapons: { name: 'Military Weapons', baseCost: 3500, description: 'Heavy laser cannons and missile pods for combat' }
+            shields: { name: 'Warlord-Surplus Shields', baseCost: 3000, description: 'Combat-grade, stripped from somebody who lost. Previous owner past caring.' },
+            hull: { name: 'Raid-Scrap Armor', baseCost: 2500, description: 'Heavy plate welded from raid wrecks — every dent already paid for' },
+            engine: { name: 'Blockade-Runner Core', baseCost: 4000, description: 'Instant acceleration (0.5s to max thrust), maximum fuel efficiency. Built to outrun questions.' },
+            weapons: { name: 'Lastlight Arsenal', baseCost: 3500, description: 'Heavy laser cannons and missile pods. No serial numbers, no warranty.' }
         }
     },
     {
@@ -75,8 +75,8 @@ globalThis.SIM_PLANETS = [
         demands: { materials: 130, technology: 110, contraband: 350, relics: 380 },
         shipyard: ['courier', 'freighter', 'clipper'],
         upgrades: {
-            cargo: { name: 'Luxury Cargo Bay', baseCost: 2000, description: 'Premium cargo expansion with climate control' },
-            fuel_tank: { name: 'Premium Fuel System', baseCost: 2500, description: 'High-capacity fuel system with purification' }
+            cargo: { name: 'Collector-Grade Hold', baseCost: 2000, description: '+5 cargo, climate-controlled — the Ledger\'s buyers insist their silk arrives unwrinkled' },
+            fuel_tank: { name: 'Estate Fuel Cells', baseCost: 2500, description: '+200 fuel, filtered three times — old money does not run dry' }
         }
     },
     {
@@ -84,7 +84,7 @@ globalThis.SIM_PLANETS = [
         x: 2600, y: 600,
         type: 'ocean',
         color: '#00ccaa',
-        blurb: 'A storm-wracked ocean world. Its drowned reef-labs culture the galaxy\'s medicine.',
+        blurb: 'A storm-wracked ocean world. Its drowned reef-labs culture the reach\'s medicine.',
         produces: { medicine: 70 },
         demands: { technology: 230, food: 150, materials: 140 },
         upgrades: {

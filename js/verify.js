@@ -22,7 +22,7 @@ VERIFY_SUITES.boot = (assert) => {
 VERIFY_SUITES.xp = (assert) => {
     const pilot = game.pilot;
     assert('pilot state exists', pilot && typeof pilot.xp === 'number');
-    assert('rank table starts at Cadet/0', PILOT_RANKS[0].xp === 0);
+    assert('rank table starts at Deckhand/0', PILOT_RANKS[0].xp === 0);
     assert('rankForXP walks thresholds',
         rankForXP(0) === 0 && rankForXP(60) === 1 && rankForXP(999999) === PILOT_RANKS.length - 1);
 
@@ -146,7 +146,7 @@ VERIFY_SUITES.crew = (assert) => {
     pilot.rank = 5;
     assert('two berths at Captain', crewSlots() === 2);
     pilot.rank = 7;
-    assert('three berths at Star Marshal aboard a clipper', crewSlots() === 3);
+    assert('three berths at Chartbreaker aboard a clipper', crewSlots() === 3);
     pilot.rank = 5;
 
     // Hiring through a station offer

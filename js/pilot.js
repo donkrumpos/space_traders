@@ -3,14 +3,16 @@
 // ship. Kills, trades, deliveries, and discoveries all feed it.
 
 const PILOT_RANKS = [
-    { title: 'Cadet',         xp: 0,    icon: '·' },
-    { title: 'Ensign',        xp: 60,   icon: '▸' },
+    // A freelancer's ladder, not a navy's (lore-bible rule 7: no empires,
+    // no fleets — rank is reputation among dockhands and dispatchers).
+    { title: 'Deckhand',      xp: 0,    icon: '·' },
+    { title: 'Runner',        xp: 60,   icon: '▸' },
     { title: 'Pilot',         xp: 150,  icon: '★' },
     { title: 'Veteran',       xp: 320,  icon: '★★' },
     { title: 'Ace',           xp: 600,  icon: '✦' },
     { title: 'Captain',       xp: 1000, icon: '✪' },
-    { title: 'Commodore',     xp: 1600, icon: '✪✪' },
-    { title: 'Star Marshal',  xp: 2500, icon: '❂' },
+    { title: 'Shipmaster',    xp: 1600, icon: '✪✪' },
+    { title: 'Chartbreaker',  xp: 2500, icon: '❂' },
     { title: 'Living Legend', xp: 4000, icon: '❂❂' }
 ];
 

@@ -19,7 +19,7 @@ const eventTypes = {
         size: 12,
         color: '#666666',
         symbol: '🚢',
-        description: "A drifting derelict vessel. Investigating might yield valuable salvage.",
+        description: "A hull running cold and quiet — silent long enough to be salvage, recent enough to be worth it.",
         interactionText: "Investigate Derelict Ship",
         fuelCost: 50,
         action: "investigateDerelict"
@@ -30,7 +30,7 @@ const eventTypes = {
         size: 15,
         color: '#FFD700',
         symbol: '⛽',
-        description: "An automated fuel depot offering emergency refueling at premium prices.",
+        description: "An automated Combine depot, still faithfully selling. The prices went feral generations before you got here.",
         interactionText: "Access Fuel Depot",
         fuelCost: 0,
         action: "accessFuelDepot"
@@ -41,7 +41,7 @@ const eventTypes = {
         size: 8,
         color: '#FF6B6B',
         symbol: '🆘',
-        description: "A distress beacon signals for help. Someone needs assistance.",
+        description: "A distress beacon on an open channel. Out here, answering is a choice every pilot makes alone.",
         interactionText: "Respond to Distress Call",
         fuelCost: 40,
         action: "respondDistress"
