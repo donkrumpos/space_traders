@@ -29,7 +29,17 @@ persistent living world"** wire section. TEST-PLAN.md Part 1 is the new
 playtest hand-off (incl. VERIFY_DEBUG console commands to force windows/
 occupations without waiting 12-24h).
 
-**Next-milestone candidates** (pick after playtest): quest chains off the
+**Next session (user-requested, 2026-08-31 playtest):** UI milestone — the
+game must fit a FIXED screen size: the user is building a physical
+system/console of their own design and the game targets its display. Current
+layout (tall stacked-panel sidebar + canvas) is desktop-browser sprawl and
+won't survive a fixed viewport. Info to collect at kickoff before designing:
+exact resolution + aspect ratio, physical screen size / viewing distance
+(font scale), input method (keyboard? gamepad? custom controls?), and whether
+it runs fullscreen/kiosk browser. Then diagnose → propose layouts → build in
+verified slices as usual.
+
+**Other milestone candidates** (pick after playtest): quest chains off the
 questSeed rails (Ossuary dig-quest); death broadcast + death chronicle
 entries (known M4 gap, now more visible since deaths are the one big event
 the ledger misses); occupation expiry knob if the map feels naggy; flipping
