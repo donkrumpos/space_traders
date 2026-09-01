@@ -19,6 +19,12 @@ numerics strip; NEW solo `vitals` suite asserts the encodings. **Gates: solo
 ?verify 154/154 (was 144), verify-net 136/136.** TEST-PLAN.md Part 0 is the
 playtest hand-off (the five-second glance test is the one that matters).
 
+**First look (2026-09-01, user, in-browser):** the schematic renders as
+designed; the reaction was "the side drawer still has a lot of information
+that seems overwhelming" — i.e. the un-rebuilt panel stack below the
+schematic (The Ship / Navigation / Missions / Ledger / Crew / Reputation /
+Galaxy Log) is the remaining wall. That confirms Slice 2 as the next cut.
+
 **BUILD NEXT — Slice 2: Records tabs; then Slice 3: the contextual "Now"
 zone** — both specified in `mockups/sidebar-redesign.html` (the ★ Contextual
 Hybrid). Watchlist for the schematic after family playtest: does the
