@@ -1,11 +1,58 @@
 # Test Plan — Exploration + Persistent World milestones (branch `feature/exploration-poi`)
 
-Built headless on 2026-08-31 while you were away — TWO milestones now live on
-this branch: **Exploration** (the seven POIs, below) and **Persistent World**
-("The World Remembers and Moves", first section). **Nothing is merged to
-`main` or deployed to themisto yet.** Both automated gates are green (solo
-`?verify` 144/144, `node verify-net.mjs` 136/136); this doc is for the things
-a machine can't judge — how it *feels*.
+Built headless on 2026-08-31 while you were away — THREE milestones now live
+on this branch: **UI legibility Slice 1** (the ship-schematic Vitals band,
+Part 0), **Persistent World** ("The World Remembers and Moves", Part 1), and
+**Exploration** (the seven POIs, Part 2). **Nothing is merged to `main` or
+deployed to themisto yet.** Both automated gates are green (solo `?verify`
+154/154, `node verify-net.mjs` 136/136); this doc is for the things a machine
+can't judge — how it *feels*.
+
+---
+
+# Part 0 — The ship schematic (UI legibility, Slice 1)
+
+The confusing sidebar got its first redesign slice: the old **Ship Status +
+Ship Upgrades + Cargo Hold** text panels (and the systems-down warning wall)
+are now **one drawn ship** at the top of the sidebar, with a small numerics
+strip under it. The design bet (docs/ship-design-vision.md): you should read
+your ship's state from the *shape*, mid-combat, without reading a single
+number —
+
+- **Cargo** is a bay grid that fills cell by cell, each cell in the good's
+  own color (relics violet, ore orange, Glowgrain yellow…). A one-line
+  manifest under the numerics says what's aboard.
+- **Shields** are the blue envelope around the hull — it thins and fades as
+  charge drops, and a bigger shield bank IS a thicker envelope.
+- **Upgrades are size, not "Lv" badges**: bigger engines = bigger nacelles,
+  bigger weapon = bigger nose mount, bigger tank = wider fuel spine, more
+  missile tubes = more pips.
+- **Damage flashes the exact part red** — hull outline goes amber then red
+  and pulses when critical; knocked-out engines / life support / lasers flash
+  where they live; an overheated laser glows amber. The one-line "R to
+  repair (kits: N)" hint stays below the strip.
+- **Thruster glow breathes with your actual thrust.**
+
+## What to check (feel, not function)
+
+1. **The five-second test.** Mid-fight, glance at the sidebar only: can you
+   tell how hurt you are, and WHERE, without reading the numbers? That's the
+   whole bet of the milestone. If you still read the digits first, say so.
+2. **Cargo at a glance.** Buy a mixed load, look at the bay: does the colored
+   grid tell you "mostly ore, two relics" faster than the old list did?
+3. **Upgrade shopping.** Buy an engine or shield upgrade at a station: does
+   the drawing visibly change (fatter nacelles / thicker envelope)? Does
+   losing the "Level 3" text hurt, or do the shapes + Bench prices carry it?
+4. **Damage moments.** Let a raider knock your shields down and take hull
+   hits: does the red-flash-on-the-part read instantly? Field-repair with R —
+   does the flash clearing feel like a fix?
+5. **Two windows side by side** (the family-testing goal): the sidebar
+   should feel *shorter* now — status + upgrades + cargo were three panels,
+   now one. Does the top of the sidebar still fit on your screens?
+
+Nothing about combat/trading behavior changed — this is the HUD around it.
+Slice 2 (Records tabs) and Slice 3 (the contextual "Now" zone) come next per
+`mockups/sidebar-redesign.html`.
 
 ---
 

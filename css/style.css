@@ -50,6 +50,75 @@ body {
     box-shadow: 0 6px 12px rgba(0, 10, 0, 0.9);
 }
 
+/* Vitals band — the drawn-ship schematic + numerics strip that replaced
+   the Ship Status / Upgrades / Cargo Hold text panels */
+#vitalsHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 8px;
+}
+
+#creditsLine {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+#xpLine {
+    color: #88bbff;
+    font-size: 11px;
+}
+
+#schematicWrap {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+}
+
+#shipSchematic {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    overflow: visible;
+}
+
+#vitalsNums {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 12px;
+    font-size: 11px;
+}
+
+#vitalsNums .vn {
+    display: flex;
+    justify-content: space-between;
+}
+
+#vitalsNums .vk {
+    color: #5a7a5a;
+}
+
+#vitalsNums .vv {
+    font-variant-numeric: tabular-nums;
+}
+
+#cargoManifest {
+    font-size: 10px;
+    color: #889988;
+    margin-top: 4px;
+    line-height: 1.5;
+}
+
+/* Damaged schematic parts pulse red; CSS opacity multiplies the part's own
+   fill/stroke opacity, so overlays keep their computed strength */
+@keyframes schemFlash {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.9; }
+}
+.schem-flash {
+    animation: schemFlash 0.7s ease-in-out infinite;
+}
+
 /* Toast notifications — a stack, not a single slot: bursts of messages
    (kill + loot + mission + save) each get their own toast and timer */
 #hudToastStack {

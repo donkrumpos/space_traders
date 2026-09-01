@@ -18,18 +18,71 @@
             </div>
         </div>
         <div id="ui">
+            <!-- Vitals band: one drawn ship replaces the old Ship Status /
+                 Ship Upgrades / Cargo Hold text panels (docs/ship-design-vision.md
+                 §7). The glance is the schematic — capacity as form, damage as
+                 red on the exact part; the numerics strip below carries the
+                 digits. Each region is a slot group so the future Ship Bay
+                 reuses the same anatomy. -->
             <div class="panel" id="shipStatusPanel">
-                <h3>Ship Status</h3>
-                <div>Rank: <span id="pilotRank" style="color: #ffdd44;">· Cadet</span></div>
-                <div id="xpLine" style="color: #88bbff; font-size: 11px;"></div>
+                <div id="vitalsHeader">
+                    <span id="pilotRank" style="color: #ffdd44;">· Cadet</span>
+                    <span id="creditsLine">$<span id="credits">1000</span></span>
+                </div>
+                <div id="xpLine"></div>
                 <div id="trainingChip" onclick="showPerkChoice()" style="display: none;">⭐ Training available — click to choose</div>
-                <div>Credits: $<span id="credits">1000</span></div>
-                <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
-                <div>Hull: <span id="hull">100</span>/<span id="hullMax">100</span></div>
-                <div>Shield: <span id="shieldVal" style="color: #44aaff;">20</span>/<span id="shieldMax">20</span></div>
-                <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
-                <div>Missiles: <span id="missiles">5</span>/<span id="missilesMax">5</span></div>
-                <div>Weapon: <span id="weaponMode">Single</span> <span id="laserHeat"></span></div>
+
+                <div id="schematicWrap">
+                    <svg id="shipSchematic" viewBox="0 0 240 300">
+                        <g class="slot" data-slot="shields">
+                            <path id="svShieldEnv" d="M120 6 C186 34 206 120 200 210 C196 262 150 292 120 292 C90 292 44 262 40 210 C34 120 54 34 120 6 Z"
+                                  fill="none" stroke="#44aaff" stroke-width="3" stroke-opacity="0.7"/>
+                        </g>
+                        <g class="slot" data-slot="hull">
+                            <path id="svHullBody" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+                                  fill="#04140a" stroke="#55cc66" stroke-width="2.5"/>
+                            <path id="svHullDmg" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+                                  fill="#ff4d4d" fill-opacity="0"/>
+                        </g>
+                        <g class="slot" data-slot="weapons">
+                            <polygon id="svWeaponMount" points="120,20 134,58 106,58" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                            <g id="svMissilePips"></g>
+                        </g>
+                        <g class="slot" data-slot="engines">
+                            <g id="svEngLWrap">
+                                <path id="svEngL" d="M84 150 L64 175 L70 235 L92 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                                <ellipse id="svThrL" cx="79" cy="236" rx="8" ry="4" fill="#ffaa00" opacity="0.15"/>
+                            </g>
+                            <g id="svEngRWrap">
+                                <path id="svEngR" d="M156 150 L176 175 L170 235 L148 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                                <ellipse id="svThrR" cx="161" cy="236" rx="8" ry="4" fill="#ffaa00" opacity="0.15"/>
+                            </g>
+                        </g>
+                        <g class="slot" data-slot="lifeSupport">
+                            <circle id="svLifeCore" cx="120" cy="86" r="10" fill="#0a2a14" stroke="#00ffff" stroke-width="2"/>
+                            <circle id="svLifeCoreDmg" cx="120" cy="86" r="10" fill="#ff4d4d" fill-opacity="0"/>
+                        </g>
+                        <g class="slot" data-slot="cargo">
+                            <text x="120" y="108" fill="#5a7a5a" font-size="8" text-anchor="middle" font-family="'Courier New',monospace">CARGO</text>
+                            <rect id="svCargoBay" x="94" y="110" width="52" height="80" rx="2" fill="#03150a" stroke="#0a3a0a" stroke-width="1"/>
+                            <g id="svCargoGrid"></g>
+                        </g>
+                        <g class="slot" data-slot="fuel">
+                            <rect id="svFuelTank" x="114" y="196" width="12" height="52" rx="3" fill="#0a1a0a" stroke="#0a5a0a" stroke-width="1.5"/>
+                            <rect id="svFuelFill" x="114" y="248" width="12" height="0" rx="2" fill="#d9902a"/>
+                        </g>
+                    </svg>
+                </div>
+
+                <div id="vitalsNums">
+                    <div class="vn"><span class="vk">Hull</span><span class="vv"><span id="hull">100</span>/<span id="hullMax">100</span></span></div>
+                    <div class="vn"><span class="vk">Shield</span><span class="vv"><span id="shieldVal" style="color: #44aaff;">20</span>/<span id="shieldMax">20</span></span></div>
+                    <div class="vn"><span class="vk">Fuel</span><span class="vv"><span id="fuel">500</span>/<span id="fuelMax">500</span></span></div>
+                    <div class="vn"><span class="vk">Cargo</span><span class="vv"><span id="cargoUsed">0</span>/<span id="cargoMax">10</span></span></div>
+                    <div class="vn"><span class="vk">Missiles</span><span class="vv"><span id="missiles">5</span>/<span id="missilesMax">5</span></span></div>
+                    <div class="vn"><span class="vk">Weapon</span><span class="vv"><span id="weaponMode">Single</span> <span id="laserHeat"></span></span></div>
+                </div>
+                <div id="cargoManifest"></div>
                 <div id="streakLine" style="display: none; color: #ffcc00;"></div>
                 <div id="powerupLine" style="display: none;"></div>
                 <div id="systemsLine" style="display: none; color: #ff5555;"></div>
@@ -40,13 +93,6 @@
                 <div id="shipIdentity"><span style="color:#666;">— unnamed —</span></div>
                 <div id="shipModsList"></div>
                 <div id="shipLogList"></div>
-            </div>
-
-            <div class="panel">
-                <h3>Cargo Hold</h3>
-                <div id="cargoList">
-                    <div class="cargo-item">Empty</div>
-                </div>
             </div>
 
             <div class="panel">
@@ -83,16 +129,6 @@
                 <div id="ledgerList">
                     <div style="color:#666;">Dock at stations to record prices</div>
                 </div>
-            </div>
-
-            <div class="panel">
-                <h3>Ship Upgrades</h3>
-                <div>Engines: Level <span id="engineLevel">1</span></div>
-                <div>Shields: Level <span id="shieldLevel">1</span></div>
-                <div>Cargo: Level <span id="cargoLevel">1</span></div>
-                <div>Fuel Tank: Level <span id="fuelTankLevel">1</span></div>
-                <div>Hull: Level <span id="hullLevel">1</span></div>
-                <div>Weapons: Level <span id="weaponLevel">1</span></div>
             </div>
 
             <div class="panel" id="tradingPanel" style="display: none;">

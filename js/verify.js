@@ -715,6 +715,73 @@ VERIFY_SUITES.chronicle = (assert) => {
         (saved.entries.length > 0 || document.getElementById('chroniclePanel').style.display === 'none'));
 };
 
+VERIFY_SUITES.vitals = (assert) => {
+    // The schematic Vitals band (docs/ship-design-vision.md §7): the drawn
+    // ship must exist, encode capacity as form, and flash damage in place.
+    const ship = game.ship;
+    const saved = {
+        cargo: { ...ship.cargo }, fuel: ship.fuel, shield: ship.shield,
+        engines: ship.systems.engines, ammo: ship.weapons.missiles.ammo
+    };
+
+    updateUI();
+    assert('schematic slots drawn', document.querySelectorAll('#shipSchematic .slot').length === 7);
+    assert('bay grid holds one cell per cargo unit',
+        document.querySelectorAll('#svCargoGrid rect').length === ship.cargoMax);
+    assert('missile pips match the rack',
+        document.querySelectorAll('#svMissilePips circle').length === ship.weapons.missiles.maxAmmo);
+
+    // Cargo fills cells in the good's own color and writes the manifest
+    ship.cargo = { relics: 2 };
+    updateUI();
+    const cells = document.querySelectorAll('#svCargoGrid rect');
+    assert('cargo fills bay cells in good colors',
+        cells[0].getAttribute('fill') === goods.relics.color &&
+        cells[1].getAttribute('fill') === goods.relics.color &&
+        cells[2].getAttribute('fill') === '#081808');
+    assert('manifest names the cargo',
+        document.getElementById('cargoManifest').textContent.includes('Precursor Relics'));
+
+    // Shield envelope thins as the charge drops
+    ship.shield = ship.shieldMax;
+    updateUI();
+    const wFull = parseFloat(document.getElementById('svShieldEnv').getAttribute('stroke-width'));
+    ship.shield = ship.shieldMax / 4;
+    updateUI();
+    const wLow = parseFloat(document.getElementById('svShieldEnv').getAttribute('stroke-width'));
+    assert('shield envelope thins as charge drops', wLow < wFull);
+
+    // Damage flashes the exact part
+    ship.systems.engines = 'damaged';
+    updateUI();
+    assert('downed engines turn red and flash on the drawing',
+        document.getElementById('svEngL').getAttribute('stroke') === '#ff4d4d' &&
+        document.getElementById('svEngL').classList.contains('schem-flash'));
+    ship.systems.engines = 'ok';
+    updateUI();
+    assert('repair clears the flash',
+        !document.getElementById('svEngL').classList.contains('schem-flash'));
+
+    // Fuel spine fill tracks the tank
+    ship.fuel = ship.fuelMax / 2;
+    updateUI();
+    assert('fuel spine sits at half tank',
+        Math.abs(parseFloat(document.getElementById('svFuelFill').getAttribute('height')) - 26) < 1);
+
+    // Spent missile tubes go dark
+    ship.weapons.missiles.ammo = 1;
+    updateUI();
+    const pips = document.querySelectorAll('#svMissilePips circle');
+    assert('spent missile tubes go dark',
+        pips[0].getAttribute('fill') === '#ffdd44' &&
+        (pips.length < 2 || pips[1].getAttribute('fill') === '#333333'));
+
+    // Restore
+    ship.cargo = saved.cargo; ship.fuel = saved.fuel; ship.shield = saved.shield;
+    ship.systems.engines = saved.engines; ship.weapons.missiles.ammo = saved.ammo;
+    updateUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');
