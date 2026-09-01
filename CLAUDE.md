@@ -48,7 +48,6 @@ green → commit per slice → push. Branch for features (don't commit straight 
 `main`). Commit footer:
 
 ```
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: <session url>
 ```
 
