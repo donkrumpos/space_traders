@@ -41,15 +41,29 @@ purchase unless that spike fails AND the port is still wanted (then a
 Pi-Zero-FOOTPRINT board ~$25-40, NOT a Pi 4 — the PowerBoost 1000C's 1A
 output and the carved cavity rule the big boards out).
 
-The UI milestone itself is unchanged and its driver is the DESKTOP: the user
-wants the game compact enough to run **two windows side by side on one
-screen** (family testing, and it just plays better small). Design target: a
-layout that works at roughly half-screen (~700×900 or smaller) — full-screen
-canvas, HUD overlays toggled instead of the permanent stacked sidebar. If it
-happens to also work near 480×320, the console option stays warm for free,
-but that's a bonus, not a requirement. Fold in the per-frame UI perf backlog
-(updateUI innerHTML rebuilds, full-map canvas realloc, ~25 getElementById/
-frame, shadowBlur + gradient allocs) — same code, same milestone.
+**The UI milestone's real goal (user clarified at sync): LEGIBILITY, not
+size.** The sidebar drawer is **confusing** — a wall of same-looking stacked
+text panels (ship status, cargo, nav, missions, crew, reputation, Galaxy Log,
+ledger, upgrades) with no visual hierarchy; the user "wonders if it can be
+redesigned, perhaps with visuals to help scan things" and knows it's a hard
+job. So the milestone is an information-design pass: what does a pilot need
+at a glance vs on demand, and how do icons/color/grouping/gauges make state
+scannable instead of readable. Secondary benefits, in order: compact enough
+for two windows side by side on one screen (family testing); working near
+480×320 would keep the parked Iceswitch option warm (distant bonus, not a
+requirement). Same workflow as the last two milestones: diagnose the current
+UI's information architecture FIRST (inventory every panel: what it shows,
+when it matters, how often it changes), propose 2-3 redesign directions with
+mockups, pin the forks with the user, then build in verified slices — the
+gates don't assert visuals, so add a TEST-PLAN section per slice and keep the
+existing DOM ids/console hooks stable where the verify suites read them
+(verify.js asserts on #credits, #pilotRank, #factionPanel, #chroniclePanel,
+#missionList, #crewList, #shipLogList etc. — renaming ids means updating
+suites in the same slice). Fold in the per-frame UI perf backlog (updateUI
+innerHTML rebuilds, full-map canvas realloc, ~25 getElementById/frame,
+shadowBlur + gradient allocs) — same code, same milestone. Art constraint
+still holds: this is layout/hierarchy/iconography (structure), not an art
+pass.
 
 **Other milestone candidates** (pick after playtest): quest chains off the
 questSeed rails (Ossuary dig-quest); death broadcast + death chronicle
