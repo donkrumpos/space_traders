@@ -116,7 +116,41 @@ function undock() {
     }, 300); // Wait for CSS transition
 }
 
+// The docked screen has two districts (Slice B). Docking always lands at the
+// Dock — the seconds loop — even if the player walked out to the Shipyard last
+// time; the choice is deliberately non-persistent.
+function resetDistrict() {
+    const dock = document.getElementById('district-dock');
+    const yard = document.getElementById('district-yard');
+    const door = document.getElementById('districtDoor');
+    if (!dock || !yard || !door) return;
+    dock.classList.add('on');
+    yard.classList.remove('on');
+    door.textContent = '⇱ walk to the Shipyard';
+}
+
+// Walk between the Dock and the Shipyard, swapping which district shows.
+// Burying the considered purchases (hulls, upgrades, weapons, bench) is a
+// feature: it sheds half the every-dock wall and plants the planet-map seed.
+function walkDistrict() {
+    const dock = document.getElementById('district-dock');
+    const yard = document.getElementById('district-yard');
+    const door = document.getElementById('districtDoor');
+    if (!dock || !yard || !door) return;
+    const toYard = dock.classList.contains('on');
+    dock.classList.toggle('on', !toYard);
+    yard.classList.toggle('on', toYard);
+    door.textContent = toYard ? '⇲ walk back to the Dock' : '⇱ walk to the Shipyard';
+}
+
+// Fill a service gauge to the current level of its pool (fuel/ammo/hull).
+function setServiceGauge(id, frac) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = Math.max(0, Math.min(1, frac || 0)) * 100 + '%';
+}
+
 function updateTradingInterface(planet) {
+    resetDistrict();
     document.getElementById('tradingTitle').textContent = planet.name;
     document.getElementById('stationInfo').innerHTML =
         `Type: ${planet.type} | Status: DOCKED` +
@@ -252,6 +286,7 @@ function updateUpgradesUI(planet) {
 }
 
 function updateFuelCost() {
+    setServiceGauge('fuelGauge', game.ship.fuel / game.ship.fuelMax);
     const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
     const fullTankCost = fuelNeeded * 2;
 
@@ -293,7 +328,9 @@ function updateFuelButton() {
 }
 
 function updateMissileCost() {
-    const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
+    const m = game.ship.weapons.missiles;
+    setServiceGauge('missileGauge', m.maxAmmo ? m.ammo / m.maxAmmo : 0);
+    const missilesNeeded = m.maxAmmo - m.ammo;
     const fullCost = missilesNeeded * 50; // $50 per missile
 
     if (game.ship.credits >= fullCost) {
@@ -731,6 +768,7 @@ function fieldRepair() {
 function updateRepairCost() {
     const label = document.getElementById('repairCost');
     const button = document.querySelector('button[onclick="buyRepair()"]');
+    setServiceGauge('repairGauge', game.ship.hull / game.ship.hullMax);
     if (!label || !button) return;
 
     const needed = game.ship.hullMax - Math.floor(game.ship.hull);

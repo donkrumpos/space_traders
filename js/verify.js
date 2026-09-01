@@ -1013,6 +1013,80 @@ VERIFY_SUITES.icons = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.districts = (assert) => {
+    // Dock districts (visual-language Slice B): the docked panel splits into
+    // THE DOCK (services strip + market + board + crew) and THE SHIPYARD
+    // (hulls + upgrades + weapons + bench) behind a walk-out door. Docking
+    // always lands at the Dock; the door swaps districts.
+    const dockD = document.getElementById('district-dock');
+    const yardD = document.getElementById('district-yard');
+    const id = x => document.getElementById(x);
+    const filled = x => (id(x) ? id(x).innerHTML.trim().length > 0 : false);
+
+    const planet = game.planets[0];
+    const saved = {
+        isDocked: game.isDocked, currentPlanet: game.currentPlanet,
+        credits: game.ship.credits, cargo: { ...game.ship.cargo },
+        xp: game.pilot.xp, rank: game.pilot.rank, pending: game.pilot.pendingPerkChoices,
+        missions: game.missions.slice(), visited: (characterManager.character &&
+            characterManager.character.progress.planetsVisited.slice()) || null
+    };
+    // Cap the rank so the docking XP can't stack a perk-choice overlay mid-suite
+    if (typeof PILOT_RANKS !== 'undefined') game.pilot.rank = PILOT_RANKS.length - 1;
+
+    dock(planet);
+    assert('docking lands on the Dock, not the Shipyard',
+        dockD.classList.contains('on') && !yardD.classList.contains('on'));
+    assert('door reads walk-to-the-Shipyard on arrival',
+        id('districtDoor').textContent.includes('walk to the Shipyard'));
+
+    // The Dock renders the seconds loop
+    assert('the Dock carries market + board + crew',
+        filled('buyingSection') && filled('sellingSection') &&
+        filled('missionBoard') && filled('crewSection'));
+    assert('the services strip carries live costs',
+        id('fuelCost').textContent.trim() !== '' &&
+        id('missileCost').textContent.trim() !== '' &&
+        id('repairCost').textContent.trim() !== '');
+    assert('the services strip draws its three service glyphs',
+        !!document.querySelector('#servicesStrip use[href="#s-fuel"]') &&
+        !!document.querySelector('#servicesStrip use[href="#s-rearm"]') &&
+        !!document.querySelector('#servicesStrip use[href="#s-repair"]'));
+
+    // The door swaps to the Shipyard, which renders the considered purchases
+    walkDistrict();
+    assert('the door swaps to the Shipyard',
+        yardD.classList.contains('on') && !dockD.classList.contains('on') &&
+        id('districtDoor').textContent.includes('walk back'));
+    assert('the Shipyard carries hulls + upgrades + weapons + bench',
+        filled('shipyardSection') && filled('upgradesSection') &&
+        filled('weaponSystemsSection') && filled('modsSection'));
+
+    // Walking back returns to the Dock
+    walkDistrict();
+    assert('walking back returns to the Dock', dockD.classList.contains('on'));
+
+    // Re-docking always re-lands at the Dock, even left out at the yard
+    walkDistrict(); // out to the Shipyard
+    dock(planet);
+    assert('re-docking always re-lands at the Dock',
+        dockD.classList.contains('on') && !yardD.classList.contains('on'));
+
+    // Restore — docking drifted markets and posted offers; undo the pilot state
+    undock();
+    game.isDocked = saved.isDocked;
+    game.currentPlanet = saved.currentPlanet;
+    game.ship.credits = saved.credits;
+    game.ship.cargo = saved.cargo;
+    game.pilot.xp = saved.xp;
+    game.pilot.rank = saved.rank;
+    game.pilot.pendingPerkChoices = saved.pending;
+    game.missions = saved.missions;
+    if (saved.visited) characterManager.character.progress.planetsVisited = saved.visited;
+    updateUI();
+    updateMissionsUI();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

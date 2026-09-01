@@ -393,6 +393,88 @@ body {
     border: 1px solid #004400;
 }
 
+/* Dock districts (visual-language Slice B) — the docked panel is two places
+   split by decision tempo: THE DOCK (default) and THE SHIPYARD (behind a door). */
+.dockhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.dockhead h3 { margin: 0; }
+.district-door {
+    background: #001a00;
+    border: 1px dashed #2a6a2a;
+    color: #88cc88;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 5px 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.district-door:hover { background: #043004; color: #ccffcc; }
+
+.district { display: none; }
+.district.on { display: block; }
+.district-sec { margin: 14px 0 6px; }
+
+/* The Shipyard's junkyard-voice preamble */
+.yard-note {
+    color: #8a9a6a;
+    font-size: 11px;
+    font-style: italic;
+    line-height: 1.5;
+    margin: 6px 0 12px;
+}
+
+/* Services icon strip: refuel / rearm / repair as gauge-buttons, not text rows.
+   Each cell: service glyph, a fill gauge (current level), the top-off cost, the
+   action button (whose live text carries the mechanical fact). */
+.svc-strip {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 6px;
+}
+.svc {
+    flex: 1;
+    background: #001a00;
+    border: 1px solid #0a4a0a;
+    padding: 7px 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+.svc .svcicon { width: 24px; height: 24px; margin: 0; }
+.svc-track {
+    width: 100%;
+    height: 4px;
+    background: #03150a;
+    border: 1px solid #063806;
+}
+.svc-track i {
+    display: block;
+    height: 100%;
+    width: 0;
+}
+.svc-cost {
+    font-size: 10px;
+    color: #ffaa00;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.svc button {
+    width: 100%;
+    padding: 3px 4px;
+    font-size: 11px;
+}
+
 button {
     background: #004400;
     color: #00ff00;

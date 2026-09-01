@@ -7,6 +7,23 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- Service glyph sprite (dock districts, Slice B) — kept SEPARATE from
+         js/icons.js's #glyphSprite so the goods-glyph count the `icons` suite
+         asserts stays untouched. Drawings from mockups/dock-visual-language.html. -->
+    <svg id="serviceSprite" width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+        <symbol id="s-fuel" viewBox="0 0 24 24">
+            <path d="M12 4 C16 9 18 12 18 15 A6 6 0 0 1 6 15 C6 12 8 9 12 4 Z" fill="#2d2000" stroke="#d9902a" stroke-width="1.5"/>
+        </symbol>
+        <symbol id="s-rearm" viewBox="0 0 24 24">
+            <path d="M12 3 L15 9 L15 17 L12 21 L9 17 L9 9 Z" fill="#2d2600" stroke="#ffdd44" stroke-width="1.5"/>
+            <path d="M9 13 L6 16 M15 13 L18 16" stroke="#ffdd44" stroke-width="1.2"/>
+        </symbol>
+        <symbol id="s-repair" viewBox="0 0 24 24">
+            <path d="M12 3 L19 7 V14 C19 18 16 20 12 21 C8 20 5 18 5 14 V7 Z" fill="#062106" stroke="#00ff00" stroke-width="1.5"/>
+            <path d="M9 12 L11.5 14.5 L15.5 9.5" stroke="#00ff00" stroke-width="1.5" fill="none"/>
+        </symbol>
+    </defs></svg>
+
     <div id="gameContainer">
         <div id="canvasWrap">
             <canvas id="gameCanvas"></canvas>
@@ -151,69 +168,72 @@
                 </div>
             </div>
 
+            <!-- Docked screen splits into two districts by decision tempo
+                 (visual-language Slice B; mockups/dock-visual-language.html §2).
+                 THE DOCK is the seconds loop (services, market, board, crew);
+                 THE SHIPYARD holds the considered purchases behind a door.
+                 Docking always lands at the Dock — resetDistrict() in
+                 updateTradingInterface() re-lands it every time. -->
             <div class="panel" id="tradingPanel" style="display: none;">
-                <h3 id="tradingTitle">Trading</h3>
-                <div id="stationInfo" style="margin-bottom: 15px; color: #00ffff; font-size: 12px;"></div>
-
-                <div style="margin-bottom: 15px;">
-                    <strong style="color: #00ffff;">Available for Purchase:</strong>
+                <div class="dockhead">
+                    <h3 id="tradingTitle">Trading</h3>
+                    <button class="district-door" id="districtDoor" onclick="walkDistrict()">⇱ walk to the Shipyard</button>
                 </div>
-                <div id="buyingSection"></div>
+                <div id="stationInfo" style="margin-bottom: 12px; color: #00ffff; font-size: 12px;"></div>
 
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Selling to Station:</strong>
-                </div>
-                <div id="sellingSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Ship Upgrades:</strong>
-                </div>
-                <div id="upgradesSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Weapon Systems:</strong>
-                </div>
-                <div id="weaponSystemsSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Shipyard:</strong>
-                </div>
-                <div id="shipyardSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Mechanic's Bench:</strong>
-                </div>
-                <div id="modsSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Mission Board:</strong>
-                </div>
-                <div id="missionBoard"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Crew for Hire:</strong>
-                </div>
-                <div id="crewSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Station Services:</strong>
-                </div>
-                <div id="servicesSection">
-                    <div class="trade-item">
-                        <span>Refuel Ship</span>
-                        <span id="fuelCost">0</span>
-                        <button onclick="buyFuel()">Refuel</button>
+                <!-- THE DOCK — the seconds loop -->
+                <div class="district on" id="district-dock">
+                    <div id="servicesStrip" class="svc-strip">
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Refuel</title><use href="#s-fuel"/></svg>
+                            <div class="svc-track"><i id="fuelGauge" style="background:#d9902a;"></i></div>
+                            <span class="svc-cost" id="fuelCost">0</span>
+                            <button onclick="buyFuel()">Refuel</button>
+                        </div>
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Rearm missiles</title><use href="#s-rearm"/></svg>
+                            <div class="svc-track"><i id="missileGauge" style="background:#ffdd44;"></i></div>
+                            <span class="svc-cost" id="missileCost">0</span>
+                            <button onclick="buyMissiles()">Rearm</button>
+                        </div>
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Patch hull</title><use href="#s-repair"/></svg>
+                            <div class="svc-track"><i id="repairGauge" style="background:#00ff00;"></i></div>
+                            <span class="svc-cost" id="repairCost">0</span>
+                            <button onclick="buyRepair()">Repair</button>
+                        </div>
                     </div>
-                    <div class="trade-item">
-                        <span>Rearm Missiles</span>
-                        <span id="missileCost">0</span>
-                        <button onclick="buyMissiles()">Rearm</button>
-                    </div>
-                    <div class="trade-item">
-                        <span>Repair Hull</span>
-                        <span id="repairCost">0</span>
-                        <button onclick="buyRepair()">Repair</button>
-                    </div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Available for Purchase:</strong></div>
+                    <div id="buyingSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Selling to Station:</strong></div>
+                    <div id="sellingSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Mission Board:</strong></div>
+                    <div id="missionBoard"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Crew for Hire:</strong></div>
+                    <div id="crewSection"></div>
+                </div>
+
+                <!-- THE SHIPYARD — the considered purchases, out past the fuel lines -->
+                <div class="district" id="district-yard">
+                    <p class="yard-note">You walk out past the fuel lines to the yard gantries. Nothing
+                        here is new — it's inherited, salvaged, or grown. No hurry: these are the
+                        decisions you sit with.</p>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Shipyard:</strong></div>
+                    <div id="shipyardSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Ship Upgrades:</strong></div>
+                    <div id="upgradesSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Weapon Systems:</strong></div>
+                    <div id="weaponSystemsSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Mechanic's Bench:</strong></div>
+                    <div id="modsSection"></div>
                 </div>
 
                 <div style="margin-top: 15px;">

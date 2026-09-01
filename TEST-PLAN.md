@@ -126,6 +126,36 @@ What to check (feel, not function):
 4. **Shields-down alarm.** Mid-fight with shields stripped — does the blink
    pull your eye in time to matter?
 
+## Visual language — Slice B: the dock districts (built 2026-09-01)
+
+The docked drawer used to be **nine identical cyan-headed sections** stacked
+into one scroll. It now splits into **two districts by decision tempo**, and
+docking always lands you at the first one:
+
+- **The Dock** (default) — the seconds loop. A **services icon strip**
+  (refuel / rearm / repair as three gauge-buttons: the glyph, a fill gauge for
+  the current level, the top-off cost, the action), then market buy/sell (glyphed
+  by Slice A), the mission board, and crew for hire.
+- **The Shipyard** — the considered purchases (hulls, ship upgrades, weapon
+  systems, mechanic's bench), tucked behind a deliberate **"⇱ walk to the
+  Shipyard"** door. A junkyard-voice line greets you out there ("nothing here is
+  new — inherited, salvaged, or grown"). **"⇲ walk back"** returns to the Dock.
+
+What to check (feel, not function):
+
+1. **The seconds-loop test.** Dock to trade and refuel: is everything you reach
+   for on the *first* screen, with no scrolling past hull ads to sell your cargo?
+2. **The service gauges.** Do the three fill bars read at a glance — low fuel /
+   spent missiles / battered hull — before you read the dollar amounts?
+3. **Walking out.** Does burying the shipyard behind a door feel like a *place*
+   you visit for a big purchase (good), or an annoying extra click for something
+   you wanted often (tell us which section)?
+4. **Landing spot.** Every dock drops you at the Dock, even if you walked to the
+   Shipyard last time — does that reset feel right, or do you want it to remember?
+5. **The door copy.** Does "walk to the Shipyard / walk back" land, or read as
+   fussy? (It's also planting the seed of a future planet map — districts are
+   named places.)
+
 ---
 
 # Part 1 — Persistent World: "The World Remembers and Moves"
