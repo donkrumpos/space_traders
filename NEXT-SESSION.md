@@ -29,15 +29,22 @@ persistent living world"** wire section. TEST-PLAN.md Part 1 is the new
 playtest hand-off (incl. VERIFY_DEBUG console commands to force windows/
 occupations without waiting 12-24h).
 
-**Next session (user-requested, 2026-08-31 playtest):** UI milestone — the
-game must fit a FIXED screen size: the user is building a physical
-system/console of their own design and the game targets its display. Current
-layout (tall stacked-panel sidebar + canvas) is desktop-browser sprawl and
-won't survive a fixed viewport. Info to collect at kickoff before designing:
-exact resolution + aspect ratio, physical screen size / viewing distance
-(font scale), input method (keyboard? gamepad? custom controls?), and whether
-it runs fullscreen/kiosk browser. Then diagnose → propose layouts → build in
-verified slices as usual.
+**Next session (user-requested, 2026-08-31 playtest):** UI milestone,
+console-first — the target is the **Iceswitch** (son's germ-shape wooden
+handheld; full spec in the sibling repo:
+`~/Documents/Projects/reliquary/knowledge/electronics/germ-shape-console.md`,
+incl. its prior "Phase 2.5 family games kiosk" plan). Hard constraints:
+**480×320 landscape** (Waveshare 3.5" SPI — frame-copy pipe, expect 15-30fps
+ceiling), Pi Zero 2W 512MB (WPE WebKit/`cog` kiosk, not Chromium), 12-14 GPIO
+buttons as keycodes via `gpio-keys` (+capacitive touch). Plan agreed with
+user: (1) redesign UI console-first at 480×320 — full-screen canvas,
+large-type HUD, button-toggled overlays; scales up to desktop, worth it
+regardless; (2) the per-frame perf backlog (updateUI innerHTML rebuilds,
+shadowBlur, gradient allocs, getElementById/frame) becomes MANDATORY for the
+Zero 2W; (3) separate short spike on real hardware (`cog` at 480×320,
+measure combat fps) decides native vs board-upgrade vs desktop-only. Also
+fun: control-scheme design session with the son (game uses ~10 keys, germ
+has 12-14 buttons).
 
 **Other milestone candidates** (pick after playtest): quest chains off the
 questSeed rails (Ossuary dig-quest); death broadcast + death chronicle
