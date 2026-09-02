@@ -533,6 +533,9 @@ function updateNowZone(els, ship) {
             let status = `${kind.label} · ${dist}u ${dir}`;
             if (poi.chartedBy) status += ` · charted by ${poi.chartedBy}`;
             html += `<div class="now-dim">${status}</div>`;
+            if (poi.claim) {
+                html += `<div class="now-dim" style="color:${poi.claim.color || '#44ddaa'}">◎ ${poi.claim.faction} holds this ground</div>`;
+            }
             if (poi.occupation) {
                 html += `<div class="now-dim" style="color:${poi.occupation.color || '#ff5555'}">⚑ Occupied by ${poi.occupation.faction} — drive them out</div>`;
             } else if (poi.mine) {
@@ -540,6 +543,11 @@ function updateNowZone(els, ship) {
                 if (eta) html += `<div class="now-dim" style="color:#ffcc44">✦ ${eta}</div>`;
             } else {
                 html += `<div class="now-keys">Fly in to survey the site</div>`;
+            }
+            // M7: an unmarked, unoccupied site inside the ring takes your
+            // banner's mark (server revalidates everything)
+            if (typeof poiClaimable === 'function' && poiClaimable(poi)) {
+                html += `<div class="now-keys"><button onclick="plantBanner('${poi.id}')">◎ raise the banner here</button></div>`;
             }
             if (poi.blurb) html += `<div class="now-lore">${poi.blurb}</div>`;
         }

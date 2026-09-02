@@ -129,6 +129,9 @@ const net = {
     factionLeave() {
         return netRequest('faction.leave', {}, 'faction');
     },
+    factionClaim(poiId) {
+        return netRequest('faction.claim', { poiId }, 'faction');
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -403,6 +406,7 @@ function netHandleMessage(msg) {
         case 'faction.invited':
         case 'faction.joined':
         case 'faction.left':
+        case 'faction.claimed':
             netResolvePending(msg, 'faction');
             break;
         // Unknown t: ignored (forward compatibility)

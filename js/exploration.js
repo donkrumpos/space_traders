@@ -130,6 +130,7 @@ function applyPOIState(map) {
         if (!poi || !map[id]) return;
         poi.nextSalvageAt = map[id].nextSalvageAt;
         poi.occupation = map[id].occupation || null;
+        poi.claim = map[id].claim || null;
     });
 }
 
@@ -140,6 +141,7 @@ function applyPOIStateUpdate(msg) {
     if (!poi) return;
     poi.nextSalvageAt = msg.nextSalvageAt;
     poi.occupation = msg.occupation || null;
+    poi.claim = msg.claim || null;
 }
 
 function poiSalvageReady(poi) {
@@ -366,6 +368,17 @@ function renderPOIs(ctx, camera) {
         }
 
         // Charted landmark: icon, name, charter, and a discovery ring up close
+        // M7 claim: a faction's mark rings the glyph in its banner color —
+        // under occupation the ring stays (contested: your ring, their flag).
+        if (poi.claim) {
+            ctx.strokeStyle = poi.claim.color || '#44ddaa';
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, 16, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
         ctx.fillStyle = kind.color;
         ctx.font = '18px Arial';
         ctx.textAlign = 'center';
@@ -440,6 +453,13 @@ function renderPOIMinimap(ctx, centerX, centerY, scale, range) {
             ctx.fillText('?', mapX, mapY + 3);
             return;
         }
+        if (poi.claim) {
+            ctx.strokeStyle = poi.claim.color || '#44ddaa';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(mapX, mapY, 6, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.fillStyle = kind.color;
         ctx.font = '8px Arial';
         ctx.textAlign = 'center';
@@ -468,6 +488,15 @@ function renderPOIFullMap(ctx, scale, offsetX, offsetY) {
         ctx.fillStyle = '#7788aa';
         ctx.font = '8px Courier New';
         ctx.fillText(kind.label + (poi.chartedBy ? ` · ${poi.chartedBy}` : ''), mapX, mapY + 18);
+        if (poi.claim) {
+            ctx.strokeStyle = poi.claim.color || '#44ddaa';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(mapX, mapY, 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = poi.claim.color || '#44ddaa';
+            ctx.fillText(`${poi.claim.faction} holds this ground`, mapX, mapY + 38);
+        }
         if (poi.occupation) {
             ctx.fillStyle = poi.occupation.color || '#ff5555';
             ctx.fillText(`⚑ ${poi.occupation.faction} dug in`, mapX, mapY + 28);
@@ -498,7 +527,8 @@ window.listPOIs = function () {
         charted: p.charted, chartedBy: p.chartedBy, mine: p.mine,
         dist: Math.round(p.dist), at: `(${p.x}, ${p.y})`,
         salvage: poiSalvageEtaText(p),
-        occupiedBy: p.occupation ? p.occupation.faction : null
+        occupiedBy: p.occupation ? p.occupation.faction : null,
+        claimedBy: p.claim ? p.claim.faction : null
     }));
 };
 // Warp the ship next to a POI to test discovery without the long flight.

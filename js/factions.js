@@ -201,6 +201,26 @@ function charterLeave() {
     }).catch(() => {});
 }
 
+// --- The claim (M7 slice F2): one mark per banner ---------------------------
+
+// Client-side gate for the Now zone's "raise the banner" button; the server
+// revalidates all of it (proximity is a client rule, like salvage).
+function poiClaimable(poi) {
+    const f = myFaction();
+    if (!f || !(window.net && net.online)) return false;
+    if (!poi || !poi.charted || poi.claim || poi.occupation) return false;
+    return !(game.pois || []).some(p => p.claim && p.claim.faction === f.name);
+}
+
+function plantBanner(poiId) {
+    net.factionClaim(poiId).then(res => {
+        if (!res.ok) { showHudFeedback(res.reason || 'the ground refuses the mark', 'warning', 5000); return; }
+        const poi = (game.pois || []).find(p => p.id === res.id);
+        showHudFeedback(`Your banner flies over ${poi ? poi.name : 'the site'} — the raiders will notice`, 'success', 6000);
+        addShipLog(`Raised the banner over ${poi ? poi.name : 'a charted site'}`);
+    }).catch(() => showHudFeedback('the ledger did not answer — try again', 'warning', 4000));
+}
+
 // Console hook (PROTOCOL M7)
 window.netFactions = function() {
     return {

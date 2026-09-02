@@ -165,6 +165,18 @@ VERIFY_SUITES.banner = (assert) => {
         formatChronicleEntry({ kind: 'faction.joined', pilot: 'Arthur', faction: 'Reef Wardens' }).includes('signed on') &&
         formatChronicleEntry({ kind: 'faction.disbanded', pilot: 'Dad', faction: 'Reef Wardens' }).includes('folded'));
 
+    // Slice F2: the claim rides poi.state onto the map model (render-side)
+    const poi = game.pois && game.pois[0];
+    if (poi) {
+        applyPOIStateUpdate({ id: poi.id, nextSalvageAt: null, occupation: null,
+            claim: { faction: 'Reef Wardens', color: '#44ddaa', since: 1 } });
+        assert('a claim rides poi.state onto the map model',
+            poi.claim && poi.claim.faction === 'Reef Wardens');
+        assert('the claim gate stays shut offline (claims live on the reach)',
+            poiClaimable(poi) === false);
+        poi.claim = null;
+    }
+
     pilot.faction = null;
     pilot.grudges = {};
     updateFactionUI();

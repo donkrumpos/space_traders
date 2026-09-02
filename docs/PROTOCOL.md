@@ -551,10 +551,20 @@ snapshot, so there is no separate offer message.
 | `faction.join` | c→s | `{ reqId, name }` → `faction.joined { reqId, ok, faction?, reason? }`. Requires a standing invite; one faction per pilot |
 | `faction.leave` | c→s | `{ reqId }` → `faction.left { reqId, ok, reason? }`. A founder with members still aboard is refused; a sole-member founder disbands (registry row deleted — the chronicle keeps the history) |
 | `faction.update` | s→c *broadcast* | `{ factions }` — the whole registry after any change (tiny at this scale) |
+| `faction.claim` | c→s | `{ reqId, poiId }` → `faction.claimed { reqId, ok, id?, reason? }`. Plant the banner's mark at a charted site: requires membership, site charted, unoccupied, unmarked, and **one claim per faction**. Proximity is a client rule (like salvage). The claim rides `poi.state` as `claim: { faction, color, since } \| null` and persists in `poiState` |
+| `debug.liberatePOI` | c→s | `{ id }` — VERIFY_DEBUG only: liberate an occupied site as the sender without the combat path |
 
 - Chronicle kinds: `faction.founded { faction, founder, want }`,
   `faction.joined { faction, pilot }`, `faction.left { faction, pilot }`,
-  `faction.disbanded { faction, pilot }`.
+  `faction.disbanded { faction, pilot }`, `faction.claimed { faction, poi,
+  name }`; `poi.liberated` gains an optional `by` (the claiming faction,
+  when the liberating pilot is one of its members — the repel credit).
+- **The claim's teeth:** the daily occupation roll weighs claimed sites
+  double (`CLAIM_OCCUPY_WEIGHT`) — a raised banner is a standing
+  invitation to defend it. Claims survive occupation (contested: your
+  ring, their flag); salvage stays first-come for everyone (the claim is
+  a flag and a fight-magnet, not a paywall). A disbanding faction's
+  claims come down with the banner.
 - Client (`js/factions.js`): charter desk in the Shipyard district
   (founding form / invite papers / roster actions), banner card atop the
   Rep tab (`updateFactionUI` composes it above the grudge list; the page
