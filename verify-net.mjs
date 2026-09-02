@@ -9,6 +9,7 @@
 // harness URL may contain the lowercase substring "verify" (pilot=VerifyA is safe).
 
 import { spawn } from 'node:child_process';
+import WebSocket from 'ws';
 import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -569,6 +570,26 @@ async function worldSuite(t, { browser, base, wsUrl, restartServer }) {
             && o.filter(x => x && x.goodType).length >= 1;
     });
     t("D's board dropped the taken mission and still has ≥1 offer", !!regen);
+
+    // 5b. mission.taken echoes the client's reqId — a double-clicked board
+    // offer used to resolve the wrong pending promise (PROTOCOL M3). Raw
+    // socket so we control the reqId; bogus mission id keeps the board intact.
+    const echoed = await new Promise(resolve => {
+        const raw = new WebSocket(wsUrl);
+        const bail = setTimeout(() => { try { raw.close(); } catch {} resolve(null); }, 8000);
+        raw.on('open', () => raw.send(JSON.stringify(
+            { t: 'hello', pilot: 'VerifyEcho', secret: SECRET, lastPlayed: 0 })));
+        raw.on('message', d => {
+            const m = JSON.parse(String(d));
+            if (m.t === 'welcome') raw.send(JSON.stringify(
+                { t: 'mission.take', planet: AGRICON, missionId: 'no-such-mission', reqId: 'echo-check-1' }));
+            if (m.t === 'mission.taken') { clearTimeout(bail); try { raw.close(); } catch {} resolve(m); }
+        });
+        raw.on('error', () => { clearTimeout(bail); resolve(null); });
+    });
+    t('mission.taken echoes reqId (bogus id → ok:false, same reqId)',
+        !!echoed && echoed.ok === false && echoed.reqId === 'echo-check-1',
+        `got ${JSON.stringify(echoed)}`);
 
     // 6. persistence: moved prices survive a server restart (same port + DB).
     await S.C.page.evaluate(() => net.send({ t: 'debug.snapshot' }));

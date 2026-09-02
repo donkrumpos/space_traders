@@ -7,7 +7,7 @@ Deployed 2026-07-08. The game lives at **https://siegeperilousstudio.com**.
 | What | Where |
 |---|---|
 | Game URL | https://siegeperilousstudio.com (first visit asks pilot name + family secret) |
-| Family secret | NOT in this public repo — read it on themisto: `grep FAMILY_SECRET /etc/systemd/system/space-traders.service` (change it there, then `daemon-reload` + restart) |
+| Family secret | NOT in this public repo — read it on themisto: `grep FAMILY_SECRET /etc/systemd/system/space-traders.service` (change it there, then `daemon-reload` + restart). Since 2026-09-02 the server **refuses to start** if the env var is missing (no more dev-secret fallback) |
 | VPS | themisto = ServaRica, `162.250.190.20`, ssh port `3465`, user `don` |
 | Ssh from any of Foggy's machines | `ssh themisto` (Host block in `~/.ssh/config`; key auth only) |
 | Game files | `/var/www/siegeperilous` (git checkout of donkrumpos/space_traders, main) |
@@ -36,6 +36,43 @@ ssh themisto 'sudo systemctl restart space-traders'    # restart (players auto-r
 
 If the server is down, the game still works — every client falls back to
 offline solo on its local save and syncs back up on reconnect.
+
+Supervision: the unit already has `Restart=always` + `RestartSec=3`, so a
+crashed node process comes back on its own; systemd also starts it on boot
+(`WantedBy=multi-user.target`). `journalctl -u space-traders` is the crash
+history.
+
+## Backups (added 2026-09-02)
+
+Two layers, no credentials on the VPS:
+
+1. **On-box, daily** — don's crontab runs the repo's backup script (SQLite
+   online-backup API, safe against a live server; never copy `world.db` +
+   `-wal` by hand):
+
+   ```
+   17 3 * * * cd /var/www/siegeperilous && /usr/bin/node server/backup.mjs >> /var/lib/space-traders/backup.log 2>&1
+   ```
+
+   Output: `/var/lib/space-traders/backups/world-YYYYMMDD-HHMMSS.db.gz`,
+   rotated to the newest 30 (`BACKUP_KEEP` env to change).
+
+2. **Off-box, daily pull** — Foggy's Mac pulls the backup dir via the
+   existing `themisto` ssh alias (launchd agent
+   `~/Library/LaunchAgents/com.spacetraders.backup-pull.plist`, runs at
+   09:00 or on next wake):
+
+   ```bash
+   rsync -az themisto:/var/lib/space-traders/backups/ ~/Backups/space-traders/
+   ```
+
+   Check it's alive: `ls -la ~/Backups/space-traders/` — newest file should
+   be ≤ a day or two old whenever the laptop has been awake.
+
+**Restore:** `sudo systemctl stop space-traders`, then
+`gunzip -c world-<stamp>.db.gz > /var/lib/space-traders/world.db` (remove any
+stale `world.db-wal`/`-shm` first), then start. Pilot saves also have
+last-20 rotating backups inside the db itself (`backups` table).
 
 ## Changing the family secret
 

@@ -358,17 +358,17 @@ export function handleWorldMessage(ws, msg, send) {
             const meta = metaByName.get(msg.planet);
             const board = world.missionBoards[msg.planet];
             if (!meta || !board) {
-                send(ws, { t: 'mission.taken', ok: false, mission: null });
+                send(ws, { t: 'mission.taken', reqId: msg.reqId, ok: false, mission: null });
                 return true;
             }
             const idx = board.findIndex(o => o.id === msg.missionId);
             if (idx === -1) {
                 // Someone else took it first — the board is shared
-                send(ws, { t: 'mission.taken', ok: false, mission: null });
+                send(ws, { t: 'mission.taken', reqId: msg.reqId, ok: false, mission: null });
                 return true;
             }
             const [mission] = board.splice(idx, 1);
-            send(ws, { t: 'mission.taken', ok: true, mission });
+            send(ws, { t: 'mission.taken', reqId: msg.reqId, ok: true, mission });
             // Restock like-for-like from a fresh roll so boards never bleed
             // dry: bounty slot refills at the core's own 40% odds.
             const fresh = EconomyCore.generateMissionOffers(meta, SIM_PLANETS);

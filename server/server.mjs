@@ -16,7 +16,13 @@ import {
 } from './combat.mjs';
 
 const PORT = Number(process.env.PORT) || 8378;
-const FAMILY_SECRET = process.env.FAMILY_SECRET || 'dev-secret';
+const FAMILY_SECRET = process.env.FAMILY_SECRET;
+if (!FAMILY_SECRET) {
+    console.error('FATAL: FAMILY_SECRET is not set. Refusing to start — a '
+        + 'guessable default on a public server is worse than no server. '
+        + 'Local dev/verify: FAMILY_SECRET=dev-secret node server/server.mjs');
+    process.exit(1);
+}
 const STATIC_DIR = process.env.STATIC_DIR ? path.resolve(process.env.STATIC_DIR) : null;
 
 const MIME = {
