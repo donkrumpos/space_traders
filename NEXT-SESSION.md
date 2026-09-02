@@ -48,6 +48,13 @@ durability done + player factions F1/F2 BUILT**). Three strands:
      their flag); salvage stays first-come; disband lowers the mark.
      `debug.liberatePOI` (VERIFY_DEBUG) tests the credit path.
 
+**Post-sync review batch (6db8525, autonomous):** 8-angle review of the
+faction diff → fixed: banner-color uniqueness enforced server-side,
+charter-desk innerHTML guard (broadcasts no longer wipe a half-typed
+name), pilot-name escaping at the banner-card sink, weightedPick shared
+between raid + occupation rolls, claim-ring drawer deduped, unified
+net-fail feedback, lore-voice copy trims. Gates re-verified after.
+
 **Gates at tips: main = solo 219/219 · net 158/158; player-factions =
 solo 221/221 · net 167/167.** (Solo growth: `banner` suite; net: [faction]
 suite, 35 asserts total.)
