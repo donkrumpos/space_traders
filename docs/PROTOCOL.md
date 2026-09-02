@@ -92,7 +92,7 @@ character via `importCharacter`-equivalent path. Local newer → push local up.
 **Offline fallback:** connect timeout 3s. On fail/close: `net.online=false`,
 game plays solo from localStorage exactly as today; reconnect attempts every
 30s; on reconnect re-handshake (sync rule runs again). NOTHING in solo boot
-may block on the network — `?verify` (92 assertions) must stay green with no
+may block on the network — `?verify` (117 assertions) must stay green with no
 server running.
 
 ### M2 — ghost presence
@@ -119,7 +119,7 @@ distinct color, minimap blip. Ghosts are NOT collidable (friendly fire off).
 
 | t | dir | payload |
 |---|-----|---------|
-| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges }` — sent as its own message immediately AFTER `welcome` (welcome stays M1-shaped, no snapshot field), and on `debug.snapshot` |
+| `world.snapshot` | s→c | `{ markets, marketEvent, missionBoards, grudges, discoveredPOIs }` — sent as its own message immediately AFTER `welcome` (welcome stays M1-shaped, no snapshot field), and on `debug.snapshot`. `discoveredPOIs` is M5 (see below) |
 | `trade` | c→s | `{ reqId, planet, good, side:'buy'\|'sell', qty }` |
 | `trade.result` | s→c | `{ reqId, ok, prices: {buy,sell} }` — client applies credits/cargo locally on ok |
 | `market.update` | s→c *broadcast* | `{ planet, market }` after any trade/drift/event |
@@ -203,7 +203,7 @@ rollMarketEvent(planetMetas), generateMissionOffers(meta, allMetas)). Both
 files are side-effect scripts setting globals (script tags in the browser
 loaded BEFORE game.js, `await import()` on the server — same files, no fork).
 Browser economy.js delegates to EconomyCore; solo behavior must stay
-identical (`?verify` 92/92 is the proof).
+identical (`?verify` 117/117 is the proof).
 
 Return shapes (locked at extraction, 2026-07-08): `makeMarket` returns
 `{ buy: {good: price}, sell: {good: price} }`; `drift`/`tradeImpact` mutate
@@ -429,6 +429,105 @@ discriminator everywhere is `id !== undefined` = server-owned.
 - **Console hook:** `window.netCombat()` →
   `{ enemies, traders, drops, lastTickN }` (plain snapshots with ids).
 
+### M5 — exploration (discoverable POIs, shared first-charter landmarks)
+
+Hidden points of interest out past the known planet cluster, defined in
+`js/sim/pois.js` (`globalThis.SIM_POIS`, same shared-file pattern as planets —
+loaded as a script tag in the browser and `await import()`ed on the server).
+A pilot **charts** a POI by flying within its `discoveryRadius`. Discovery is a
+shared, persistent fact; the reward is granted per-pilot (co-op friendly).
+
+| t | dir | payload |
+|---|-----|---------|
+| `poi.discover` | c→s | `{ id }` — "I charted this site." Pilot taken from the authenticated `ws.pilot`, NEVER a payload field. Fire-and-forget (no reqId), like `dock`. Unknown/invalid ids are ignored. |
+| `poi.discovered` | s→c *broadcast* | `{ id, pilot, at }` — the canonical charter. First-write-wins: the first pilot to report a site owns its name forever; later reports never overwrite it. Broadcast to ALL (incl. the sender, so a peer who beat them shows the right name). |
+
+- **`world.snapshot.discoveredPOIs`**: `{ id: { pilot, at } }` — the galaxy-wide
+  charter record, persisted in the singleton `world` JSON blob (rides the same
+  SQLite snapshot as grudges; no schema change). Applied client-side as
+  landmark state only (`poi.charted` + `poi.chartedBy`), NEVER as a reward.
+- **Two-flag model (client, `js/exploration.js`):** `poi.charted` (SHARED — the
+  site is a known landmark on the map) vs `poi.mine` (PER-PILOT — this pilot
+  personally reached it and claimed the reward; stored locally in
+  `game.pilot.discoveredPOIs`, so solo play persists and re-charts on load).
+  A peer's discovery charts a site for everyone but grants them nothing; each
+  pilot earns the reward by flying there themselves.
+- **Reward schema** (`poi.reward`, all optional — forward-compatible with the
+  quest/RPG milestone): `{ credits, relics, xp, mod, lore, questSeed }`. `relics`
+  cap to hold space (overflow pays out); `mod` grants a one-off ship mod if new;
+  `lore` writes a ship-log line; `questSeed` is recorded on `game.pilot.questSeeds`
+  as a rail for the future quest system (grants nothing yet).
+- **Detection** rides the alive-path proximity loop (`js/physics.js`), never
+  while paused or dead. Sensor range = the minimap range (perks/mods like
+  `long_range_scanner` / `whisper_coil` scale it, so exploration gear does
+  double duty): an uncharted site inside sensor range shows as a pulsing "?"
+  contact; charted sites draw as their archetype icon on all three map surfaces.
+- **Console hooks:** `window.listPOIs()`, `window.warpToPOI(id)`.
+
+### M6 — persistent living world (chronicle: the world remembers)
+
+The world keeps a **chronicle** — a capped ledger (100 entries) of notable
+happenings, persisted inside the singleton `world` JSON blob (same SQLite
+snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
+`{ at, kind, ...detail }`, oldest → newest. Kinds so far:
+
+| kind | detail | recorded when |
+|------|--------|---------------|
+| `poi.charted` | `{ pilot, poi, name }` | a POI's FIRST charter lands (`poi.discover`, world.mjs) |
+| `market.event` | `{ label, planet }` | a market event starts (`setEvent`, incl. debug-forced) |
+| `boss.killed` | `{ pilot, faction, tier }` | a raid-band boss dies (`damage.claim`, combat.mjs). Common-pirate kills are deliberately NOT recorded (noise) |
+| `poi.salvaged` | `{ pilot, poi, name }` | a regenerated cache is claimed (`poi.salvage`) |
+| `poi.occupied` | `{ faction, poi, name }` | raiders dig in at a charted site (daily-ish roll, world.mjs) |
+| `poi.liberated` | `{ pilot, faction, poi, name }` | the occupation boss dies (`damage.claim`, combat.mjs) — replaces the plain `boss.killed` entry for that kill |
+
+| t | dir | payload |
+|---|-----|---------|
+| `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
+| `poi.salvage` | c→s | `{ reqId, id }` — "I'm at this charted site and its cache looks ready." Request/response like `trade` |
+| `poi.salvaged` | s→c | `{ reqId, ok, id, reward?, nextSalvageAt }` — `ok:true` carries the roster's `salvage` table (`{ credits, relics, xp }`, server-owned; the client applies exactly this) and the freshly rolled next window. `ok:false` = not ready / already claimed; `nextSalvageAt` echoes the live window so the loser's map updates |
+| `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt, occupation }` — a site's state moved (charter seeded the first cycle, a salvage claim rolled the next window, raiders dug in, or a pilot drove them out). `occupation` = `{ faction, color, since }` or `null`. Drives the "✦ salvage ready" / "⚑ dug in" map markers |
+| `debug.poiState` | c→s | `{ id, nextSalvageAt }` — VERIFY_DEBUG only: force a window (harness sets it in the past = ready now). Preserves any occupation |
+| `debug.occupyPOI` | c→s | `{ id, factionName? }` — VERIFY_DEBUG only: force an occupation now (real roll is 12-24h) |
+
+- **`world.snapshot.chronicle`**: the full ledger array (additive snapshot
+  field; old clients ignore it).
+- **`welcome.lastSeen`** (additive field): the server-side `updated` stamp of
+  this pilot's stored doc, `0` for a brand-new pilot. This is "when you last
+  flew" as the SERVER remembers it — every real save (`char.push`) refreshes it.
+- **Away digest (client, `js/chronicle.js`):** on each (re)connect the client
+  stamps `lastSeen` from welcome, then when the snapshot lands shows ONE
+  "While you were away — N things happened" HUD digest plus the last ≤3 unseen
+  entries (`entry.at > lastSeen`; `lastSeen === 0` ⇒ nothing was missed). The
+  **Galaxy Log** sidebar panel (`#chroniclePanel`) lists the latest 8 entries,
+  unseen ones highlighted; hidden when the ledger is empty (offline/solo).
+- **Console hook:** `window.netChronicle()` →
+  `{ count, lastSeen, unseen, digestShown, latest }`.
+- **Regenerating caches (`world.snapshot.poiState`)**: `{ id: { nextSalvageAt } }`,
+  persisted in the world blob. Seeded at first charter, re-rolled 12–24h out
+  after each claim (jitter kills clockwork farming). Readiness is **computed on
+  read against wall-clock** — the `marketEvent.endsAt` pattern taken further:
+  no timers, no catch-up pass, restart- and idle-proof by construction. Boot
+  migrates windows in for sites charted before the field existed. Client rule
+  (`js/exploration.js`): a pilot who never claimed the site gets the discovery
+  moment (`claimPOI`); a returning pilot (`poi.mine`) inside the radius with a
+  ready window sends `poi.salvage` (throttled 10s). Salvage is FIRST-COME
+  galaxy-wide — deliberate scarcity per the kickoff fork ("whoever flies out
+  first gets it"), same precedent as shared mission boards and loot drops.
+- **Occupations**: daily-ish (`world.nextOccupationAt`, persisted; 60s check
+  loop; 12–24h between rolls; at most ONE catch-up roll after downtime), a
+  grudge-weighted faction (`CombatCore.pickRaidFaction(world.grudges)` — the
+  shared vendetta made visible) digs in at a random charted, unoccupied site.
+  Max 2 concurrent. The world only ever ADDS (kickoff fork): nothing is taken,
+  but salvage is blocked while occupied. combat.mjs makes it physical: a pilot
+  within 1000 units of an occupied site with no live tagged band musters the
+  squatters AT the site (`makeRaidBand` with the faction forced, every member
+  tagged `occupyingPoi`, per-pilot minion scaling as usual). Killing the tagged
+  boss → `liberatePOI`: occupation cleared, **cache opens immediately**
+  (`nextSalvageAt = now` — clear the pirates, collect the salvage, one loop),
+  `poi.liberated` chronicled to the killer. Despawned bands (pilots flew off)
+  simply re-muster on the next approach — the occupation lives in world state,
+  not in the enemies.
+
 ## verify-net.mjs (the gate)
 
 Node script at repo root. Uses `puppeteer-core` with
@@ -455,7 +554,7 @@ MULTIPLAYER.md):
 Assertions land as `PASS/FAIL [suite] name` lines + final `VERIFY-NET-PASS
 n/n`; process exit code 0/1. Milestones enable suites incrementally — the
 harness must run green at every milestone for the suites that exist so far.
-Solo gate stays: `?verify` 92/92 via the documented chrome-headless-shell
+Solo gate stays: `?verify` 117/117 via the documented chrome-headless-shell
 one-liner, with NO server running.
 
 ## Client integration points (from the architecture map)

@@ -54,44 +54,76 @@ const HULL_ORDER = ['skiff', 'courier', 'freighter', 'gunship', 'clipper'];
 // Falcon layer. Two ships with the same hull diverge here. Flat stats flow
 // through recomputeShipStats(); rate effects are read live at their call
 // sites via hasMod(), same pattern as perks.
+//
+// `slot` names the schematic region the part pins to (Slice D); `stats` is
+// the under-the-hood card's fact sheet — every mechanical truth the blurb
+// wraps, as [label, delta, 'good'|'bad'] rows. The card is the ONLY place
+// these numbers show; the glance layer gets just the ◈.
 
 const MODS = {
     vex_compressor: {
-        name: 'Vex-Pattern Compressor', cost: 1800, flat: { cargo: 6 },
-        blurb: '+6 cargo. Salvaged Vexworks lattice — runs the lasers 10% hotter.'
+        name: 'Vex-Pattern Compressor', cost: 1800, flat: { cargo: 6 }, slot: 'cargo',
+        blurb: '+6 cargo. Salvaged Vexworks lattice — runs the lasers 10% hotter.',
+        stats: [['cargo hold', '+6', 'good'], ['laser heat', '+10%', 'bad']]
     },
     smugglers_deck: {
-        name: "Smuggler's False Deck", cost: 2600, flat: { cargo: 4 },
-        blurb: '+4 cargo in a hold customs scanners somehow never find.'
+        name: "Smuggler's False Deck", cost: 2600, flat: { cargo: 4 }, slot: 'cargo',
+        blurb: '+4 cargo in a hold customs scanners somehow never find.',
+        stats: [['cargo hold', '+4', 'good'], ['customs scans', 'blind to it', 'good']]
     },
     barnacle_plating: {
-        name: 'Barnacle-Hide Plating', cost: 2200, flat: { hull: 40 },
-        blurb: '+40 hull. Grown, not forged. Sheds half a point of top speed.'
+        name: 'Barnacle-Hide Plating', cost: 2200, flat: { hull: 40 }, slot: 'hull',
+        blurb: '+40 hull. Grown, not forged. Sheds half a point of top speed.',
+        stats: [['hull', '+40', 'good'], ['top speed', '-0.5', 'bad']]
     },
     saint_capacitor: {
-        name: "Saint Elmo's Capacitor", cost: 2400, flat: { shield: 15 },
-        blurb: '+15 shields. Hums a hymn when it charges.'
+        name: "Saint Elmo's Capacitor", cost: 2400, flat: { shield: 15 }, slot: 'shields',
+        blurb: '+15 shields. Hums a hymn when it charges.',
+        stats: [['shields', '+15', 'good']]
     },
     whisper_coil: {
-        name: 'Whisperdrive Coil', cost: 2000,
-        blurb: 'Burns 10% less fuel. Its hum scrambles the minimap a touch.'
+        name: 'Whisperdrive Coil', cost: 2000, slot: 'engines',
+        blurb: 'Burns 10% less fuel. Its hum scrambles the minimap a touch.',
+        stats: [['fuel burn', '-10%', 'good'], ['minimap range', 'scrambled', 'bad']]
     },
     grinner_bore: {
-        name: "Old Grinner's Cannon Bore", cost: 3200,
-        blurb: "Lasers hit 15% harder and run 15% hotter. Grinner doesn't need it anymore."
+        name: "Old Grinner's Cannon Bore", cost: 3200, slot: 'weapons',
+        blurb: "Lasers hit 15% harder and run 15% hotter. Grinner doesn't need it anymore.",
+        stats: [['laser damage', '+15%', 'good'], ['laser heat', '+15%', 'bad']]
     },
     tuned_injectors: {
-        name: 'Back-Alley Injectors', cost: 1500,
-        blurb: 'Throttle answers 25% faster. Definitely not factory settings.'
+        name: 'Back-Alley Injectors', cost: 1500, slot: 'engines',
+        blurb: 'Throttle answers 25% faster. Definitely not factory settings.',
+        stats: [['throttle response', '+25%', 'good']]
     },
     songbird_antenna: {
-        name: 'Songbird Array', cost: 2600,
-        blurb: 'Contracts pay 10% more — dispatchers like a clear channel.'
+        name: 'Songbird Array', cost: 2600, slot: 'lifeSupport',
+        blurb: 'Contracts pay 10% more — dispatchers like a clear channel.',
+        stats: [['contract pay', '+10%', 'good']]
     },
     reliquary_hold: {
-        name: 'Reliquary Hold', cost: 7500,
-        blurb: 'A precursor vault-alloy hold. Whatever else burns, the cargo rides out the wreck.'
+        name: 'Reliquary Hold', cost: 7500, slot: 'cargo',
+        blurb: 'A precursor vault-alloy hold. Whatever else burns, the cargo rides out the wreck.',
+        stats: [['cargo on death', 'rides out the wreck', 'good']]
     }
+};
+
+// Where each slot's ◈ pins sit on the schematic (viewBox 240×300). A slot
+// with several parts walks down its anchor list, then stacks below it.
+const SLOT_PIN_ANCHORS = {
+    weapons: [[143, 40]],
+    shields: [[203, 104]],
+    hull: [[157, 224]],
+    engines: [[70, 190], [170, 190]],
+    lifeSupport: [[143, 86]],
+    cargo: [[153, 126], [153, 152], [153, 178]],
+    fuel: [[134, 240]]
+};
+
+const SLOT_LABELS = {
+    weapons: 'weapon mount', shields: 'shield envelope', hull: 'hull plating',
+    engines: 'drive assembly', lifeSupport: 'the cabin', cargo: 'cargo bay',
+    fuel: 'fuel spine'
 };
 
 function hasMod(id) {
@@ -439,25 +471,93 @@ function showShipBanner(name, subtitle) {
     setTimeout(() => banner.remove(), 4000);
 }
 
-// --- Sidebar panel: name, hull, bolted-on parts, and the log ---
+// --- The ship IS the panel (visual-language Slice D): the old Ship tab's
+// three jobs live on the schematic now. The name engraves on the hull, the
+// bolted-on parts pin as ◈ markers on the slots they modify, and the journal
+// lines render in the Log tab (chronicle.js owns that page). Numbers live
+// ONLY in the under-the-hood card a pin opens.
+
+let shownModCard = null;
 
 function updateShipPanelUI() {
-    const identity = document.getElementById('shipIdentity');
-    const modsList = document.getElementById('shipModsList');
-    const logList = document.getElementById('shipLogList');
-    if (!identity) return;
+    const nameEl = document.getElementById('svShipName');
+    const pins = document.getElementById('svModPins');
+    const hullLine = document.getElementById('hullLine');
+    if (!nameEl || !pins) return;
     const hull = currentHull();
 
-    identity.innerHTML = `
-        <div style="color:#ffdd44; font-size:14px;">${game.ship.name || '— unnamed —'}</div>
-        <div style="color:#889988; font-size:11px;">${hull.name} · ${hull.class} · ${hull.berths} berth${hull.berths === 1 ? '' : 's'}</div>`;
+    const name = (game.ship.name || '').toUpperCase();
+    nameEl.textContent = name;
+    // Long names squeeze into the hull instead of spilling off it
+    if (name.length > 13) {
+        nameEl.setAttribute('textLength', '112');
+        nameEl.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+    } else {
+        nameEl.removeAttribute('textLength');
+        nameEl.removeAttribute('lengthAdjust');
+    }
 
-    const mods = game.ship.mods || [];
-    modsList.innerHTML = mods.length
-        ? mods.map(id => `<div style="color:#88ffee; font-size:10px;">⬡ ${(typeof MODS !== 'undefined' && MODS[id]) ? MODS[id].name : id}</div>`).join('')
-        : '';
+    if (hullLine) {
+        hullLine.textContent = `${hull.name} · ${hull.class} · ${hull.berths} berth${hull.berths === 1 ? '' : 's'}`;
+    }
 
-    const log = game.ship.log || [];
-    logList.innerHTML = log.slice(-3).map(e =>
-        `<div style="color:#667766; font-size:10px; font-style:italic; margin-top:3px;">${e.text}</div>`).join('');
+    const slotCount = {};
+    pins.innerHTML = (game.ship.mods || []).map(id => {
+        const mod = MODS[id];
+        const slot = (mod && mod.slot) || 'hull';
+        const n = slotCount[slot] = (slotCount[slot] || 0) + 1;
+        const anchors = SLOT_PIN_ANCHORS[slot] || SLOT_PIN_ANCHORS.hull;
+        const a = anchors[Math.min(n - 1, anchors.length - 1)];
+        const y = a[1] + Math.max(0, n - anchors.length) * 22;
+        return `<g class="modpin" data-slot="${slot}" data-mod="${id}" onclick="showModCard('${id}')">
+            <title>${mod ? mod.name : id}</title>
+            <circle cx="${a[0]}" cy="${y}" r="9"></circle>
+            <text x="${a[0]}" y="${y + 3.5}">◈</text></g>`;
+    }).join('');
+
+    // A card left open for a part that's gone (import/restore) closes
+    if (shownModCard && !hasMod(shownModCard)) hideModCard();
+
+    // Journal lines live in the Log tab now — let its owner re-render
+    if (typeof updateChroniclePanelUI === 'function') updateChroniclePanelUI();
 }
+
+// Where a part came from: the journal remembers the bench if the line hasn't
+// scrolled off the 40-entry log; older installs keep their mystery.
+function modSource(id) {
+    const mod = MODS[id];
+    if (!mod) return '';
+    const marker = `Bolted on the ${mod.name} at `;
+    const hit = (game.ship.log || []).find(e => e.text && e.text.includes(marker));
+    if (hit) {
+        const port = hit.text.slice(hit.text.indexOf(marker) + marker.length).replace(/\.$/, '');
+        return `mechanic's bench, ${port}`;
+    }
+    return 'a bench somewhere back down the road';
+}
+
+// The under-the-hood card: the gearhead layer, and the only place a mod's
+// numbers print. Clicking the same pin again puts the panel cover back on.
+function showModCard(id) {
+    const card = document.getElementById('modCard');
+    const mod = MODS[id];
+    if (!card || !mod) return;
+    if (shownModCard === id) { hideModCard(); return; }
+    shownModCard = id;
+    const rows = (mod.stats || []).map(([label, delta, tone]) =>
+        `<div class="mc-stat"><span>${label}</span><span class="${tone === 'bad' ? 'mc-bad' : 'mc-good'}">${delta}</span></div>`).join('');
+    card.innerHTML = `
+        <div class="mc-head">◈ ${mod.name} <span class="mc-slot">— ${SLOT_LABELS[mod.slot] || 'hull plating'}</span>
+            <span class="mc-close" onclick="hideModCard()">✕</span></div>
+        ${rows}
+        <div class="mc-stat"><span>source</span><span class="mc-src">${modSource(id)}</span></div>`;
+    card.style.display = 'block';
+}
+window.showModCard = showModCard;
+
+function hideModCard() {
+    const card = document.getElementById('modCard');
+    shownModCard = null;
+    if (card) card.style.display = 'none';
+}
+window.hideModCard = hideModCard;

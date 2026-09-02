@@ -103,6 +103,18 @@ const net = {
         const name = planet && planet.name ? planet.name : planet;
         net.send({ t: 'dock', planet: name });
     },
+    // Exploration: tell the server we charted a POI (fire-and-forget). The
+    // server records the FIRST charter galaxy-wide and broadcasts poi.discovered
+    // so the site becomes a landmark on every pilot's map.
+    discoverPOI(id) {
+        net.send({ t: 'poi.discover', id });
+    },
+    // M6: claim a regenerated cache at a charted site. Request/response like
+    // trade — first claim galaxy-wide wins; the reply carries the granted
+    // reward (server-owned salvage table) and the freshly rolled next window.
+    salvagePOI(id) {
+        return netRequest('poi.salvage', { id }, 'salvage');
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -247,6 +259,9 @@ function netHandleMessage(msg) {
             net.online = true;
             net.status = 'online';
             net.peers = (msg.peers || []).filter(p => p !== netIdentity.pilot);
+            // M6: stamp lastSeen BEFORE the snapshot lands — the chronicle
+            // digest diffs against it when world.snapshot arrives next.
+            if (typeof setChronicleLastSeen === 'function') setChronicleLastSeen(msg.lastSeen || 0);
             netApplySyncRule(msg.doc);
             netSyncedOnce = true;
             netStartSender();
@@ -350,6 +365,21 @@ function netHandleMessage(msg) {
             break;
         case 'grudge.update':
             netApplyGrudges(msg.grudges, false);
+            break;
+        // --- M5: exploration -------------------------------------------
+        case 'poi.discovered':
+            if (typeof applyPOIDiscovered === 'function') applyPOIDiscovered(msg);
+            break;
+        // --- M6: regenerating caches ------------------------------------
+        case 'poi.salvaged':
+            netResolvePending(msg, 'salvage');
+            break;
+        case 'poi.state':
+            if (typeof applyPOIStateUpdate === 'function') applyPOIStateUpdate(msg);
+            break;
+        // --- M6: chronicle ---------------------------------------------
+        case 'chronicle.add':
+            if (typeof applyChronicleAdd === 'function') applyChronicleAdd(msg.entry);
             break;
         // Unknown t: ignored (forward compatibility)
     }
@@ -529,6 +559,19 @@ function netApplySnapshot(snap) {
     // pilot's doc yet (char.push races the snapshot), so solo-earned grudges
     // must survive until grudge.update arrives with the merged truth.
     if (snap.grudges) netApplyGrudges(snap.grudges, true);
+    // Charted POIs become shared landmarks (never a reward — reward is earned
+    // per-pilot by flying to the site).
+    if (snap.discoveredPOIs && typeof applyDiscoveredPOIsFromServer === 'function') {
+        applyDiscoveredPOIsFromServer(snap.discoveredPOIs);
+    }
+    // M6: the world's ledger — feeds the Galaxy Log panel + away digest.
+    if (snap.chronicle && typeof applyChronicleSnapshot === 'function') {
+        applyChronicleSnapshot(snap.chronicle);
+    }
+    // M6: cache windows for charted sites (salvage-ready markers).
+    if (snap.poiState && typeof applyPOIState === 'function') {
+        applyPOIState(snap.poiState);
+    }
 }
 
 function netApplyMarket(planetName, market) {

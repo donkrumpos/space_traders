@@ -19,7 +19,10 @@
 // - The world sleeps at zero pilots: ticks skip entirely, all combat timers
 //   freeze (sim-time based). M3 market-event timers keep running (unchanged).
 import config from './config.mjs';
-import { getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact } from './world.mjs';
+import {
+    getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact,
+    recordChronicle, getOccupiedPOIs, liberatePOI
+} from './world.mjs';
 
 // Side-effect imports set the globals (same files, no fork — PROTOCOL.md
 // "Combat/traffic sim extraction"). planets.js is already loaded by world.mjs
@@ -144,8 +147,10 @@ function spawnCommonEnemy(targets, wealth) {
 // one pilot (grudge reinforcements included); the server adds +1 faction
 // minion per EXTRA pilot online, capped at config.raidExtraMinionCap.
 // forceFaction is the debug.spawnBand hook (retry-rolled, debug-only).
-function spawnBand(targets, forceFaction) {
-    const anchor = targets[Math.floor(Math.random() * targets.length)] || { x: 0, y: 0 };
+// anchorOverride pins the band to a spot (M6 occupations muster AT the site).
+function spawnBand(targets, forceFaction, anchorOverride) {
+    const anchor = anchorOverride
+        || targets[Math.floor(Math.random() * targets.length)] || { x: 0, y: 0 };
     const grudges = getGrudges();
     let band = CombatCore.makeRaidBand(anchor.x, anchor.y, grudges);
     if (forceFaction) {
@@ -195,6 +200,35 @@ function runSpawnCadence(dt, targets) {
     }
 }
 
+// --- Occupations (M6): the squatters are real ---------------------------------
+// world.mjs owns WHO occupies WHICH site (persisted, daily-ish roll); this
+// module makes the occupation physical: when a pilot flies within engage range
+// of an occupied site and no band for that site is alive, the occupying
+// faction's band musters AT the site (same makeRaidBand machinery, faction
+// forced to the squatters, every member tagged occupyingPoi). Killing the
+// tagged boss liberates the site (world.liberatePOI → cache opens + chronicle).
+// If pilots fly off and the sim despawns the band, the tag count hits zero and
+// the band simply re-musters on the next approach — the occupation itself
+// lives in world state, not in these enemies.
+
+const OCCUPATION_ENGAGE_RANGE = 1000;
+const OCCUPATION_CHECK_EVERY = 20; // ticks — every ~2s at 10Hz
+
+function spawnOccupationBand(site, targets) {
+    const band = spawnBand(targets, site.faction, { x: site.x, y: site.y });
+    band.enemies.forEach(e => { e.occupyingPoi = site.id; });
+    return band;
+}
+
+function checkOccupations(targets) {
+    for (const site of getOccupiedPOIs()) {
+        if (state.enemies.some(e => e.occupyingPoi === site.id)) continue;
+        const near = targets.some(t =>
+            (t.x - site.x) ** 2 + (t.y - site.y) ** 2 <= OCCUPATION_ENGAGE_RANGE ** 2);
+        if (near) spawnOccupationBand(site, targets);
+    }
+}
+
 // --- Traffic hooks --------------------------------------------------------------
 
 const trafficHooks = {
@@ -231,6 +265,7 @@ function tick() {
 
     if (targets.length > 0) {
         runSpawnCadence(dt, targets);
+        if (tickN % OCCUPATION_CHECK_EVERY === 0) checkOccupations(targets);
         // Substep at 60Hz so per-update turn/thrust ramps match the browser.
         // (With zero positioned targets we skip the enemy sim entirely —
         // CombatCore's despawn pass would wipe every non-boss enemy.)
@@ -330,6 +365,18 @@ export function handleCombatMessage(ws, msg, send) {
             if (outcome.grudgeDelta) {
                 bumpGrudge(outcome.grudgeDelta.faction, outcome.grudgeDelta.amount);
                 broadcast({ t: 'grudge.update', grudges: getGrudges() });
+            }
+            // A broken band is family news; common-pirate kills are too noisy
+            // for the ledger (dozens per session). An occupation boss instead
+            // records as a liberation (world.mjs) — site freed, cache opens.
+            if (enemy.isBandBoss && enemy.occupyingPoi) {
+                liberatePOI(enemy.occupyingPoi, ws.pilot);
+            } else if (enemy.isBandBoss) {
+                recordChronicle('boss.killed', {
+                    pilot: ws.pilot,
+                    faction: enemy.factionName || null,
+                    tier: enemy.tierName || null
+                });
             }
             return true;
         }

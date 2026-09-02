@@ -7,6 +7,23 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- Service glyph sprite (dock districts, Slice B) — kept SEPARATE from
+         js/icons.js's #glyphSprite so the goods-glyph count the `icons` suite
+         asserts stays untouched. Drawings from mockups/dock-visual-language.html. -->
+    <svg id="serviceSprite" width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+        <symbol id="s-fuel" viewBox="0 0 24 24">
+            <path d="M12 4 C16 9 18 12 18 15 A6 6 0 0 1 6 15 C6 12 8 9 12 4 Z" fill="#2d2000" stroke="#d9902a" stroke-width="1.5"/>
+        </symbol>
+        <symbol id="s-rearm" viewBox="0 0 24 24">
+            <path d="M12 3 L15 9 L15 17 L12 21 L9 17 L9 9 Z" fill="#2d2600" stroke="#ffdd44" stroke-width="1.5"/>
+            <path d="M9 13 L6 16 M15 13 L18 16" stroke="#ffdd44" stroke-width="1.2"/>
+        </symbol>
+        <symbol id="s-repair" viewBox="0 0 24 24">
+            <path d="M12 3 L19 7 V14 C19 18 16 20 12 21 C8 20 5 18 5 14 V7 Z" fill="#062106" stroke="#00ff00" stroke-width="1.5"/>
+            <path d="M9 12 L11.5 14.5 L15.5 9.5" stroke="#00ff00" stroke-width="1.5" fill="none"/>
+        </symbol>
+    </defs></svg>
+
     <div id="gameContainer">
         <div id="canvasWrap">
             <canvas id="gameCanvas"></canvas>
@@ -18,141 +35,216 @@
             </div>
         </div>
         <div id="ui">
+            <!-- Vitals band: one drawn ship replaces the old Ship Status /
+                 Ship Upgrades / Cargo Hold text panels (docs/ship-design-vision.md
+                 §7). The glance is the schematic — capacity as form, damage as
+                 red on the exact part; the numerics strip below carries the
+                 digits. Each region is a slot group so the future Ship Bay
+                 reuses the same anatomy. -->
             <div class="panel" id="shipStatusPanel">
-                <h3>Ship Status</h3>
-                <div>Rank: <span id="pilotRank" style="color: #ffdd44;">· Cadet</span></div>
-                <div id="xpLine" style="color: #88bbff; font-size: 11px;"></div>
+                <div id="vitalsHeader">
+                    <span id="pilotRank" style="color: #ffdd44;">· Deckhand</span>
+                    <span id="creditsLine">$<span id="credits">1000</span></span>
+                </div>
+                <div id="xpLine"></div>
                 <div id="trainingChip" onclick="showPerkChoice()" style="display: none;">⭐ Training available — click to choose</div>
-                <div>Credits: $<span id="credits">1000</span></div>
-                <div>Fuel: <span id="fuel">500</span>/<span id="fuelMax">500</span></div>
-                <div>Hull: <span id="hull">100</span>/<span id="hullMax">100</span></div>
-                <div>Shield: <span id="shieldVal" style="color: #44aaff;">20</span>/<span id="shieldMax">20</span></div>
-                <div>Cargo: <span id="cargoUsed">0</span>/<span id="cargoMax">10</span></div>
-                <div>Missiles: <span id="missiles">5</span>/<span id="missilesMax">5</span></div>
-                <div>Weapon: <span id="weaponMode">Single</span> <span id="laserHeat"></span></div>
+
+                <div id="schematicWrap">
+                    <svg id="shipSchematic" viewBox="0 0 240 300">
+                        <g class="slot" data-slot="shields">
+                            <path id="svShieldEnv" d="M120 6 C186 34 206 120 200 210 C196 262 150 292 120 292 C90 292 44 262 40 210 C34 120 54 34 120 6 Z"
+                                  fill="none" stroke="#44aaff" stroke-width="3" stroke-opacity="0.7"/>
+                        </g>
+                        <g class="slot" data-slot="hull">
+                            <path id="svHullBody" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+                                  fill="#04140a" stroke="#55cc66" stroke-width="2.5"/>
+                            <path id="svHullDmg" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
+                                  fill="#ff4d4d" fill-opacity="0"/>
+                            <text id="svShipName" x="120" y="106" text-anchor="middle"
+                                  font-family="'Courier New',monospace" font-size="9" fill="#3a7a4a"></text>
+                        </g>
+                        <g class="slot" data-slot="weapons">
+                            <polygon id="svWeaponMount" points="120,20 134,58 106,58" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                            <g id="svMissilePips"></g>
+                        </g>
+                        <g class="slot" data-slot="engines">
+                            <g id="svEngLWrap">
+                                <path id="svEngL" d="M84 150 L64 175 L70 235 L92 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                                <ellipse id="svThrL" cx="79" cy="236" rx="8" ry="4" fill="#ffaa00" opacity="0.15"/>
+                            </g>
+                            <g id="svEngRWrap">
+                                <path id="svEngR" d="M156 150 L176 175 L170 235 L148 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+                                <ellipse id="svThrR" cx="161" cy="236" rx="8" ry="4" fill="#ffaa00" opacity="0.15"/>
+                            </g>
+                        </g>
+                        <g class="slot" data-slot="lifeSupport">
+                            <circle id="svLifeCore" cx="120" cy="86" r="10" fill="#0a2a14" stroke="#00ffff" stroke-width="2"/>
+                            <circle id="svLifeCoreDmg" cx="120" cy="86" r="10" fill="#ff4d4d" fill-opacity="0"/>
+                        </g>
+                        <g class="slot" data-slot="cargo">
+                            <rect id="svCargoBay" x="94" y="110" width="52" height="80" rx="2" fill="#03150a" stroke="#0a3a0a" stroke-width="1"/>
+                            <g id="svCargoGrid"></g>
+                        </g>
+                        <g class="slot" data-slot="fuel">
+                            <rect id="svFuelTank" x="114" y="196" width="12" height="52" rx="3" fill="#0a1a0a" stroke="#0a5a0a" stroke-width="1.5"/>
+                            <rect id="svFuelFill" x="114" y="248" width="12" height="0" rx="2" fill="#d9902a"/>
+                        </g>
+                        <!-- Mod pins (visual-language Slice D): each installed
+                             mod pins a ◈ at its slot's anchor. Overlay group,
+                             not a .slot — the seven-slot anatomy stays fixed.
+                             Rebuilt by updateShipPanelUI (js/ships.js). -->
+                        <g id="svModPins"></g>
+                    </svg>
+                </div>
+                <div id="hullLine"></div>
+                <!-- The under-the-hood card: clicking a ◈ pin opens it, and it
+                     is the ONLY place a mod's numbers live (ship-design-vision
+                     §3 — the schematic glance stays number-free). -->
+                <div id="modCard" style="display: none;"></div>
+
+                <div id="vitalsNums">
+                    <div class="vn"><span class="vk">Hull</span><span class="vv"><span id="hull">100</span>/<span id="hullMax">100</span></span></div>
+                    <div class="vn"><span class="vk">Shield</span><span class="vv"><span id="shieldVal" style="color: #44aaff;">20</span>/<span id="shieldMax">20</span></span></div>
+                    <div class="vn"><span class="vk">Fuel</span><span class="vv"><span id="fuel">500</span>/<span id="fuelMax">500</span></span></div>
+                    <div class="vn"><span class="vk">Cargo</span><span class="vv"><span id="cargoUsed">0</span>/<span id="cargoMax">10</span></span></div>
+                    <div class="vn"><span class="vk">Missiles</span><span class="vv"><span id="missiles">5</span>/<span id="missilesMax">5</span></span></div>
+                    <div class="vn"><span class="vk">Weapon</span><span class="vv"><span id="weaponMode">Single</span> <span id="laserHeat"></span></span></div>
+                </div>
+                <div id="cargoManifest"></div>
                 <div id="streakLine" style="display: none; color: #ffcc00;"></div>
                 <div id="powerupLine" style="display: none;"></div>
                 <div id="systemsLine" style="display: none; color: #ff5555;"></div>
             </div>
 
-            <div class="panel" id="shipPanel">
-                <h3>The Ship</h3>
-                <div id="shipIdentity"><span style="color:#666;">— unnamed —</span></div>
-                <div id="shipModsList"></div>
-                <div id="shipLogList"></div>
+            <!-- Now zone (UI Slice 3, mockups/sidebar-redesign.html ★
+                 Contextual Hybrid): the old Navigation panel, rebuilt as a
+                 state-driven readout. data-now names the current situation
+                 (engaged / docked / combat / fuel / dockrange / event / poi /
+                 cruise) and drives the accent color; the body swaps to show
+                 only what matters in that situation. Filled by updateNowZone()
+                 in js/ui.js every tick, guarded writes only. -->
+            <div class="panel" id="nowZone" data-now="cruise">
+                <div id="nowHead">
+                    <span id="nowLabel">CRUISING</span>
+                    <span id="nowPos">(<span id="posX">0</span>, <span id="posY">0</span>)</span>
+                </div>
+                <div id="nowBody"></div>
             </div>
 
-            <div class="panel">
-                <h3>Cargo Hold</h3>
-                <div id="cargoList">
-                    <div class="cargo-item">Empty</div>
+            <!-- Records: the reference panels (Missions / Crew / Rep / Log /
+                 Ledger) collapsed to one tab at a time (UI Slice 2,
+                 mockups/sidebar-redesign.html ★ Contextual Hybrid). The page
+                 divs keep their historical ids AND inline style.display as the
+                 "this record has content" signal — verify.js asserts on it and
+                 the tab row derives visibility from it; which page is actually
+                 SHOWN is the .rec-on class, layered on top in CSS.
+                 The Ship tab dissolved into the schematic (visual-language
+                 Slice D): mods pin on the drawing, the name engraves on the
+                 hull, and the ship's journal lives in the Log page above the
+                 galaxy's chronicle. -->
+            <div class="panel" id="recordsPanel">
+                <div id="recordsTabs">
+                    <button id="recTab-missions" onclick="selectRecordsTab('missions')">Missions<span class="rec-badge" id="recBadge-missions" style="display: none;"></span></button>
+                    <button id="recTab-crew" style="display: none;" onclick="selectRecordsTab('crew')">Crew</button>
+                    <button id="recTab-rep" style="display: none;" onclick="selectRecordsTab('rep')">Rep<span class="rec-badge rec-badge-red" id="recBadge-rep" style="display: none;"></span></button>
+                    <button id="recTab-log" style="display: none;" onclick="selectRecordsTab('log')">Log<span class="rec-badge" id="recBadge-log" style="display: none;"></span></button>
+                    <button id="recTab-ledger" onclick="selectRecordsTab('ledger')">Ledger</button>
+                </div>
+
+                <div class="rec-page" id="missionsPanel">
+                    <div id="missionList">
+                        <div style="color:#666;">None — check station mission boards</div>
+                    </div>
+                </div>
+
+                <div class="rec-page" id="crewPanel" style="display: none;">
+                    <div id="crewList"></div>
+                </div>
+
+                <div class="rec-page" id="factionPanel" style="display: none;">
+                    <div id="factionList"></div>
+                </div>
+
+                <div class="rec-page" id="chroniclePanel" style="display: none;">
+                    <!-- One history surface: your journal above, the galaxy's
+                         chronicle below (Slice D log merge). -->
+                    <div id="journalList"></div>
+                    <div id="chronicleList"></div>
+                </div>
+
+                <div class="rec-page" id="ledgerPanel">
+                    <div id="ledgerList">
+                        <div style="color:#666;">Dock at stations to record prices</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="panel">
-                <h3>Navigation</h3>
-                <div>Position: (<span id="posX">0</span>, <span id="posY">0</span>)</div>
-                <div>Sector: <span id="sector">Deep Space</span></div>
-                <div id="nearbyObjects"></div>
-            </div>
-
-            <div class="panel">
-                <h3>Missions</h3>
-                <div id="missionList">
-                    <div style="color:#666;">None — check station mission boards</div>
-                </div>
-            </div>
-
-            <div class="panel" id="crewPanel" style="display: none;">
-                <h3>Crew</h3>
-                <div id="crewList"></div>
-            </div>
-
-            <div class="panel" id="factionPanel" style="display: none;">
-                <h3>Reputation</h3>
-                <div id="factionList"></div>
-            </div>
-
-            <div class="panel">
-                <h3>Trade Ledger</h3>
-                <div id="ledgerList">
-                    <div style="color:#666;">Dock at stations to record prices</div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h3>Ship Upgrades</h3>
-                <div>Engines: Level <span id="engineLevel">1</span></div>
-                <div>Shields: Level <span id="shieldLevel">1</span></div>
-                <div>Cargo: Level <span id="cargoLevel">1</span></div>
-                <div>Fuel Tank: Level <span id="fuelTankLevel">1</span></div>
-                <div>Hull: Level <span id="hullLevel">1</span></div>
-                <div>Weapons: Level <span id="weaponLevel">1</span></div>
-            </div>
-
+            <!-- Docked screen splits into two districts by decision tempo
+                 (visual-language Slice B; mockups/dock-visual-language.html §2).
+                 THE DOCK is the seconds loop (services, market, board, crew);
+                 THE SHIPYARD holds the considered purchases behind a door.
+                 Docking always lands at the Dock — resetDistrict() in
+                 updateTradingInterface() re-lands it every time. -->
             <div class="panel" id="tradingPanel" style="display: none;">
-                <h3 id="tradingTitle">Trading</h3>
-                <div id="stationInfo" style="margin-bottom: 15px; color: #00ffff; font-size: 12px;"></div>
-
-                <div style="margin-bottom: 15px;">
-                    <strong style="color: #00ffff;">Available for Purchase:</strong>
+                <div class="dockhead">
+                    <h3 id="tradingTitle">Trading</h3>
+                    <button class="district-door" id="districtDoor" onclick="walkDistrict()">⇱ walk to the Shipyard</button>
                 </div>
-                <div id="buyingSection"></div>
+                <div id="stationInfo" style="margin-bottom: 12px; color: #00ffff; font-size: 12px;"></div>
 
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Selling to Station:</strong>
-                </div>
-                <div id="sellingSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Ship Upgrades:</strong>
-                </div>
-                <div id="upgradesSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Weapon Systems:</strong>
-                </div>
-                <div id="weaponSystemsSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Shipyard:</strong>
-                </div>
-                <div id="shipyardSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Mechanic's Bench:</strong>
-                </div>
-                <div id="modsSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Mission Board:</strong>
-                </div>
-                <div id="missionBoard"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Crew for Hire:</strong>
-                </div>
-                <div id="crewSection"></div>
-
-                <div style="margin: 15px 0;">
-                    <strong style="color: #00ffff;">Station Services:</strong>
-                </div>
-                <div id="servicesSection">
-                    <div class="trade-item">
-                        <span>Refuel Ship</span>
-                        <span id="fuelCost">0</span>
-                        <button onclick="buyFuel()">Refuel</button>
+                <!-- THE DOCK — the seconds loop -->
+                <div class="district on" id="district-dock">
+                    <div id="servicesStrip" class="svc-strip">
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Refuel</title><use href="#s-fuel"/></svg>
+                            <div class="svc-track"><i id="fuelGauge" style="background:#d9902a;"></i></div>
+                            <span class="svc-cost" id="fuelCost">0</span>
+                            <button onclick="buyFuel()">Refuel</button>
+                        </div>
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Rearm missiles</title><use href="#s-rearm"/></svg>
+                            <div class="svc-track"><i id="missileGauge" style="background:#ffdd44;"></i></div>
+                            <span class="svc-cost" id="missileCost">0</span>
+                            <button onclick="buyMissiles()">Rearm</button>
+                        </div>
+                        <div class="svc">
+                            <svg class="svcicon" aria-hidden="true"><title>Patch hull</title><use href="#s-repair"/></svg>
+                            <div class="svc-track"><i id="repairGauge" style="background:#00ff00;"></i></div>
+                            <span class="svc-cost" id="repairCost">0</span>
+                            <button onclick="buyRepair()">Repair</button>
+                        </div>
                     </div>
-                    <div class="trade-item">
-                        <span>Rearm Missiles</span>
-                        <span id="missileCost">0</span>
-                        <button onclick="buyMissiles()">Rearm</button>
-                    </div>
-                    <div class="trade-item">
-                        <span>Repair Hull</span>
-                        <span id="repairCost">0</span>
-                        <button onclick="buyRepair()">Repair</button>
-                    </div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Available for Purchase:</strong></div>
+                    <div id="buyingSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Selling to Station:</strong></div>
+                    <div id="sellingSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Mission Board:</strong></div>
+                    <div id="missionBoard"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Crew for Hire:</strong></div>
+                    <div id="crewSection"></div>
+                </div>
+
+                <!-- THE SHIPYARD — the considered purchases, out past the fuel lines -->
+                <div class="district" id="district-yard">
+                    <p class="yard-note">You walk out past the fuel lines to the yard gantries. Nothing
+                        here is new — it's inherited, salvaged, or grown. No hurry: these are the
+                        decisions you sit with.</p>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Shipyard:</strong></div>
+                    <div id="shipyardSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Ship Upgrades:</strong></div>
+                    <div id="upgradesSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Weapon Systems:</strong></div>
+                    <div id="weaponSystemsSection"></div>
+
+                    <div class="district-sec"><strong style="color: #00ffff;">Mechanic's Bench:</strong></div>
+                    <div id="modsSection"></div>
                 </div>
 
                 <div style="margin-top: 15px;">
@@ -193,6 +285,7 @@
                 <div>🟢 Agricultural  🔵 Technology  🔴 Frontier</div>
                 <div>⚫ Industrial  🟡 Core World  ⭐ Your Ship</div>
                 <div>🔴 Hostiles  ☠ Bounty Target  ⚪ Asteroids</div>
+                <div>⬡ Derelict  ✦ Anomaly  ◆ Cache  ◈ Beacon  ⌂ Outpost (charted sites)</div>
             </div>
         </div>
     </div>
@@ -206,10 +299,12 @@
     <!-- Game Scripts -->
     <!-- Shared sim modules (browser+server, docs/PROTOCOL.md) load before game.js -->
     <script src="js/sim/planets.js"></script>
+    <script src="js/sim/pois.js"></script>
     <script src="js/sim/economy-core.js"></script>
     <script src="js/sim/combat-core.js"></script>
     <script src="js/sim/traffic-core.js"></script>
     <script src="js/game.js"></script>
+    <script src="js/icons.js"></script>
     <script src="js/physics.js"></script>
     <script src="js/render.js"></script>
     <script src="js/trading.js"></script>
@@ -226,6 +321,8 @@
     <script src="js/ships.js"></script>
     <script src="js/character.js"></script>
     <script src="js/net.js"></script>
+    <script src="js/exploration.js"></script>
+    <script src="js/chronicle.js"></script>
     <script src="js/verify.js"></script>
     <script>
         // Start the game after all scripts are loaded

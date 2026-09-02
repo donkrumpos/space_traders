@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Space Traders — the goods glyph language + dock districts (mockup)</title>
+<style>
+  :root{
+    --green:#00ff00; --cyan:#00ffff; --amber:#ffaa00; --red:#ff4444;
+    --dim:#888; --bg:#001100; --panel:#002200; --edge:#0a4a0a;
+  }
+  *{box-sizing:border-box}
+  body{background:#000a00;color:#ccffcc;font-family:'Courier New',monospace;margin:0;padding:24px;font-size:13px}
+  h1{color:var(--cyan);font-size:18px;margin:0 0 4px}
+  h2{color:var(--cyan);font-size:14px;margin:28px 0 8px;border-bottom:1px solid var(--edge);padding-bottom:4px}
+  .note{color:#77aa77;font-size:11px;max-width:720px;line-height:1.5}
+  .pin{color:#ffcc44}
+  .wrap{max-width:900px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--green);padding:12px;margin:10px 0}
+
+  /* ---- the glyph lexicon ---- */
+  .lex{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .lex .g{display:flex;flex-direction:column;align-items:center;gap:4px;width:86px;cursor:default}
+  .lex .g svg{width:36px;height:36px}
+  .lex .g .lbl{font-size:10px;color:var(--dim);text-align:center;opacity:0;transition:opacity .2s}
+  body.labels .lex .g .lbl{opacity:1}
+  .lex .g:hover .lbl{opacity:1;color:#ccffcc}
+  .toggle{background:#004400;color:#00ff00;border:1px solid #00ff00;font-family:inherit;padding:4px 10px;cursor:pointer;font-size:11px}
+
+  /* ---- dock districts ---- */
+  .dockhead{display:flex;justify-content:space-between;align-items:center}
+  .dockhead .station{font-size:16px;font-weight:bold;color:var(--cyan)}
+  .dockhead .kind{color:var(--dim);font-size:11px}
+  .door{background:#001a00;border:1px dashed #2a6a2a;color:#88cc88;font-family:inherit;
+        padding:8px 14px;cursor:pointer;font-size:12px}
+  .door:hover{background:#043004;color:#ccffcc}
+  .district{display:none}
+  .district.on{display:block}
+
+  /* services strip: icon gauge-buttons instead of three text rows */
+  .svcstrip{display:flex;gap:10px;margin:10px 0}
+  .svc{flex:1;background:#001a00;border:1px solid var(--edge);padding:8px;display:flex;
+       flex-direction:column;align-items:center;gap:5px;cursor:pointer;position:relative}
+  .svc:hover{border-color:var(--green)}
+  .svc svg{width:26px;height:26px}
+  .svc .track{width:100%;height:4px;background:#03150a;border:1px solid #063806}
+  .svc .track i{display:block;height:100%}
+  .svc .cost{font-size:10px;color:var(--amber)}
+  .svc .uth{display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:5;
+            background:#000d00;border:1px solid var(--cyan);padding:8px;width:170px;font-size:10px;color:#aaddaa;margin-top:4px}
+  .svc:hover .uth{display:block}
+
+  /* market rows: glyph + price + deal bar; name only under the hood */
+  .mrow{display:flex;align-items:center;gap:10px;padding:5px 4px;border-bottom:1px solid #062806;position:relative;cursor:default}
+  .mrow:hover{background:#032803}
+  .mrow svg{width:22px;height:22px;flex:none}
+  .mrow .price{width:52px;text-align:right}
+  .mrow .buyp{color:#88ff88}.mrow .sellp{color:#ffcc44}
+  .mrow .deal{flex:1;height:8px;background:#03150a;border:1px solid #063806;position:relative}
+  .mrow .deal i{position:absolute;left:0;top:0;bottom:0}
+  .mrow .deal .mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:#ccffcc;opacity:.7}
+  .mrow .tag{font-size:9px;width:74px;color:var(--dim)}
+  .mrow .tag.best{color:#00ff00;font-weight:bold}
+  .mrow .tag.bad{color:var(--red)}
+  .mrow .uth{display:none;position:absolute;right:0;top:100%;z-index:5;background:#000d00;
+             border:1px solid var(--cyan);padding:8px;width:230px;font-size:10px;color:#aaddaa}
+  .mrow:hover .uth{display:block}
+  .mrow button{background:#004400;color:#00ff00;border:1px solid #00ff00;font-family:inherit;
+               padding:2px 8px;cursor:pointer;font-size:11px}
+  .colhead{display:flex;gap:10px;color:#557755;font-size:9px;padding:2px 4px;text-transform:uppercase;letter-spacing:1px}
+
+  /* mission board + crew rows */
+  .brow{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid #062806}
+  .brow svg{width:20px;height:20px;flex:none}
+  .brow .pay{margin-left:auto;color:var(--amber)}
+
+  /* shipyard */
+  .yardnote{color:#8a7a4a;font-size:11px;font-style:italic;margin:6px 0}
+  .yrow{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #062806}
+  .yrow .nm{color:#ccffcc;width:150px}
+  .yrow .spec{color:var(--dim);font-size:10px;flex:1}
+  .yrow .pr{color:var(--amber)}
+
+  /* ---- ledger ---- */
+  .lgood{margin:12px 0}
+  .lgood .lhead{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+  .lgood .lhead svg{width:20px;height:20px}
+  .lrow{display:flex;align-items:center;gap:8px;padding:2px 0 2px 30px;font-size:11px}
+  .lrow .st{width:110px;color:var(--dim)}
+  .lrow .bar{height:7px;background:#03150a;border:1px solid #063806;position:relative;flex:1;max-width:260px}
+  .lrow .bar i{position:absolute;left:0;top:0;bottom:0}
+  .lrow .val{width:44px;text-align:right}
+  .lrow.best .st{color:#00ff00}.lrow.best .val{color:#00ff00;font-weight:bold}
+
+  /* ---- interactive schematic sketch ---- */
+  .schemwrap{display:flex;gap:18px;align-items:flex-start}
+  .schemwrap svg{width:200px;height:230px;flex:none}
+  .modpin{cursor:pointer}
+  .modpin circle{fill:#0a2a14}
+  .modpin:hover circle{fill:#0e4a20}
+  .uthcard{background:#000d00;border:1px solid var(--cyan);padding:10px;font-size:11px;
+           color:#aaddaa;max-width:280px;display:none}
+  .uthcard.on{display:block}
+  .uthcard h4{margin:0 0 6px;color:var(--cyan);font-size:12px}
+  .uthcard .stat{display:flex;justify-content:space-between}
+  .uthcard .good{color:#88ff88}.uthcard .badv{color:#ff8888}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The goods glyph language + dock districts</h1>
+  <p class="note">Mockup for the visuals-over-text milestone. Pinned forks: <span class="pin">Ship tab
+  dissolves into the interactive schematic</span> (log merges into the Log tab) ·
+  <span class="pin">Dock + Shipyard districts</span> (crew hires dockside) ·
+  <span class="pin">goods glyphs first</span>, planet/rank insignia in later slices ·
+  <span class="pin">deal bars compare against YOUR ledger</span> (scouting builds your market sense).
+  Rule that makes the language learnable: <b>glyph + color always travel together; the text name lives
+  one layer down</b> — hover anything to see its under-the-hood card.</p>
+
+  <!-- ============ SVG SPRITE: the 8 goods glyphs, schematic drawing style ============ -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <!-- Glowgrain: a luminous grain stalk -->
+      <symbol id="g-food" viewBox="0 0 24 24">
+        <path d="M12 21 V7" stroke="#ffff00" stroke-width="1.5" fill="none"/>
+        <path d="M12 9 C9 8 8 6 8 4 C10 4 12 6 12 9 Z" fill="#332f00" stroke="#ffff00" stroke-width="1.2"/>
+        <path d="M12 9 C15 8 16 6 16 4 C14 4 12 6 12 9 Z" fill="#332f00" stroke="#ffff00" stroke-width="1.2"/>
+        <path d="M12 14 C9 13 8 11 8 9 C10 9 12 11 12 14 Z" fill="#332f00" stroke="#ffff00" stroke-width="1.2"/>
+        <path d="M12 14 C15 13 16 11 16 9 C14 9 12 11 12 14 Z" fill="#332f00" stroke="#ffff00" stroke-width="1.2"/>
+        <circle cx="12" cy="5" r="1.4" fill="#ffff00"/>
+      </symbol>
+      <!-- Cognition Cores: a shipmind lattice cube -->
+      <symbol id="g-technology" viewBox="0 0 24 24">
+        <rect x="5.5" y="5.5" width="13" height="13" rx="1.5" fill="#00292d" stroke="#00ffff" stroke-width="1.5"/>
+        <path d="M9.5 5.5 V18.5 M14.5 5.5 V18.5 M5.5 9.5 H18.5 M5.5 14.5 H18.5" stroke="#00ffff" stroke-width="0.8" opacity="0.7"/>
+        <circle cx="12" cy="12" r="1.6" fill="#00ffff"/>
+      </symbol>
+      <!-- Ferrovolt Ore: a charge-bearing chunk -->
+      <symbol id="g-materials" viewBox="0 0 24 24">
+        <path d="M6 15 L8.5 6.5 L15.5 7.5 L19 13.5 L14.5 19 L7.5 17.5 Z" fill="#2d1a00" stroke="#ff8800" stroke-width="1.5"/>
+        <path d="M12.5 9 L10.5 13 L13 12.7 L11.2 16" stroke="#ffcc66" stroke-width="1.2" fill="none"/>
+      </symbol>
+      <!-- Nebula Silk: gas-woven strands -->
+      <symbol id="g-luxury" viewBox="0 0 24 24">
+        <path d="M4 8 C9 5 13 11 20 7" stroke="#ff00ff" stroke-width="1.5" fill="none"/>
+        <path d="M4 13 C9 10 13 16 20 12" stroke="#ff00ff" stroke-width="1.5" fill="none" opacity="0.75"/>
+        <path d="M4 18 C9 15 13 21 20 17" stroke="#ff00ff" stroke-width="1.5" fill="none" opacity="0.5"/>
+      </symbol>
+      <!-- Panacea Vials: reef-lab cure-all -->
+      <symbol id="g-medicine" viewBox="0 0 24 24">
+        <rect x="10" y="3.5" width="4" height="3" fill="#0f3320" stroke="#66ff99" stroke-width="1.2"/>
+        <path d="M9 7 H15 V17 A3 3 0 0 1 9 17 Z" fill="#0f3320" stroke="#66ff99" stroke-width="1.5"/>
+        <path d="M9 12.5 H15 V17 A3 3 0 0 1 9 17 Z" fill="#66ff99" opacity="0.55"/>
+      </symbol>
+      <!-- Precursor Relics: a cracked hex shard of the vanished builders -->
+      <symbol id="g-relics" viewBox="0 0 24 24">
+        <path d="M12 3.5 L19 7.5 V16.5 L12 20.5 L5 16.5 V7.5 Z" fill="#241d33" stroke="#cc99ff" stroke-width="1.5"/>
+        <path d="M12 3.5 L10.5 10 L13.5 13 L11 20.5" stroke="#cc99ff" stroke-width="1" fill="none" opacity="0.8"/>
+      </symbol>
+      <!-- Voidbloom: the illegal flower -->
+      <symbol id="g-contraband" viewBox="0 0 24 24">
+        <g stroke="#ff44cc" stroke-width="1.2" fill="#33112a">
+          <ellipse cx="12" cy="6.5" rx="2.4" ry="4" />
+          <ellipse cx="12" cy="17.5" rx="2.4" ry="4" />
+          <ellipse cx="6.5" cy="12" rx="4" ry="2.4" />
+          <ellipse cx="17.5" cy="12" rx="4" ry="2.4" />
+        </g>
+        <circle cx="12" cy="12" r="2.2" fill="#ff44cc"/>
+      </symbol>
+      <!-- Repair Kits: sealed spares crate -->
+      <symbol id="g-parts" viewBox="0 0 24 24">
+        <rect x="4.5" y="7.5" width="15" height="11" rx="1" fill="#0b2a26" stroke="#88ffee" stroke-width="1.5"/>
+        <path d="M4.5 11 H19.5" stroke="#88ffee" stroke-width="1"/>
+        <path d="M12 12.5 V17 M9.8 14.8 H14.2" stroke="#88ffee" stroke-width="1.6"/>
+      </symbol>
+      <!-- service icons -->
+      <symbol id="s-fuel" viewBox="0 0 24 24">
+        <path d="M12 4 C16 9 18 12 18 15 A6 6 0 0 1 6 15 C6 12 8 9 12 4 Z" fill="#2d2000" stroke="#d9902a" stroke-width="1.5"/>
+      </symbol>
+      <symbol id="s-rearm" viewBox="0 0 24 24">
+        <path d="M12 3 L15 9 L15 17 L12 21 L9 17 L9 9 Z" fill="#2d2600" stroke="#ffdd44" stroke-width="1.5"/>
+        <path d="M9 13 L6 16 M15 13 L18 16" stroke="#ffdd44" stroke-width="1.2"/>
+      </symbol>
+      <symbol id="s-repair" viewBox="0 0 24 24">
+        <path d="M12 3 L19 7 V14 C19 18 16 20 12 21 C8 20 5 18 5 14 V7 Z" fill="#062106" stroke="#00ff00" stroke-width="1.5"/>
+        <path d="M9 12 L11.5 14.5 L15.5 9.5" stroke="#00ff00" stroke-width="1.5" fill="none"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ============ 1 · THE LEXICON ============ -->
+  <h2>1 · The lexicon — 8 goods, one drawn style
+      <button class="toggle" onclick="document.body.classList.toggle('labels')">toggle learning labels</button></h2>
+  <div class="panel">
+    <div class="lex">
+      <div class="g"><svg><use href="#g-food"/></svg><span class="lbl">Glowgrain</span></div>
+      <div class="g"><svg><use href="#g-technology"/></svg><span class="lbl">Cognition Cores</span></div>
+      <div class="g"><svg><use href="#g-materials"/></svg><span class="lbl">Ferrovolt Ore</span></div>
+      <div class="g"><svg><use href="#g-luxury"/></svg><span class="lbl">Nebula Silk</span></div>
+      <div class="g"><svg><use href="#g-medicine"/></svg><span class="lbl">Panacea Vials</span></div>
+      <div class="g"><svg><use href="#g-relics"/></svg><span class="lbl">Precursor Relics</span></div>
+      <div class="g"><svg><use href="#g-contraband"/></svg><span class="lbl">Voidbloom</span></div>
+      <div class="g"><svg><use href="#g-parts"/></svg><span class="lbl">Repair Kits</span></div>
+    </div>
+    <p class="note">Same drawing rules as the ship schematic: dark fill of the good's own color,
+    1.5px colored stroke. Names fade in on hover (or the learning toggle) — after a few sessions the
+    glyph IS the word. This sprite ships as one file (<code>&lt;symbol&gt;/&lt;use&gt;</code>, no build step)
+    and every surface reuses it: market, cargo manifest, ledger, mission board, map loot markers.</p>
+  </div>
+
+  <!-- ============ 2 · THE DOCK ============ -->
+  <h2>2 · Docked — two districts, split by decision tempo</h2>
+  <div class="panel">
+    <div class="dockhead">
+      <div><span class="station">Meridian Station</span> <span class="kind">· agricultural</span></div>
+      <button class="door" id="doorBtn" onclick="walk()">⇱ walk to the Shipyard</button>
+    </div>
+
+    <!-- THE DOCK: the seconds-loop -->
+    <div class="district on" id="d-dock">
+      <div class="svcstrip">
+        <div class="svc"><svg><use href="#s-fuel"/></svg>
+          <div class="track"><i style="width:36%;background:#d9902a"></i></div><span class="cost">$64</span>
+          <div class="uth">Refuel 180 → 500<br>$0.20 / unit</div></div>
+        <div class="svc"><svg><use href="#s-rearm"/></svg>
+          <div class="track"><i style="width:40%;background:#ffdd44"></i></div><span class="cost">$90</span>
+          <div class="uth">Rearm missiles 2 → 5<br>$30 / tube</div></div>
+        <div class="svc"><svg><use href="#s-repair"/></svg>
+          <div class="track"><i style="width:72%;background:#00ff00"></i></div><span class="cost">$42</span>
+          <div class="uth">Patch hull 72 → 100<br>$1.50 / point</div></div>
+      </div>
+
+      <div class="colhead"><span style="width:22px"></span><span style="width:52px;text-align:right">price</span><span style="flex:1">deal vs your ledger</span><span style="width:74px"></span><span style="width:46px"></span></div>
+      <div class="mrow"><svg><use href="#g-food"/></svg><span class="price buyp">$14</span>
+        <div class="deal"><i style="width:82%;background:#00ff00"></i><span class="mark" style="left:58%"></span></div>
+        <span class="tag best">cheapest known</span><button>Buy</button>
+        <div class="uth"><b style="color:#ffff00">Glowgrain</b> — bioluminescent staple crop<br>
+          here $14 · your best buy $19 (Agri Prime) · base $20<br><span style="color:#88ff88">buy here, this is the farm</span></div></div>
+      <div class="mrow"><svg><use href="#g-parts"/></svg><span class="price buyp">$36</span>
+        <div class="deal"><i style="width:45%;background:#7aa"></i><span class="mark" style="left:48%"></span></div>
+        <span class="tag">near your best</span><button>Buy</button>
+        <div class="uth"><b style="color:#88ffee">Repair Kits</b> — sealed spares (field-fix, R)<br>
+          here $36 · your best buy $34 (Forge) · base $35</div></div>
+      <div class="mrow"><svg><use href="#g-technology"/></svg><span class="price sellp">$58</span>
+        <div class="deal"><i style="width:91%;background:#ffaa00"></i><span class="mark" style="left:66%"></span></div>
+        <span class="tag best">best sell known</span><button>Sell 3</button>
+        <div class="uth"><b style="color:#00ffff">Cognition Cores</b> — shipmind lattices<br>
+          sells $58 · your best sell $49 (Nova Labs) · base $45<br><span style="color:#88ff88">farm world starving for tech — sell</span></div></div>
+      <div class="mrow"><svg><use href="#g-luxury"/></svg><span class="price sellp">$61</span>
+        <div class="deal"><i style="width:31%;background:#ffaa00"></i><span class="mark" style="left:74%"></span></div>
+        <span class="tag bad">worse than known</span><button>Sell 2</button>
+        <div class="uth"><b style="color:#ff00ff">Nebula Silk</b> — gas-harvested weave<br>
+          sells $61 · your best sell $84 (Palace) · base $70<br><span style="color:#ff8888">haul it onward</span></div></div>
+
+      <div style="margin-top:12px" class="colhead"><span>mission board</span></div>
+      <div class="brow"><svg><use href="#g-food"/></svg><span>5 → Mining Station 7</span><span class="pay">$600</span></div>
+      <div class="brow"><svg><use href="#g-medicine"/></svg><span>3 → Frontier Depot</span><span class="pay">$540</span></div>
+      <div class="brow"><span style="color:#ff6666;width:20px;text-align:center">☠</span><span>Redjaw · last seen near Frontier</span><span class="pay">$800</span></div>
+
+      <div style="margin-top:12px" class="colhead"><span>hiring hall</span></div>
+      <div class="brow"><span style="color:#88ccff;width:20px;text-align:center">◉</span><span>Vex Marrow · Navigator</span><span class="pay">$450 + $12/dock</span></div>
+    </div>
+
+    <!-- THE SHIPYARD: the thinking purchases -->
+    <div class="district" id="d-yard">
+      <p class="yardnote">You walk out past the fuel lines to the yard gantries. No hurry out here —
+      these are decisions you sit with.</p>
+      <div class="colhead"><span>hull ladder</span></div>
+      <div class="yrow"><span class="nm">Marauder-class</span><span class="spec">hull 140 · cargo 16 · 2 hardpoints</span><span class="pr">$9,400</span></div>
+      <div class="yrow"><span class="nm">Kestrel-class</span><span class="spec">hull 90 · cargo 22 · fast</span><span class="pr">$7,800</span></div>
+      <div class="colhead" style="margin-top:10px"><span>weapon systems</span></div>
+      <div class="yrow"><span class="nm">Twin Array Lv2</span><span class="spec">+dmg, +heat — tradeoff, not a ladder</span><span class="pr">$2,100</span></div>
+      <div class="colhead" style="margin-top:10px"><span>mechanic's bench</span></div>
+      <div class="yrow"><span class="nm">Grinner's Bore</span><span class="spec">+15% dmg / +15% heat</span><span class="pr">$1,600</span></div>
+      <p class="note">Everything slow lives out here: hulls, weapon systems, the mechanic's bench.
+      The every-dock screen sheds half its wall, and "walking out" plants the seed of a planet map
+      (districts are named places) without building one.</p>
+    </div>
+  </div>
+
+  <!-- ============ 3 · THE LEDGER ============ -->
+  <h2>3 · The Ledger tab — your price memory as a chart</h2>
+  <div class="panel">
+    <p class="note" style="margin-top:0">Same data as today (prices as of your last visit — stale on
+    purpose), grouped by <b>good</b> instead of by station, so the question the ledger actually answers
+    — <i>"where do I take this cargo?"</i> — is one glance. Best known price glows. These same bars feed
+    the market's deal column above.</p>
+    <div class="lgood"><div class="lhead"><svg><use href="#g-technology"/></svg><span style="color:#00ffff">sell</span></div>
+      <div class="lrow best"><span class="st">Meridian ⚡</span><div class="bar"><i style="width:96%;background:#ffaa00"></i></div><span class="val">$58</span></div>
+      <div class="lrow"><span class="st">Nova Labs</span><div class="bar"><i style="width:81%;background:#7a6a30"></i></div><span class="val">$49</span></div>
+      <div class="lrow"><span class="st">Agri Prime</span><div class="bar"><i style="width:70%;background:#7a6a30"></i></div><span class="val">$42</span></div>
+    </div>
+    <div class="lgood"><div class="lhead"><svg><use href="#g-food"/></svg><span style="color:#88ff88">buy</span></div>
+      <div class="lrow best"><span class="st">Meridian ⚡</span><div class="bar"><i style="width:35%;background:#00aa44"></i></div><span class="val">$14</span></div>
+      <div class="lrow"><span class="st">Agri Prime</span><div class="bar"><i style="width:48%;background:#3a5a3a"></i></div><span class="val">$19</span></div>
+      <div class="lrow"><span class="st">Mining 7</span><div class="bar"><i style="width:90%;background:#3a5a3a"></i></div><span class="val">$36</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 4 · SHIP TAB DISSOLVES ============ -->
+  <h2>4 · The Ship tab dissolves — the schematic gets an under-the-hood layer</h2>
+  <div class="panel">
+    <div class="schemwrap">
+      <svg viewBox="0 0 240 260">
+        <ellipse cx="120" cy="130" rx="95" ry="118" fill="none" stroke="#4488ff" stroke-width="5" opacity="0.35"/>
+        <path d="M120 18 L150 70 L158 150 L146 215 L120 232 L94 215 L82 150 L90 70 Z"
+              fill="#03270f" stroke="#00ff00" stroke-width="2"/>
+        <text x="120" y="62" fill="#3a7a4a" font-size="9" text-anchor="middle" font-family="'Courier New',monospace">GJALLARHORN</text>
+        <path d="M84 150 L64 175 L70 235 L92 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+        <path d="M156 150 L176 175 L170 235 L148 220 Z" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
+        <g class="modpin" onclick="showMod('bore')">
+          <circle cx="120" cy="30" r="9" stroke="#ffdd44" stroke-width="1.5"/>
+          <text x="120" y="34" fill="#ffdd44" font-size="10" text-anchor="middle">◈</text>
+        </g>
+        <g class="modpin" onclick="showMod('hold')">
+          <circle cx="120" cy="150" r="9" stroke="#cc99ff" stroke-width="1.5"/>
+          <text x="120" y="154" fill="#cc99ff" font-size="10" text-anchor="middle">◈</text>
+        </g>
+      </svg>
+      <div>
+        <p class="note" style="margin-top:0">Mods pin onto the slot they modify (◈ on the weapon mount,
+        ◈ on the cargo bay); the name engraves on the hull. <b>Click a pin</b> — the under-the-hood card
+        is the gearhead layer, and it's the ONLY place numbers live. The old Ship tab retires; the ship
+        log's journal lines move to the Log tab (your journal above, the galaxy's chronicle below — one
+        history surface).</p>
+        <div class="uthcard on" id="mod-bore">
+          <h4>◈ Grinner's Bore <span style="color:#666">— weapon mount</span></h4>
+          <div class="stat"><span>laser damage</span><span class="good">+15%</span></div>
+          <div class="stat"><span>heat per shot</span><span class="badv">+15%</span></div>
+          <div class="stat"><span>source</span><span>Mechanic's bench, Mining 7</span></div>
+        </div>
+        <div class="uthcard" id="mod-hold">
+          <h4>◈ Reliquary Hold <span style="color:#666">— cargo bay</span></h4>
+          <div class="stat"><span>relic capacity</span><span class="good">+4</span></div>
+          <div class="stat"><span>scatter on death</span><span class="good">protected</span></div>
+          <div class="stat"><span>source</span><span>Ossuary Drift bench</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note" style="margin:24px 0">Proposed build slices (each: both gates green, verify suite in
+  the same slice) — <b>A:</b> the glyph sprite + swap into cargo manifest, market rows, ledger, mission
+  board. <b>B:</b> dock districts (Dock / Shipyard split + services strip). <b>C:</b> ledger-fed deal
+  bars. <b>D:</b> interactive schematic + Ship-tab dissolution. Order is negotiable; A is the
+  foundation the rest speak.</p>
+</div>
+
+<script>
+  function walk(){
+    const dock=document.getElementById('d-dock'), yard=document.getElementById('d-yard'),
+          btn=document.getElementById('doorBtn');
+    const toYard=dock.classList.contains('on');
+    dock.classList.toggle('on',!toYard); yard.classList.toggle('on',toYard);
+    btn.textContent=toYard?'⇲ walk back to the Dock':'⇱ walk to the Shipyard';
+  }
+  function showMod(id){
+    document.querySelectorAll('.uthcard').forEach(c=>c.classList.remove('on'));
+    document.getElementById('mod-'+id).classList.add('on');
+  }
+</script>
+</body>
+</html>

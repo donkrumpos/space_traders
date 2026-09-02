@@ -116,7 +116,41 @@ function undock() {
     }, 300); // Wait for CSS transition
 }
 
+// The docked screen has two districts (Slice B). Docking always lands at the
+// Dock — the seconds loop — even if the player walked out to the Shipyard last
+// time; the choice is deliberately non-persistent.
+function resetDistrict() {
+    const dock = document.getElementById('district-dock');
+    const yard = document.getElementById('district-yard');
+    const door = document.getElementById('districtDoor');
+    if (!dock || !yard || !door) return;
+    dock.classList.add('on');
+    yard.classList.remove('on');
+    door.textContent = '⇱ walk to the Shipyard';
+}
+
+// Walk between the Dock and the Shipyard, swapping which district shows.
+// Burying the considered purchases (hulls, upgrades, weapons, bench) is a
+// feature: it sheds half the every-dock wall and plants the planet-map seed.
+function walkDistrict() {
+    const dock = document.getElementById('district-dock');
+    const yard = document.getElementById('district-yard');
+    const door = document.getElementById('districtDoor');
+    if (!dock || !yard || !door) return;
+    const toYard = dock.classList.contains('on');
+    dock.classList.toggle('on', !toYard);
+    yard.classList.toggle('on', toYard);
+    door.textContent = toYard ? '⇲ walk back to the Dock' : '⇱ walk to the Shipyard';
+}
+
+// Fill a service gauge to the current level of its pool (fuel/ammo/hull).
+function setServiceGauge(id, frac) {
+    const el = document.getElementById(id);
+    if (el) el.style.width = Math.max(0, Math.min(1, frac || 0)) * 100 + '%';
+}
+
 function updateTradingInterface(planet) {
+    resetDistrict();
     document.getElementById('tradingTitle').textContent = planet.name;
     document.getElementById('stationInfo').innerHTML =
         `Type: ${planet.type} | Status: DOCKED` +
@@ -155,6 +189,35 @@ function updateTradingInterface(planet) {
     updateRepairCost();
 }
 
+// Deal vs your ledger (visual-language Slice C): each market row grades the
+// here-price against your own best recorded price at OTHER ports. No ledger
+// entry elsewhere, no bar — scouting is what builds your market sense.
+function dealLine(goodType, price, side) {
+    const planet = game.currentPlanet;
+    const best = ledgerBest(goodType, side, planet ? planet.name : null);
+    if (!best) return '';
+    let verdict, tag, flavor = '';
+    if (side === 'buy') {
+        if (price < best.price) { verdict = 'best'; tag = 'cheapest known'; flavor = 'buy here — this is the source'; }
+        else if (price <= best.price * 1.05) { verdict = 'near'; tag = 'near your best'; }
+        else { verdict = 'bad'; tag = 'worse than known'; flavor = 'you know a cheaper yard'; }
+    } else {
+        if (price > best.price) { verdict = 'best'; tag = 'best sell known'; flavor = 'sell here — nobody pays better'; }
+        else if (price >= best.price * 0.95) { verdict = 'near'; tag = 'near your best'; }
+        else { verdict = 'bad'; tag = 'worse than known'; flavor = 'haul it onward'; }
+    }
+    const span = Math.max(price, best.price) * 1.15;
+    const fillW = Math.round(price / span * 100);
+    const markL = Math.round(best.price / span * 100);
+    const fill = side === 'buy' ? (verdict === 'best' ? '#00ff00' : '#77aaaa') : '#ffaa00';
+    const bestLbl = side === 'buy' ? 'your best buy' : 'your best sell';
+    const title = `here $${price} · ${bestLbl} $${best.price} (${best.station})${flavor ? ' · ' + flavor : ''}`;
+    return `<div class="deal-line" data-good="${goodType}" data-verdict="${verdict}" title="${title}">
+        <span class="deal-track"><i style="width:${fillW}%;background:${fill};"></i><span class="deal-mark" style="left:${markL}%;"></span></span>
+        <span class="deal-tag ${verdict}">${tag}</span>
+    </div>`;
+}
+
 function updateBuyingSectionUI() {
     const buyingSection = document.getElementById('buyingSection');
     const planet = game.currentPlanet;
@@ -169,13 +232,14 @@ function updateBuyingSectionUI() {
                     : price < base * 0.95 ? ' <span style="color:#66ff66;">▼</span>' : '';
         const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         buyingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}${illegal}</span>
+            <span>${goodIcon(goodType)}${goods[goodType].name}${illegal}</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="buyGood('${goodType}', 1)">+1</button>
                 <button onclick="buyGood('${goodType}', 5)">+5</button>
                 <button onclick="buyGood('${goodType}', 'max')">Max</button>
             </span>
+            ${dealLine(goodType, price, 'buy')}
         </div>`;
     });
 
@@ -199,13 +263,14 @@ function updateSellingSectionUI() {
         const off = playerHas === 0 ? 'disabled' : '';
         const illegal = goodType === 'contraband' ? ' <span style="color:#ff44cc;">⚠</span>' : '';
         sellingSection.innerHTML += `<div class="trade-item">
-            <span>${goods[goodType].name}${illegal} (You have: ${playerHas})</span>
+            <span>${goodIcon(goodType)}${goods[goodType].name}${illegal} (You have: ${playerHas})</span>
             <span>$${price}${trend}</span>
             <span class="qty-buttons">
                 <button onclick="sellGood('${goodType}', 1)" ${off}>-1</button>
                 <button onclick="sellGood('${goodType}', 5)" ${off}>-5</button>
                 <button onclick="sellGood('${goodType}', 'all')" ${off}>All</button>
             </span>
+            ${dealLine(goodType, price, 'sell')}
         </div>`;
     });
 }
@@ -252,6 +317,7 @@ function updateUpgradesUI(planet) {
 }
 
 function updateFuelCost() {
+    setServiceGauge('fuelGauge', game.ship.fuel / game.ship.fuelMax);
     const fuelNeeded = game.ship.fuelMax - Math.floor(game.ship.fuel);
     const fullTankCost = fuelNeeded * 2;
 
@@ -293,7 +359,9 @@ function updateFuelButton() {
 }
 
 function updateMissileCost() {
-    const missilesNeeded = game.ship.weapons.missiles.maxAmmo - game.ship.weapons.missiles.ammo;
+    const m = game.ship.weapons.missiles;
+    setServiceGauge('missileGauge', m.maxAmmo ? m.ammo / m.maxAmmo : 0);
+    const missilesNeeded = m.maxAmmo - m.ammo;
     const fullCost = missilesNeeded * 50; // $50 per missile
 
     if (game.ship.credits >= fullCost) {
@@ -731,6 +799,7 @@ function fieldRepair() {
 function updateRepairCost() {
     const label = document.getElementById('repairCost');
     const button = document.querySelector('button[onclick="buyRepair()"]');
+    setServiceGauge('repairGauge', game.ship.hull / game.ship.hullMax);
     if (!label || !button) return;
 
     const needed = game.ship.hullMax - Math.floor(game.ship.hull);

@@ -65,6 +65,7 @@ const game = {
     camera: { x: 0, y: 0 },
     keys: {},
     planets: [],
+    pois: [],
     stars: [],
     projectiles: [],
     nearPlanet: null,
@@ -114,6 +115,9 @@ function init() {
         size: 20
     }));
 
+    // Initialize discoverable points of interest (js/exploration.js)
+    if (typeof loadPOIs === 'function') loadPOIs();
+
     // Initialize living economy and world hazards
     initEconomy();
     initAsteroids();
@@ -122,11 +126,18 @@ function init() {
     const starColors = ['#ffffff', '#aaccff', '#ffffaa', '#ffccaa', '#ffaaaa'];
     const starColorNames = ['white', 'blue', 'yellow', 'orange', 'red'];
 
+    // Each layer tiles over its own field size (fieldW/fieldH): render.js wraps
+    // stars modulo the field around the camera, so the sky is infinite and never
+    // empties when flying far — including into negative coordinates (the dark
+    // where the POIs live). Uniform-random positions stay uniform under the
+    // wrap, so density is unchanged; the field just repeats every fieldW units.
+
     // Background stars (far) - 80% small stars
     for (let i = 0; i < 160; i++) {
         game.stars.push({
             x: Math.random() * 8000, // Larger field for background
             y: Math.random() * 6000,
+            fieldW: 8000, fieldH: 6000,
             size: 1,
             brightness: 0.3 + Math.random() * 0.4, // Dimmer background stars
             color: starColors[Math.floor(Math.random() * starColors.length)],
@@ -140,6 +151,7 @@ function init() {
         game.stars.push({
             x: Math.random() * 6000,
             y: Math.random() * 4500,
+            fieldW: 6000, fieldH: 4500,
             size: 2 + Math.random(), // 2-3px
             brightness: 0.5 + Math.random() * 0.4,
             color: starColors[Math.floor(Math.random() * starColors.length)],
@@ -153,6 +165,7 @@ function init() {
         game.stars.push({
             x: Math.random() * 5000,
             y: Math.random() * 4000,
+            fieldW: 5000, fieldH: 4000,
             size: 4 + Math.random() * 2, // 4-6px
             brightness: 0.7 + Math.random() * 0.3,
             color: starColors[Math.floor(Math.random() * starColors.length)],
@@ -166,6 +179,7 @@ function init() {
         game.stars.push({
             x: Math.random() * 4500,
             y: Math.random() * 3500,
+            fieldW: 4500, fieldH: 3500,
             size: 8 + Math.random() * 2, // 8-10px
             brightness: 0.8 + Math.random() * 0.2,
             color: starColors[Math.floor(Math.random() * starColors.length)],

@@ -121,7 +121,11 @@ wss.on('connection', (ws) => {
                 pilot: name,
                 doc: storedDoc,
                 peers: [...pilots.keys()].filter(p => p !== name),
-                config
+                config,
+                // M6: when this pilot's doc was last saved server-side (0 for a
+                // brand-new pilot) — the client diffs the chronicle against it
+                // for the "while you were away" digest.
+                lastSeen: stored ? stored.updated : 0
             });
             // World state follows immediately as its own message (documented
             // choice in PROTOCOL.md — welcome itself stays M1-shaped).

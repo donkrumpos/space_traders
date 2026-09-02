@@ -50,6 +50,176 @@ body {
     box-shadow: 0 6px 12px rgba(0, 10, 0, 0.9);
 }
 
+/* Vitals band — the drawn-ship schematic + numerics strip that replaced
+   the Ship Status / Upgrades / Cargo Hold text panels */
+#vitalsHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 8px;
+}
+
+#creditsLine {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+#xpLine {
+    color: #88bbff;
+    font-size: 11px;
+}
+
+#schematicWrap {
+    display: flex;
+    justify-content: center;
+    padding: 2px 0;
+}
+
+#shipSchematic {
+    width: 100%;
+    max-width: 200px;
+    height: auto;
+    overflow: visible;
+}
+
+#vitalsNums {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 12px;
+    font-size: 11px;
+}
+
+#vitalsNums .vn {
+    display: flex;
+    justify-content: space-between;
+}
+
+#vitalsNums .vk {
+    color: #5a7a5a;
+}
+
+#vitalsNums .vv {
+    font-variant-numeric: tabular-nums;
+}
+
+#cargoManifest {
+    font-size: 10px;
+    color: #889988;
+    margin-top: 4px;
+    line-height: 1.5;
+}
+
+/* Damaged schematic parts pulse red; CSS opacity multiplies the part's own
+   fill/stroke opacity, so overlays keep their computed strength */
+@keyframes schemFlash {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.9; }
+}
+.schem-flash {
+    animation: schemFlash 0.7s ease-in-out infinite;
+}
+
+/* Slice D — the Ship tab dissolved into the schematic. Installed mods pin as
+   ◈ markers on the slot they modify; clicking one opens the under-the-hood
+   card, the only place a part's numbers print. */
+.modpin {
+    cursor: pointer;
+}
+
+.modpin circle {
+    fill: #04140a;
+    stroke: #ffdd44;
+    stroke-width: 1.5;
+}
+
+.modpin text {
+    fill: #ffdd44;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    text-anchor: middle;
+}
+
+.modpin:hover circle {
+    fill: #1a1a04;
+    filter: drop-shadow(0 0 3px #ffdd44);
+}
+
+#hullLine {
+    text-align: center;
+    color: #5a7a5a;
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+#modCard {
+    background: #030f08;
+    border: 1px solid #4a4420;
+    padding: 7px 9px;
+    margin-bottom: 6px;
+    font-size: 11px;
+}
+
+#modCard .mc-head {
+    color: #ffdd44;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+#modCard .mc-slot {
+    color: #666666;
+    font-size: 10px;
+}
+
+#modCard .mc-close {
+    float: right;
+    color: #666666;
+    cursor: pointer;
+}
+
+#modCard .mc-close:hover {
+    color: #ffffff;
+}
+
+#modCard .mc-stat {
+    display: flex;
+    justify-content: space-between;
+    color: #889988;
+    font-size: 10px;
+    margin-top: 2px;
+}
+
+#modCard .mc-good {
+    color: #66ff88;
+}
+
+#modCard .mc-bad {
+    color: #ff7766;
+}
+
+#modCard .mc-src {
+    color: #8899aa;
+}
+
+/* The Log page's two histories: your journal above, the reach's below */
+.log-sect {
+    color: #556655;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 6px;
+}
+
+.log-sect:first-child {
+    margin-top: 0;
+}
+
+.log-journal {
+    color: #779977;
+    font-size: 10px;
+    font-style: italic;
+    margin-top: 3px;
+}
+
 /* Toast notifications — a stack, not a single slot: bursts of messages
    (kill + loot + mission + save) each get their own toast and timer */
 #hudToastStack {
@@ -142,6 +312,160 @@ body {
     color: #00ffff;
 }
 
+/* Records tabs (UI Slice 2) — the reference panels share one tabbed area.
+   A page's inline style.display means "this record has content" (set by its
+   own update function, asserted by verify.js); .rec-on means "selected tab"
+   and is the layer that actually shows a page, so the two never fight. */
+#recordsPanel {
+    padding: 0;
+}
+
+#recordsTabs {
+    display: flex;
+    background: #001a00;
+    border-bottom: 1px solid #0a4a0a;
+}
+
+#recordsTabs button {
+    flex: 1;
+    position: relative;
+    font-family: inherit;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #77aa77;
+    background: none;
+    border: none;
+    border-right: 1px solid #0a3a0a;
+    padding: 7px 2px 6px;
+    cursor: pointer;
+}
+
+#recordsTabs button:last-child {
+    border-right: none;
+}
+
+#recordsTabs button:hover {
+    color: #ccffcc;
+}
+
+#recordsTabs button.on {
+    color: #dfffdf;
+    background: #042804;
+    box-shadow: inset 0 -2px 0 #00ff00;
+}
+
+.rec-badge {
+    position: absolute;
+    top: 1px;
+    right: 3px;
+    background: #ffaa00;
+    color: #000000;
+    border-radius: 8px;
+    font-size: 8px;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.rec-badge-red {
+    background: #ff5555;
+    color: #ffffff;
+}
+
+#recordsPanel .rec-page {
+    padding: 10px;
+}
+
+#recordsPanel .rec-page:not(.rec-on) {
+    display: none !important;
+}
+
+/* Now zone (UI Slice 3) — the state-driven situation readout that replaced
+   the Navigation panel. data-now on the panel names the situation; the accent
+   (label + border) recolors with it so the state change reads before the
+   words do. Body content is composed per state in updateNowZone(). */
+#nowHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+}
+
+#nowLabel {
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    color: #00ffff;
+}
+
+#nowPos {
+    color: #557755;
+    font-size: 10px;
+}
+
+#nowZone { transition: border-color 0.3s; }
+#nowZone[data-now="combat"] { border-color: #ff4444; }
+#nowZone[data-now="combat"] #nowLabel { color: #ff4444; }
+#nowZone[data-now="fuel"] { border-color: #ff8800; }
+#nowZone[data-now="fuel"] #nowLabel { color: #ff8800; }
+#nowZone[data-now="dockrange"] #nowLabel { color: #00ff00; }
+#nowZone[data-now="docked"] #nowLabel { color: #00ffff; }
+#nowZone[data-now="engaged"] #nowLabel { color: #ffaa00; }
+#nowZone[data-now="event"] #nowLabel { color: #ffaa00; }
+#nowZone[data-now="poi"] #nowLabel { color: #cc99ff; }
+
+.now-big {
+    font-size: 14px;
+    font-weight: bold;
+    color: #00ffff;
+}
+
+.now-dim {
+    color: #888888;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+.now-lore {
+    color: #9a86b8;
+    font-style: italic;
+    font-size: 10px;
+    margin-top: 5px;
+    line-height: 1.4;
+}
+
+.now-keys {
+    color: #557755;
+    font-size: 10px;
+    margin-top: 7px;
+}
+
+.now-keys b {
+    color: #aaddaa;
+    border: 1px solid #2a5a2a;
+    border-radius: 3px;
+    padding: 0 4px;
+}
+
+.now-alarm {
+    color: #ff4444;
+    font-weight: bold;
+    animation: nowBlink 0.8s step-end infinite;
+}
+
+@keyframes nowBlink {
+    50% { opacity: 0.35; }
+}
+
+/* Goods glyphs (visual-language Slice A) — inline drawn icons from the
+   #glyphSprite symbol sheet; js/icons.js goodIcon() is the only producer. */
+.gicon {
+    width: 16px;
+    height: 16px;
+    vertical-align: -3px;
+    margin-right: 3px;
+}
+
 .cargo-item {
     display: flex;
     justify-content: space-between;
@@ -165,9 +489,188 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap; /* lets the deal-line drop to its own full-width row */
     margin: 10px 0;
     padding: 5px;
     border: 1px solid #004400;
+}
+
+/* Deal vs your ledger (Slice C): a bar under each market row grading the
+   here-price against your own best recorded elsewhere. No ledger, no bar. */
+.deal-line {
+    flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+.deal-track {
+    flex: 1;
+    height: 6px;
+    background: #03150a;
+    border: 1px solid #063806;
+    position: relative;
+}
+.deal-track i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.deal-mark {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: #ccffcc;
+    opacity: 0.7;
+}
+.deal-tag {
+    font-size: 9px;
+    color: #888;
+    white-space: nowrap;
+}
+.deal-tag.best {
+    color: #00ff00;
+    font-weight: bold;
+}
+.deal-tag.bad {
+    color: #ff4444;
+}
+
+/* The Ledger tab as a chart (Slice C): grouped by good, a bar per station,
+   the best-known price glowing. Same bars feed the market's deal column. */
+.lgood {
+    margin: 10px 0;
+}
+.lgood .lhead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+.lrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0 2px 22px;
+    font-size: 11px;
+}
+.lrow .lst {
+    width: 105px;
+    flex: none;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lrow .lbar {
+    flex: 1;
+    height: 7px;
+    background: #03150a;
+    border: 1px solid #063806;
+    position: relative;
+}
+.lrow .lbar i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+.lrow .lval {
+    width: 44px;
+    flex: none;
+    text-align: right;
+}
+.lrow.best .lst {
+    color: #00ff00;
+}
+.lrow.best .lval {
+    color: #00ff00;
+    font-weight: bold;
+}
+
+/* Dock districts (visual-language Slice B) — the docked panel is two places
+   split by decision tempo: THE DOCK (default) and THE SHIPYARD (behind a door). */
+.dockhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.dockhead h3 { margin: 0; }
+.district-door {
+    background: #001a00;
+    border: 1px dashed #2a6a2a;
+    color: #88cc88;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 5px 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.district-door:hover { background: #043004; color: #ccffcc; }
+
+.district { display: none; }
+.district.on { display: block; }
+.district-sec { margin: 14px 0 6px; }
+
+/* The Shipyard's junkyard-voice preamble */
+.yard-note {
+    color: #8a9a6a;
+    font-size: 11px;
+    font-style: italic;
+    line-height: 1.5;
+    margin: 6px 0 12px;
+}
+
+/* Services icon strip: refuel / rearm / repair as gauge-buttons, not text rows.
+   Each cell: service glyph, a fill gauge (current level), the top-off cost, the
+   action button (whose live text carries the mechanical fact). */
+.svc-strip {
+    display: flex;
+    gap: 8px;
+    margin: 4px 0 6px;
+}
+.svc {
+    flex: 1;
+    background: #001a00;
+    border: 1px solid #0a4a0a;
+    padding: 7px 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+.svc .svcicon { width: 24px; height: 24px; margin: 0; }
+.svc-track {
+    width: 100%;
+    height: 4px;
+    background: #03150a;
+    border: 1px solid #063806;
+}
+.svc-track i {
+    display: block;
+    height: 100%;
+    width: 0;
+}
+.svc-cost {
+    font-size: 10px;
+    color: #ffaa00;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.svc button {
+    width: 100%;
+    padding: 3px 4px;
+    font-size: 11px;
 }
 
 button {
