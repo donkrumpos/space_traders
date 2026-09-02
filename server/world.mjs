@@ -178,13 +178,8 @@ function maybeRollOccupation() {
     if (candidates.length === 0) return; // nothing charted yet — quiet sky
     // A raised banner draws the raiders (M7): claimed sites weigh double —
     // planting your mark is a standing invitation to defend it.
-    const weights = candidates.map(id => world.poiState[id].claim ? CLAIM_OCCUPY_WEIGHT : 1);
-    let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
-    let id = candidates[0];
-    for (let i = 0; i < candidates.length; i++) {
-        roll -= weights[i];
-        if (roll <= 0) { id = candidates[i]; break; }
-    }
+    const id = CombatCore.weightedPick(candidates,
+        candidates.map(c => world.poiState[c].claim ? CLAIM_OCCUPY_WEIGHT : 1));
     occupyPOI(id, CombatCore.pickRaidFaction(world.grudges));
 }
 
@@ -495,7 +490,10 @@ export function handleWorldMessage(ws, msg, send) {
                 send(ws, { t: 'faction.founded', reqId: msg.reqId, ok: false, reason });
             if (!FACTION_NAME_RE.test(name)) return fail('a banner needs a sayable name (3-24 plain characters)');
             if (RESERVED_NAMES.has(key) || world.factions[key]) return fail('that name is already in the ledger');
-            if (!/^#[0-9a-f]{6}$/.test(color) || RESERVED_COLORS.has(color)) return fail('that color flies over someone else\'s ships');
+            if (!/^#[0-9a-f]{6}$/.test(color) || RESERVED_COLORS.has(color)
+                || Object.values(world.factions).some(x => x.color.toLowerCase() === color)) {
+                return fail('that color flies over someone else\'s ships');
+            }
             if (!FACTION_WANT_KINDS.has(kind) || !FACTION_WORDS_RE.test(words)) return fail('say what your crew wants — a few plain words');
             if (factionOfPilot(ws.pilot)) return fail('you already fly under a banner');
             if (Object.keys(world.factions).length >= FACTION_MAX) return fail('the ledger is full of banners nobody buried');

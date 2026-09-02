@@ -146,7 +146,8 @@ function spawnCommonEnemy(targets, wealth) {
 // kickoff answer (config.raidScale 'perPilot'): the core sizes the band for
 // one pilot (grudge reinforcements included); the server adds +1 faction
 // minion per EXTRA pilot online, capped at config.raidExtraMinionCap.
-// forceFaction is the debug.spawnBand hook (retry-rolled, debug-only).
+// forceFaction pins the band's faction by exact name (occupation musters +
+// the debug.spawnBand hook); unknown names log and fall back to the roll.
 // anchorOverride pins the band to a spot (M6 occupations muster AT the site).
 function spawnBand(targets, forceFaction, anchorOverride) {
     const anchor = anchorOverride

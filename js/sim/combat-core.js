@@ -189,16 +189,23 @@
         };
     }
 
+    // Cumulative-weight random pick over a non-empty items array. Shared by
+    // the raid-faction roll and the server's occupation-site roll — one
+    // algorithm, one float-fallthrough fallback (items[0]).
+    function weightedPick(items, weights) {
+        let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
+        for (let i = 0; i < items.length; i++) {
+            roll -= weights[i];
+            if (roll <= 0) return items[i];
+        }
+        return items[0];
+    }
+
     // Grudge-weighted faction pick: a broken raid makes that faction likelier
     // to come back for you (weight 1 + grudge each)
     function pickRaidFaction(grudges) {
-        const weights = PIRATE_FACTIONS.map(f => 1 + grudgeOf(grudges, f.name));
-        let roll = Math.random() * weights.reduce((a, b) => a + b, 0);
-        for (let i = 0; i < PIRATE_FACTIONS.length; i++) {
-            roll -= weights[i];
-            if (roll <= 0) return PIRATE_FACTIONS[i];
-        }
-        return PIRATE_FACTIONS[0];
+        return weightedPick(PIRATE_FACTIONS,
+            PIRATE_FACTIONS.map(f => 1 + grudgeOf(grudges, f.name)));
     }
 
     // Assemble a full raid band anchored near (anchorX, anchorY): minions in a
@@ -607,7 +614,7 @@
     globalThis.CombatCore = {
         ENEMY_TIERS, PIRATE_FACTIONS,
         pickEnemyTier, makeEnemy, makeNamedWarlord,
-        pickRaidFaction, makeRaidBand,
+        weightedPick, pickRaidFaction, makeRaidBand,
         updateEnemies, applyDamage
     };
 })();

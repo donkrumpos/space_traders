@@ -10,10 +10,17 @@ const FACTION_RANK_MIN = 3;      // Veteran — founding is earned
 
 const FACTION_PALETTE = ['#44ddaa', '#ddaa44', '#dd44aa', '#aadd44', '#cc6644', '#66aacc'];
 const FACTION_WANTS = [
+    // Rule 4 (lore-bible §8): wants lead with the errand, never the violence
     { kind: 'place', label: '⚓ a place — hold a site the reach forgot' },
     { kind: 'trade', label: '⇄ a trade — move what nobody else will' },
-    { kind: 'grudge', label: '☠ a grudge — break the cartel that broke you' },
+    { kind: 'grudge', label: '☠ a debt — what the cartel took, owed back' },
 ];
+
+// Pilot names come from the handshake with no charset rule (unlike faction
+// fields, which the server restricts) — escape them at this innerHTML sink.
+function escName(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 const factionState = {
     registry: {},        // server truth, keyed by lowercased name
@@ -88,10 +95,10 @@ function factionBannerHTML() {
     const me = myPilotName();
     const roster = (f.members || []).map(p => {
         const tag = p === f.founder ? ' — founder' : '';
-        return `<div style="font-size:11px;">${p}${tag}</div>`;
-    }).join('') || `<div style="font-size:11px;">${me || 'you'} — founder</div>`;
+        return `<div style="font-size:11px;">${escName(p)}${tag}</div>`;
+    }).join('') || `<div style="font-size:11px;">${escName(me || 'you')} — founder</div>`;
     const invites = (f.invites || []).length
-        ? `<div style="font-size:10px; color:#888;">invited: ${f.invites.join(', ')}</div>` : '';
+        ? `<div style="font-size:10px; color:#888;">invited: ${f.invites.map(escName).join(', ')}</div>` : '';
     const offline = (window.net && net.online) ? '' :
         `<div style="font-size:10px; color:#667;">(the roster lives on the reach — offline copy)</div>`;
     return `<div style="border:1px solid ${f.color}; padding:6px 8px; margin-bottom:8px;">
@@ -106,12 +113,22 @@ function factionBannerHTML() {
 function charterPickColor(c) { charterSel.color = c; updateCharterDeskUI(); }
 function charterPickWant(k) { charterSel.kind = k; updateCharterDeskUI(); }
 
+// The desk holds live text inputs, so rewrites are guarded by string equality
+// (the vHtml idiom): an unrelated faction.update broadcast must not wipe a
+// half-typed banner name. Typed input never changes the template string.
+let charterDeskHTML = null;
+function setCharterDesk(el, html) {
+    if (html === charterDeskHTML) return;
+    charterDeskHTML = html;
+    el.innerHTML = html;
+}
+
 function updateCharterDeskUI() {
     const el = document.getElementById('charterDesk');
     if (!el) return;
     if (!(window.net && net.online)) {
-        el.innerHTML = `<div style="color:#667; font-size:11px;">The desk clerk is out —
-            banners are signed on the living reach.</div>`;
+        setCharterDesk(el, `<div style="color:#667; font-size:11px;">The desk clerk is out —
+            banners are signed on the living reach.</div>`);
         return;
     }
     const mine = myFaction();
@@ -125,8 +142,8 @@ function updateCharterDeskUI() {
         const leaveLabel = isFounder
             ? (mine.members.length > 1 ? '' : `<button onclick="charterLeave()" style="margin-top:6px;">fold the banner</button>`)
             : `<button onclick="charterLeave()" style="margin-top:6px;">walk from the banner</button>`;
-        el.innerHTML = `<div style="font-size:11px;">You fly under
-            <strong style="color:${mine.color};">${mine.name}</strong>.</div>${inviteRow}${leaveLabel}`;
+        setCharterDesk(el, `<div style="font-size:11px;">You fly under
+            <strong style="color:${mine.color};">${mine.name}</strong>.</div>${inviteRow}${leaveLabel}`);
         return;
     }
     const invites = myInvites();
@@ -147,9 +164,9 @@ function updateCharterDeskUI() {
         `<div onclick="charterPickWant('${w.kind}')" style="cursor:pointer; font-size:11px; padding:2px 4px;
          border:1px solid ${w.kind === charterSel.kind ? charterSel.color : '#234'};
          margin-top:3px;">${w.label}</div>`).join('');
-    el.innerHTML = `${inviteBlock}
-        <div style="font-size:11px; color:#8a8;">"Names are cheap. Names in the ledger aren't.
-        Say what your crew wants and sign." — ${FACTION_FEE.toLocaleString()} cr</div>
+    setCharterDesk(el, `${inviteBlock}
+        <div style="font-size:11px; color:#8a8;">"Names in the ledger aren't cheap —
+        say what your crew wants and sign." — ${FACTION_FEE.toLocaleString()} cr</div>
         <div style="margin-top:6px;"><input id="charterName" type="text" maxlength="24"
             placeholder="banner name" style="width:140px;"></div>
         <div style="margin-top:6px;">${swatches}</div>
@@ -158,7 +175,7 @@ function updateCharterDeskUI() {
             placeholder="the want, in your own words" style="width:200px;"></div>
         <button onclick="charterFound()" ${gateOK ? '' : 'disabled'} style="margin-top:6px;">sign the articles</button>
         ${gateNote ? `<div style="font-size:10px; color:#a86;">${gateNote}</div>` : ''}
-        <div style="font-size:10px; color:#966;">⚠ founding is chronicled — broadcast, permanent, never erased</div>`;
+        <div style="font-size:10px; color:#966;">⚠ founding is chronicled — broadcast, permanent, never erased</div>`);
 }
 
 function charterFound() {
@@ -175,7 +192,7 @@ function charterFound() {
             characterManager.saveCharacter(true);
             if (typeof updateUI === 'function') updateUI();
         })
-        .catch(() => showHudFeedback('the ledger did not answer — try again', 'warning', 4000));
+        .catch(charterNetFail);
 }
 
 function charterInvite() {
@@ -183,7 +200,11 @@ function charterInvite() {
     if (!pilot) return;
     net.factionInvite(pilot).then(res => {
         showHudFeedback(res.ok ? `Invitation signed for ${pilot}` : (res.reason || 'no'), res.ok ? 'info' : 'warning', 4000);
-    }).catch(() => {});
+    }).catch(charterNetFail);
+}
+
+function charterNetFail() {
+    showHudFeedback('the ledger did not answer — try again', 'warning', 4000);
 }
 
 function charterJoin(name) {
@@ -191,14 +212,14 @@ function charterJoin(name) {
         if (!res.ok) { showHudFeedback(res.reason || 'the papers fell through', 'warning', 5000); return; }
         showHudFeedback(`You fly under the ${res.faction.name} now`, 'success', 6000);
         addShipLog(`Signed on with the ${res.faction.name}`);
-    }).catch(() => {});
+    }).catch(charterNetFail);
 }
 
 function charterLeave() {
     net.factionLeave().then(res => {
         if (!res.ok) { showHudFeedback(res.reason || 'the clerk refuses', 'warning', 5000); return; }
         showHudFeedback('Your name is off the roster — the ledger remembers it was on', 'info', 6000);
-    }).catch(() => {});
+    }).catch(charterNetFail);
 }
 
 // --- The claim (M7 slice F2): one mark per banner ---------------------------
@@ -206,9 +227,12 @@ function charterLeave() {
 // Client-side gate for the Now zone's "raise the banner" button; the server
 // revalidates all of it (proximity is a client rule, like salvage).
 function poiClaimable(poi) {
-    const f = myFaction();
-    if (!f || !(window.net && net.online)) return false;
+    // Called per tick from updateNowZone — the O(1) disqualifiers go first so
+    // the registry/POI scans only run for a genuinely claimable-looking site.
     if (!poi || !poi.charted || poi.claim || poi.occupation) return false;
+    if (!(window.net && net.online)) return false;
+    const f = myFaction();
+    if (!f) return false;
     return !(game.pois || []).some(p => p.claim && p.claim.faction === f.name);
 }
 
@@ -218,7 +242,7 @@ function plantBanner(poiId) {
         const poi = (game.pois || []).find(p => p.id === res.id);
         showHudFeedback(`Your banner flies over ${poi ? poi.name : 'the site'} — the raiders will notice`, 'success', 6000);
         addShipLog(`Raised the banner over ${poi ? poi.name : 'a charted site'}`);
-    }).catch(() => showHudFeedback('the ledger did not answer — try again', 'warning', 4000));
+    }).catch(charterNetFail);
 }
 
 // Console hook (PROTOCOL M7)

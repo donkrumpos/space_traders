@@ -370,15 +370,7 @@ function renderPOIs(ctx, camera) {
         // Charted landmark: icon, name, charter, and a discovery ring up close
         // M7 claim: a faction's mark rings the glyph in its banner color —
         // under occupation the ring stays (contested: your ring, their flag).
-        if (poi.claim) {
-            ctx.strokeStyle = poi.claim.color || '#44ddaa';
-            ctx.lineWidth = 1.5;
-            ctx.globalAlpha = 0.8;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, 16, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-        }
+        strokeClaimRing(ctx, poi, screenX, screenY, 16, 1.5);
         ctx.fillStyle = kind.color;
         ctx.font = '18px Arial';
         ctx.textAlign = 'center';
@@ -453,18 +445,25 @@ function renderPOIMinimap(ctx, centerX, centerY, scale, range) {
             ctx.fillText('?', mapX, mapY + 3);
             return;
         }
-        if (poi.claim) {
-            ctx.strokeStyle = poi.claim.color || '#44ddaa';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.arc(mapX, mapY, 6, 0, Math.PI * 2);
-            ctx.stroke();
-        }
+        strokeClaimRing(ctx, poi, mapX, mapY, 6, 1);
         ctx.fillStyle = kind.color;
         ctx.font = '8px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(kind.symbol, mapX, mapY + 3);
     });
+}
+
+// M7: one drawer for the faction-claim ring on every map surface, so the
+// fallback color and ring semantics can't drift between them.
+function strokeClaimRing(ctx, poi, x, y, radius, lineWidth) {
+    if (!poi.claim) return;
+    ctx.strokeStyle = poi.claim.color || '#44ddaa';
+    ctx.lineWidth = lineWidth;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
 }
 
 // --- Rendering: full map ----------------------------------------------------
@@ -489,11 +488,7 @@ function renderPOIFullMap(ctx, scale, offsetX, offsetY) {
         ctx.font = '8px Courier New';
         ctx.fillText(kind.label + (poi.chartedBy ? ` · ${poi.chartedBy}` : ''), mapX, mapY + 18);
         if (poi.claim) {
-            ctx.strokeStyle = poi.claim.color || '#44ddaa';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(mapX, mapY, 12, 0, Math.PI * 2);
-            ctx.stroke();
+            strokeClaimRing(ctx, poi, mapX, mapY, 12, 1.5);
             ctx.fillStyle = poi.claim.color || '#44ddaa';
             ctx.fillText(`${poi.claim.faction} holds this ground`, mapX, mapY + 38);
         }

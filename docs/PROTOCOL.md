@@ -546,7 +546,7 @@ snapshot, so there is no separate offer message.
 
 | t | dir | payload |
 |---|-----|---------|
-| `faction.found` | c→s | `{ reqId, name, color, want: { kind, words } }` → `faction.founded { reqId, ok, faction?, reason? }`. Server validates: name `[A-Za-z0-9' -]{3,24}` unique vs cartels + Guild + registry (case-insensitive), color `#rrggbb` not a cartel color, `want.kind` ∈ place/trade/grudge, `want.words` 3-60 chars with no `<>&` (charset rules double as innerHTML safety), founder not already a member, registry cap 8. The 15k fee + Veteran rank gate are CLIENT-side (credits are client-authoritative, M3 rule) |
+| `faction.found` | c→s | `{ reqId, name, color, want: { kind, words } }` → `faction.founded { reqId, ok, faction?, reason? }`. Server validates: name `[A-Za-z0-9' -]{3,24}` unique vs cartels + Guild + registry (case-insensitive), color `#rrggbb` not a cartel color and not another banner's color (color is the identity signal on maps/ghosts), `want.kind` ∈ place/trade/grudge, `want.words` 3-60 chars with no `<>&` (charset rules double as innerHTML safety), founder not already a member, registry cap 8. The 15k fee + Veteran rank gate are CLIENT-side (credits are client-authoritative, M3 rule) |
 | `faction.invite` | c→s | `{ reqId, pilot }` (founder only) → `faction.invited { reqId, ok, pilot?, reason? }`. Adds to `invites` |
 | `faction.join` | c→s | `{ reqId, name }` → `faction.joined { reqId, ok, faction?, reason? }`. Requires a standing invite; one faction per pilot |
 | `faction.leave` | c→s | `{ reqId }` → `faction.left { reqId, ok, reason? }`. A founder with members still aboard is refused; a sole-member founder disbands (registry row deleted — the chronicle keeps the history) |
