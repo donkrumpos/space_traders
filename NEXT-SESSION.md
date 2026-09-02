@@ -1,5 +1,63 @@
 # Next Session Roadmap
 
+State as of 2026-09-01 (tenth session — **visual-language Slice D BUILT —
+THE MILESTONE IS COMPLETE**): commit 968433d on `feature/exploration-poi`
+(pushed; still NOT merged, NOT deployed; nothing server-side changed). One
+commit:
+
+1. **Slice D — the Ship tab dissolved into the schematic (968433d).** Mockup
+   §4, the last slice. The old Ship records tab's three jobs live on the
+   drawing now:
+   - **Mod pins** — every installed mod pins a ◈ on the `#shipSchematic` slot
+     it modifies (`MODS[id].slot` + `SLOT_PIN_ANCHORS` in ships.js; a slot
+     with several parts walks its anchor list then stacks below). Pins rebuild
+     in `updateShipPanelUI()` — same event-driven call sites as before
+     (install, hull buy, christening, character load). Clicking a pin opens
+     the **under-the-hood card** (`#modCard`, `showModCard(id)`) — the ONLY
+     place the part's numbers print, as `MODS[id].stats` rows (+green/−red).
+     The card's source line greps the ship's log for the bolt-on entry to name
+     the bench port; installs that scrolled off the 40-line journal read "a
+     bench somewhere back down the road" (deliberate — old parts keep their
+     mystery).
+   - **Identity** — `game.ship.name` engraves on the hull (`#svShipName`,
+     above the cargo bay where the CARGO label used to sit; names >13 chars
+     squeeze via `textLength`). A dim `#hullLine` under the drawing keeps
+     hull class/berths.
+   - **Log merge** — the journal renders in the **Log tab** above the
+     galaxy's chronicle ("one history surface"): `updateChroniclePanelUI()`
+     (chronicle.js) now owns both halves, each under a dim `.log-sect`
+     header, and the page's "has content" display signal is journal OR
+     chronicle. `updateShipPanelUI()` chains into it, so `addShipLog()`
+     still refreshes everything.
+   - **Retired** — `#recTab-ship` + `#shipPanel` deleted; `RECORDS_PAGE_IDS`
+     dropped `'ship'`; a stored `'ship'` tab preference from an old session
+     falls through to the default rule, which is now **Missions when
+     contracts are active, else the Log** (the journal inherits the Ship
+     tab's character-surface role).
+   - Suites: `records` retargeted (missions/ledger as the permanent tabs),
+     `chronicle`'s final assert knows the Log page hides only when BOTH
+     histories are empty, new solo `schematic` suite (10 asserts). Verified
+     visually in-browser (claude-in-chrome): pins, card, engraving, and the
+     merged Log all match the mockup.
+
+**Gates at tip: solo ?verify 212/212 (was 202), verify-net 136/136.**
+
+**NEXT: two explicit steps, in order.**
+1. **Deploy to themisto** (explicit, per docs/RUNBOOK.md — merge the branch
+   first; it carries M5+M6 server changes plus this whole UI milestone). The
+   direction memo says milestones deploy when they land so the shared world
+   stays live.
+2. **MMO groundwork:** player-founded factions (lore-bible §9 — a faction is
+   a declared WANT; founding = chronicle naming-event; never hardcode the
+   three authored cartels) + VPS durability chores (off-box SQLite backups,
+   systemd supervision, wss).
+
+Backlog unchanged: nebula mist ambient effect (art-pass column, spec below in
+the ninth-session record), plus the standing watchlist/tuning flags further
+down.
+
+--- (ninth-session record follows) ---
+
 State as of 2026-09-01 (ninth session — **visual-language Slice C BUILT
 (ledger-fed deal bars)**): commit 8a2267d on `feature/exploration-poi`
 (pushed; still NOT merged, NOT deployed; nothing server-side changed). One
