@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Space Traders — player factions: three directions (mockup)</title>
+<style>
+  :root{
+    --green:#00ff00; --cyan:#00ffff; --amber:#ffaa00; --red:#ff4444;
+    --dim:#888; --bg:#001100; --panel:#002200; --edge:#0a4a0a;
+    --ward:#44ddaa; /* the sample player faction's color */
+  }
+  *{box-sizing:border-box}
+  body{background:#000a00;color:#ccffcc;font-family:'Courier New',monospace;margin:0;padding:24px;font-size:13px}
+  h1{color:var(--cyan);font-size:18px;margin:0 0 4px}
+  h2{color:var(--cyan);font-size:14px;margin:28px 0 8px;border-bottom:1px solid var(--edge);padding-bottom:4px}
+  h3{color:#88cc88;font-size:12px;margin:14px 0 6px}
+  .note{color:#77aa77;font-size:11px;max-width:720px;line-height:1.5}
+  .pin{color:#ffcc44}
+  .wrap{max-width:960px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--green);padding:12px;margin:10px 0}
+  .voice{color:#88bb88;font-style:italic}
+
+  /* ---- §1 charter desk ---- */
+  .desk{max-width:420px}
+  .desk .row{display:flex;align-items:center;gap:8px;margin:8px 0}
+  .desk label{width:70px;color:var(--dim);font-size:11px}
+  .desk input[type=text]{background:#001a00;border:1px solid var(--edge);color:#ccffcc;
+    font-family:inherit;padding:5px 8px;flex:1;font-size:12px}
+  .swatches{display:flex;gap:6px;flex:1}
+  .sw{width:22px;height:22px;border:1px solid #333;cursor:pointer}
+  .sw.on{outline:2px solid #ccffcc}
+  .sw.dead{opacity:.25;cursor:not-allowed;position:relative}
+  .wants{flex:1;display:flex;flex-direction:column;gap:4px}
+  .want{background:#001a00;border:1px solid var(--edge);padding:5px 8px;cursor:pointer;font-size:11px}
+  .want.on{border-color:var(--ward);color:#ddfff2}
+  .want:hover{background:#032803}
+  .fee{color:var(--amber);font-size:11px}
+  .warn{color:#cc8888;font-size:10px;line-height:1.4;margin-top:8px}
+  .sign{background:#004400;color:#00ff00;border:1px solid #00ff00;font-family:inherit;
+    padding:7px 16px;cursor:pointer;font-size:12px;margin-top:10px}
+  .sign:hover{background:#006600}
+
+  /* ---- §2 direction cards ---- */
+  .dirs{display:flex;gap:12px;align-items:stretch;flex-wrap:wrap}
+  .dir{flex:1;min-width:260px;background:var(--panel);border:1px solid var(--edge);padding:12px}
+  .dir.star{border-color:var(--amber)}
+  .dir h3{margin-top:0}
+  .dir .tag{font-size:10px;color:var(--dim)}
+  .dir ul{margin:8px 0;padding-left:16px;font-size:11px;line-height:1.5;color:#aaddaa}
+  .dir .cost{font-size:10px;color:var(--dim);border-top:1px solid var(--edge);padding-top:6px;margin-top:8px}
+
+  /* ---- §3 rep tab ---- */
+  .rep{max-width:380px}
+  .sect{color:var(--dim);font-size:10px;letter-spacing:1px;margin:10px 0 4px}
+  .bannercard{border:1px solid var(--ward);background:#001a14;padding:10px}
+  .bannercard .head{display:flex;align-items:center;gap:8px}
+  .chip{width:14px;height:14px;background:var(--ward);flex:none}
+  .bname{color:#ddfff2;font-weight:bold}
+  .bwant{color:#88bbaa;font-size:11px;font-style:italic;margin:6px 0}
+  .roster{font-size:11px;margin:6px 0}
+  .roster .on::before{content:'●';color:var(--green);margin-right:5px}
+  .roster .off::before{content:'○';color:var(--dim);margin-right:5px}
+  .deeds{font-size:10px;color:#77aa77;border-top:1px solid #0a4a3a;padding-top:6px;margin-top:6px}
+  .grudge{display:flex;justify-content:space-between;font-size:11px;padding:3px 2px}
+  .grudge .lvl{color:var(--red)}
+
+  /* ---- §4 map + chronicle ---- */
+  .maplegend{display:flex;gap:24px;flex-wrap:wrap}
+  .mk{display:flex;align-items:center;gap:8px;font-size:11px;color:#aaddaa}
+  .poi{width:34px;height:34px;position:relative;flex:none}
+  .poi .core{position:absolute;inset:9px;border:1px solid var(--cyan)}
+  .poi .claimring{position:absolute;inset:2px;border:2px solid var(--ward);border-radius:50%}
+  .poi .occflag{position:absolute;top:-4px;right:-2px;color:#ff7744;font-size:12px}
+  .chron{font-size:11px;line-height:1.7}
+  .chron .t{color:var(--dim);margin-right:6px}
+  .chron .f{color:var(--ward)}
+  .chron .c{color:#ff7744}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Player factions — the design space</h1>
+<p class="note">Lore-bible §9: a faction is a declared <b>want</b>, founding is a
+naming-event, and the machinery already treats factions as plain data. The sample
+faction throughout: <span style="color:var(--ward)">the Reef Wardens</span> —
+want: <i>the reefs back</i>. Sections: §1 the founding flow (common to all
+directions), §2 the three directions, §3 the Rep tab, §4 world surfaces.
+<span class="pin">★ = recommended.</span></p>
+
+<h2>§1 — The charter desk (founding flow, common)</h2>
+<p class="note">Lives in the Shipyard district, beside the mechanic's bench —
+you walk to it (Slice B's door pattern). Three declarations and a fee. The
+warning is real: the chronicle is permanent.</p>
+<div class="panel desk">
+  <div class="voice" style="font-size:11px;margin-bottom:8px">"Names are cheap.
+  Names in the ledger aren't. Say what your crew wants and sign."</div>
+  <div class="row"><label>banner</label><input type="text" value="Reef Wardens"></div>
+  <div class="row"><label>color</label>
+    <div class="swatches">
+      <div class="sw" style="background:#44ddaa" ></div>
+      <div class="sw on" style="background:#44ddaa"></div>
+      <div class="sw" style="background:#ddaa44"></div>
+      <div class="sw" style="background:#dd44aa"></div>
+      <div class="sw" style="background:#aadd44"></div>
+      <div class="sw dead" style="background:#ff7744" title="Rustfang orange — taken"></div>
+      <div class="sw dead" style="background:#bb66ff" title="Choir purple — taken"></div>
+    </div>
+  </div>
+  <div class="row"><label>the want</label>
+    <div class="wants">
+      <div class="want on">⚓ a place — hold a site the reach forgot</div>
+      <div class="want">⇄ a trade — move what nobody else will</div>
+      <div class="want">☠ a grudge — break the cartel that broke you</div>
+      <div class="want">✎ our own words… <span style="color:var(--dim)">(freeform — fork 4)</span></div>
+    </div>
+  </div>
+  <div class="row"><label>the fee</label><div class="fee">15,000 cr — the desk keeps it either way</div></div>
+  <div class="warn">⚠ founding is chronicled: broadcast to every pilot, written in
+  the galaxy's ledger, never erased. Disbanding doesn't unwrite it.</div>
+  <button class="sign">sign the articles</button>
+</div>
+
+<h2>§2 — Three directions (what a faction DOES, v1)</h2>
+<div class="dirs">
+  <div class="dir">
+    <h3>A — The Banner</h3><div class="tag">identity-first</div>
+    <ul>
+      <li>Name, color, want, roster</li>
+      <li>Your color on your ghost's name tag</li>
+      <li>Deeds credit the banner in the chronicle ("…for the Reef Wardens")</li>
+      <li>Faction card in the Rep tab</li>
+    </ul>
+    <div class="cost">Cheapest. Risk: a clan tag — the want is declared but
+    never <i>does</i> anything.</div>
+  </div>
+  <div class="dir star">
+    <h3><span class="pin">★</span> B — The Claim</h3><div class="tag">territory-first</div>
+    <ul>
+      <li>Everything in A, plus <b>one claim per faction</b>: plant your mark
+      at a charted, unoccupied site</li>
+      <li>The site rings in your color on every map</li>
+      <li>The cartels' daily occupation roll <b>prefers claimed sites</b> —
+      your flag is an invitation to a fight</li>
+      <li>Repelling them chronicles as the faction's deed</li>
+      <li>Salvage stays first-come for everyone — the claim is a flag and a
+      fight-magnet, not a paywall</li>
+    </ul>
+    <div class="cost">Reuses poiState / occupations / liberation wholesale.
+    Turns the living-world loop two-way: the world finally pushes back on
+    something players <i>chose</i>.</div>
+  </div>
+  <div class="dir">
+    <h3>C — The Tally</h3><div class="tag">want-first</div>
+    <ul>
+      <li>Everything in A, plus the want is <b>counted</b>: haul-a-good /
+      break-raids / chart-and-salvage</li>
+      <li>Member deeds tick the faction's tally</li>
+      <li>Thresholds chronicle milestones ("the Wardens have moved 500
+      crates of panacea")</li>
+    </ul>
+    <div class="cost">Most faithful to rule 4, but hooks span trade + combat +
+    salvage paths, and a counter is less <i>visible</i> than a flag on the map.
+    Better as slice 2, once claims give the want somewhere to live.</div>
+  </div>
+</div>
+
+<h2>§3 — The Rep tab: Your Banner above the grudge list</h2>
+<div class="panel rep">
+  <div class="sect">YOUR BANNER</div>
+  <div class="bannercard">
+    <div class="head"><div class="chip"></div><span class="bname">Reef Wardens</span>
+      <span style="color:var(--dim);font-size:10px;margin-left:auto">est. day 214</span></div>
+    <div class="bwant">"the reefs back"</div>
+    <div class="roster">
+      <div class="on">Dad — founder</div>
+      <div class="on">Arthur</div>
+      <div class="off">Foggy</div>
+    </div>
+    <div class="deeds">⚑ holds the Drowned Choir relay · repelled Iron Shoal ×2</div>
+  </div>
+  <div class="sect">GRUDGES HELD AGAINST YOU</div>
+  <div class="grudge"><span>Iron Shoal</span><span class="lvl">HUNTED</span></div>
+  <div class="grudge"><span>Rustfang Cartel</span><span class="lvl">Marked</span></div>
+  <p class="note" style="font-size:10px">No faction yet → the banner section is a
+  one-liner: <span class="voice">"a banner needs a want — the charter desk is in
+  any shipyard."</span></p>
+</div>
+
+<h2>§4 — World surfaces: map + chronicle</h2>
+<div class="panel">
+  <h3>Map markers (claims vs occupations)</h3>
+  <div class="maplegend">
+    <div class="mk"><div class="poi"><div class="core"></div><div class="claimring"></div></div>
+      claimed — your ring, your color</div>
+    <div class="mk"><div class="poi"><div class="core"></div><div class="occflag">⚑</div></div>
+      occupied — cartel flag (exists today)</div>
+    <div class="mk"><div class="poi"><div class="core"></div><div class="claimring"></div><div class="occflag">⚑</div></div>
+      contested — your ring, their flag: the fight is at your door</div>
+  </div>
+  <h3>Chronicle lines (the ledger the Rustfang live in)</h3>
+  <div class="chron">
+    <div><span class="t">day 214</span><span class="f">Reef Wardens</span> founded by Dad — the want: the reefs back</div>
+    <div><span class="t">day 214</span>Arthur signed on with the <span class="f">Reef Wardens</span></div>
+    <div><span class="t">day 215</span>the <span class="f">Reef Wardens</span> raised their mark over the Drowned Choir relay</div>
+    <div><span class="t">day 217</span><span class="c">Iron Shoal</span> dug in at the Drowned Choir relay</div>
+    <div><span class="t">day 218</span>Arthur drove <span class="c">Iron Shoal</span> off the Drowned Choir relay for the <span class="f">Reef Wardens</span></div>
+  </div>
+</div>
+
+<p class="note" style="margin-top:28px">Forks to pin before building:
+<b>1)</b> the mechanical heart (A/B/C — recommended: A's surface as slice F1,
+B's claim as slice F2, C later); <b>2)</b> the founding gate (fee + rank vs an
+earned deed vs free); <b>3)</b> membership (invite-only single-faction vs open
+join); <b>4)</b> the want (structured picks that feed mechanics vs freeform
+words). Full riff: docs/faction-design.md.</p>
+</div>
+</body>
+</html>
