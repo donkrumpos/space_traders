@@ -206,8 +206,10 @@
     // { faction, grudge, bandId, minions, boss, enemies } — enemies is the
     // spawn-ordered list (minions then boss); the caller pushes them into its
     // own enemy array and owns the muster announcement.
-    function makeRaidBand(anchorX, anchorY, grudges) {
-        const faction = pickRaidFaction(grudges);
+    // opts.faction: explicit faction object override (occupation musters, debug
+    // forcing) — the roll only happens when the caller didn't already know who.
+    function makeRaidBand(anchorX, anchorY, grudges, opts) {
+        const faction = (opts && opts.faction) || pickRaidFaction(grudges);
         const grudge = grudgeOf(grudges, faction.name);
         const bandId = `band-${Date.now()}`;
         const bandAngle = Math.random() * Math.PI * 2;

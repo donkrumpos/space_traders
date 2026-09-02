@@ -187,6 +187,9 @@ function updateTradingInterface(planet) {
 
     // Update repair cost
     updateRepairCost();
+
+    // The charter desk (M7 player factions — Shipyard district)
+    if (typeof updateCharterDeskUI === 'function') updateCharterDeskUI();
 }
 
 // Deal vs your ledger (visual-language Slice C): each market row grades the

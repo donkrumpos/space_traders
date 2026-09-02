@@ -75,6 +75,14 @@ function formatChronicleEntry(e) {
             return e.label || `market event at ${e.planet}`;
         case 'boss.killed':
             return e.faction ? `${e.pilot} broke a ${e.faction} raid` : `${e.pilot} broke a raid band`;
+        case 'faction.founded':
+            return `${e.founder} raised the ${e.faction} banner — "${e.want}"`;
+        case 'faction.joined':
+            return `${e.pilot} signed on with the ${e.faction}`;
+        case 'faction.left':
+            return `${e.pilot} walked from the ${e.faction}`;
+        case 'faction.disbanded':
+            return `${e.pilot} folded the ${e.faction} banner`;
         default:
             return `${e.kind}${e.pilot ? ` — ${e.pilot}` : ''}`;
     }

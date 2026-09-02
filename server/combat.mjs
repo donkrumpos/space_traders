@@ -152,12 +152,16 @@ function spawnBand(targets, forceFaction, anchorOverride) {
     const anchor = anchorOverride
         || targets[Math.floor(Math.random() * targets.length)] || { x: 0, y: 0 };
     const grudges = getGrudges();
-    let band = CombatCore.makeRaidBand(anchor.x, anchor.y, grudges);
+    // Direct lookup, not a retry-roll: a name outside PIRATE_FACTIONS (e.g. a
+    // future player faction leaking in) falls back to the grudge roll LOUDLY
+    // instead of silently mustering a random cartel under the wrong flag.
+    let forced = null;
     if (forceFaction) {
-        for (let tries = 0; band.faction.name !== forceFaction && tries < 100; tries++) {
-            band = CombatCore.makeRaidBand(anchor.x, anchor.y, grudges);
-        }
+        forced = CombatCore.PIRATE_FACTIONS.find(f => f.name === forceFaction) || null;
+        if (!forced) console.error(`spawnBand: unknown faction "${forceFaction}", rolling instead`);
     }
+    const band = CombatCore.makeRaidBand(anchor.x, anchor.y, grudges,
+        forced ? { faction: forced } : undefined);
     const extra = Math.min(config.raidExtraMinionCap, Math.max(0, pilots.size - 1));
     const factionTag = band.faction.name.split(' ')[0];
     for (let i = 0; i < extra; i++) {

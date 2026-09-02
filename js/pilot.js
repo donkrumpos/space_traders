@@ -19,7 +19,7 @@ const PILOT_RANKS = [
 // Perks / grudges / crew live here from day one so the save format is stable;
 // the systems that consume them arrive in their own features.
 function createDefaultPilot() {
-    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [] };
+    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [], faction: null };
 }
 
 function rankForXP(xp) {
@@ -287,17 +287,23 @@ function updateFactionUI() {
     if (!panel || !list) return;
     const grudges = (game.pilot && game.pilot.grudges) || {};
     const held = Object.keys(grudges).filter(name => grudges[name] > 0);
-    if (held.length === 0) {
+    // M7: your own banner sits above the grudge list — the Rep page lives
+    // while EITHER has content (membership keeps the tab after amnesty).
+    const banner = (typeof factionBannerHTML === 'function') ? factionBannerHTML() : '';
+    if (held.length === 0 && !banner) {
         panel.style.display = 'none';
         updateRecordsTabs(); // Rep tab retires with the last grudge
         return;
     }
     panel.style.display = 'block';
-    list.innerHTML = held.map(name => {
+    const grudgeRows = held.map(name => {
         const tier = grudgeTierLabel(grudges[name]);
         return `<div class="ledger-row"><span>${name}</span>
             <span style="color:${tier.color};">${tier.label} ×${grudges[name]}</span></div>`;
     }).join('');
+    list.innerHTML = banner +
+        (held.length && banner ? `<div style="font-size:10px; color:#888; letter-spacing:1px; margin:4px 0 2px;">GRUDGES HELD AGAINST YOU</div>` : '') +
+        grudgeRows;
     updateRecordsTabs(); // Rep tab appears/badges with held grudges
 }
 

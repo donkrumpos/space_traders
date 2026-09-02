@@ -130,6 +130,46 @@ VERIFY_SUITES.factions = (assert) => {
     updateFactionUI();
 };
 
+// M7 player factions, solo surface: the banner card renders from the pilot
+// doc's offline mirror; the charter desk needs the living reach (online).
+VERIFY_SUITES.banner = (assert) => {
+    const pilot = game.pilot;
+    pilot.grudges = {};
+    pilot.faction = null;
+    updateFactionUI();
+    assert('no banner + no grudges → Rep page hidden',
+        document.getElementById('factionPanel').style.display === 'none');
+
+    pilot.faction = { name: 'Reef Wardens', color: '#44ddaa', want: { kind: 'place', words: 'the reefs back' } };
+    updateFactionUI();
+    const list = document.getElementById('factionList');
+    assert('offline mirror renders the banner card',
+        document.getElementById('factionPanel').style.display === 'block' &&
+        list.innerHTML.includes('Reef Wardens') && list.innerHTML.includes('#44ddaa'));
+    assert('the want prints on the card', list.innerHTML.includes('the reefs back'));
+
+    pilot.grudges = { 'Iron Shoal': 2 };
+    updateFactionUI();
+    assert('banner and grudges share the page under section headers',
+        list.innerHTML.includes('GRUDGES HELD AGAINST YOU') && list.textContent.includes('Iron Shoal'));
+
+    const desk = document.getElementById('charterDesk');
+    updateCharterDeskUI();
+    assert('the charter desk clerk is out offline',
+        !!desk && desk.textContent.includes('clerk is out'));
+
+    assert('netFactions() serves the offline mirror',
+        netFactions().mine && netFactions().mine.name === 'Reef Wardens');
+    assert('chronicle lines cover the faction kinds',
+        formatChronicleEntry({ kind: 'faction.founded', founder: 'Dad', faction: 'Reef Wardens', want: 'the reefs back' }).includes('raised the Reef Wardens banner') &&
+        formatChronicleEntry({ kind: 'faction.joined', pilot: 'Arthur', faction: 'Reef Wardens' }).includes('signed on') &&
+        formatChronicleEntry({ kind: 'faction.disbanded', pilot: 'Dad', faction: 'Reef Wardens' }).includes('folded'));
+
+    pilot.faction = null;
+    pilot.grudges = {};
+    updateFactionUI();
+};
+
 VERIFY_SUITES.crew = (assert) => {
     const pilot = game.pilot;
     pilot.crew = [];
