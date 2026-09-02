@@ -41,6 +41,17 @@ lines merge into the Log tab. Then the milestone is done → deploy to themisto
 (explicit, per RUNBOOK) and start MMO groundwork (player-founded factions,
 lore-bible §9).
 
+**Backlog — nebula mist ambient effect (developer request 2026-09-01):** a
+fine drifting haze over the starfield. Build it the CHEAP way or not at all:
+pre-render a few soft mist blobs to offscreen canvases at load, then per-frame
+only `drawImage` at low alpha with parallax offsets + very slow drift (rAF
+timestamps, per the repo timing rule). NEVER per-frame `createRadialGradient`
+over large areas / `shadowBlur` / full-canvas `ctx.filter` blur / particle
+swarms — those are what tanks low-end machines. Density can be regional
+(thicker near certain planets/POIs, singing-reach mood) at the same cost since
+it bakes into the pre-rendered blobs. Add a `lowFx` tuning flag as insurance.
+Slots in the art-pass column — after Slice D, not before.
+
 --- (eighth-session record follows) ---
 
 State as of 2026-09-01 (eighth session — **visual-language Slice B BUILT
