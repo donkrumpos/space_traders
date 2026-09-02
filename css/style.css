@@ -119,6 +119,107 @@ body {
     animation: schemFlash 0.7s ease-in-out infinite;
 }
 
+/* Slice D — the Ship tab dissolved into the schematic. Installed mods pin as
+   ◈ markers on the slot they modify; clicking one opens the under-the-hood
+   card, the only place a part's numbers print. */
+.modpin {
+    cursor: pointer;
+}
+
+.modpin circle {
+    fill: #04140a;
+    stroke: #ffdd44;
+    stroke-width: 1.5;
+}
+
+.modpin text {
+    fill: #ffdd44;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    text-anchor: middle;
+}
+
+.modpin:hover circle {
+    fill: #1a1a04;
+    filter: drop-shadow(0 0 3px #ffdd44);
+}
+
+#hullLine {
+    text-align: center;
+    color: #5a7a5a;
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+#modCard {
+    background: #030f08;
+    border: 1px solid #4a4420;
+    padding: 7px 9px;
+    margin-bottom: 6px;
+    font-size: 11px;
+}
+
+#modCard .mc-head {
+    color: #ffdd44;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+#modCard .mc-slot {
+    color: #666666;
+    font-size: 10px;
+}
+
+#modCard .mc-close {
+    float: right;
+    color: #666666;
+    cursor: pointer;
+}
+
+#modCard .mc-close:hover {
+    color: #ffffff;
+}
+
+#modCard .mc-stat {
+    display: flex;
+    justify-content: space-between;
+    color: #889988;
+    font-size: 10px;
+    margin-top: 2px;
+}
+
+#modCard .mc-good {
+    color: #66ff88;
+}
+
+#modCard .mc-bad {
+    color: #ff7766;
+}
+
+#modCard .mc-src {
+    color: #8899aa;
+}
+
+/* The Log page's two histories: your journal above, the reach's below */
+.log-sect {
+    color: #556655;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 6px;
+}
+
+.log-sect:first-child {
+    margin-top: 0;
+}
+
+.log-journal {
+    color: #779977;
+    font-size: 10px;
+    font-style: italic;
+    margin-top: 3px;
+}
+
 /* Toast notifications — a stack, not a single slot: bursts of messages
    (kill + loot + mission + save) each get their own toast and timer */
 #hudToastStack {

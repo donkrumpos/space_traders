@@ -568,9 +568,11 @@ function updateNowZone(els, ship) {
     vHtml('nowBody', els.nowBody, html);
 }
 // ---------------------------------------------------------------------------
-// Records tabs — the reference panels (Ship / Missions / Crew / Rep / Log /
-// Ledger) collapsed to one tabbed area, one page visible at a time (UI Slice
-// 2, mockups/sidebar-redesign.html ★ Contextual Hybrid).
+// Records tabs — the reference panels (Missions / Crew / Rep / Log / Ledger)
+// collapsed to one tabbed area, one page visible at a time (UI Slice 2,
+// mockups/sidebar-redesign.html ★ Contextual Hybrid). The Ship tab dissolved
+// into the schematic in visual-language Slice D — identity engraves on the
+// hull, mods pin as ◈, and the journal lives in the Log page.
 //
 // Two visibility layers, deliberately separate:
 //   - each page's inline style.display stays "this record has content", set
@@ -587,7 +589,7 @@ function updateNowZone(els, ship) {
 // ---------------------------------------------------------------------------
 const RECORDS_TAB_KEY = 'space_trader_records_tab';
 const RECORDS_PAGE_IDS = {
-    ship: 'shipPanel', missions: 'missionsPanel', crew: 'crewPanel',
+    missions: 'missionsPanel', crew: 'crewPanel',
     rep: 'factionPanel', log: 'chroniclePanel', ledger: 'ledgerPanel'
 };
 const records = { els: null, selected: null, userChose: false, logViewedAt: 0, last: {} };
@@ -605,7 +607,7 @@ function recordsEls() {
 }
 
 // Conditional records reuse the page's inline display as the "has content"
-// signal; Ship / Missions / Ledger always earn a tab
+// signal; Missions / Ledger always earn a tab
 function recordsTabAvailable(key, els) {
     if (key === 'crew' || key === 'rep' || key === 'log') {
         return els.pages[key] && els.pages[key].style.display !== 'none';
@@ -613,9 +615,13 @@ function recordsTabAvailable(key, els) {
     return true;
 }
 
+// Missions when contracts are active; otherwise the Log — the ship's journal
+// inherited the old Ship tab's role as the character surface. A pilot with no
+// story yet lands on Missions.
 function recordsDefaultTab() {
     const active = typeof game !== 'undefined' && game.missions && game.missions.length > 0;
-    return active ? 'missions' : 'ship';
+    if (active) return 'missions';
+    return recordsTabAvailable('log', recordsEls()) ? 'log' : 'missions';
 }
 
 function recordsBadgeCounts() {
@@ -649,11 +655,12 @@ window.selectRecordsTab = selectRecordsTab;
 
 function updateRecordsTabs() {
     const els = recordsEls();
-    if (!els.tabs.ship) return;
+    if (!els.tabs.missions) return;
 
     if (records.selected === null) {
-        // First call: last session's tab if the player ever picked one,
-        // else the sensible default (Missions when any active, else Ship)
+        // First call: last session's tab if the player ever picked one, else
+        // the sensible default. A stored 'ship' from before Slice D no longer
+        // resolves to a page and falls through to the default rule.
         let stored = null;
         try { stored = localStorage.getItem(RECORDS_TAB_KEY); } catch (e) { /* private mode */ }
         if (stored && els.pages[stored]) {
@@ -665,7 +672,7 @@ function updateRecordsTabs() {
     }
 
     // Until the player picks a tab themselves, follow the default rule — a
-    // restored character's missions land after boot, so Ship upgrades to
+    // restored character's missions land after boot, so the Log upgrades to
     // Missions once contracts exist. A vanished tab (rep with grudges
     // cleared, stored tab whose record is empty this session) falls back too.
     if (!records.userChose || !recordsTabAvailable(records.selected, els)) {

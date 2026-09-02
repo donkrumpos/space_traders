@@ -705,14 +705,17 @@ VERIFY_SUITES.chronicle = (assert) => {
     applyChronicleSnapshot(flood);
     assert('client ledger caps at 100', netChronicle().count === 100);
 
-    // Restore — empty ledger hides the panel again for a clean sidebar
+    // Restore — the Log page hides again only when BOTH histories are empty
+    // (the ship's journal shares the page since Slice D)
     chronicle.entries = saved.entries;
     chronicle.lastSeen = saved.lastSeen;
     chronicle.digestShown = saved.digestShown;
     updateChroniclePanelUI();
+    const journalLen = (game.ship.log || []).length;
     assert('restored ledger leaves no trace',
         netChronicle().count === saved.entries.length &&
-        (saved.entries.length > 0 || document.getElementById('chroniclePanel').style.display === 'none'));
+        (saved.entries.length + journalLen > 0 ||
+            document.getElementById('chroniclePanel').style.display === 'none'));
 };
 
 VERIFY_SUITES.vitals = (assert) => {
@@ -798,7 +801,6 @@ VERIFY_SUITES.records = (assert) => {
     const now = Date.now();
 
     assert('permanent records always earn a tab',
-        tab('ship').style.display !== 'none' &&
         tab('missions').style.display !== 'none' &&
         tab('ledger').style.display !== 'none');
 
@@ -806,8 +808,8 @@ VERIFY_SUITES.records = (assert) => {
     assert('selected page is the one shown',
         page('ledgerPanel').classList.contains('rec-on') &&
         getComputedStyle(page('ledgerPanel')).display !== 'none' &&
-        !page('shipPanel').classList.contains('rec-on') &&
-        getComputedStyle(page('shipPanel')).display === 'none');
+        !page('missionsPanel').classList.contains('rec-on') &&
+        getComputedStyle(page('missionsPanel')).display === 'none');
     assert('selection persists for the next session',
         localStorage.getItem('space_trader_records_tab') === 'ledger');
 
@@ -834,7 +836,7 @@ VERIFY_SUITES.records = (assert) => {
     assert('cleared grudges retire the rep tab and fall back',
         tab('rep').style.display === 'none' &&
         !page('factionPanel').classList.contains('rec-on') &&
-        (page('shipPanel').classList.contains('rec-on') || page('missionsPanel').classList.contains('rec-on')));
+        (page('missionsPanel').classList.contains('rec-on') || page('chroniclePanel').classList.contains('rec-on')));
 
     // Galaxy Log: unseen count rides the tab; reading the log clears it
     setChronicleLastSeen(now - 3600 * 1000);
@@ -857,9 +859,67 @@ VERIFY_SUITES.records = (assert) => {
     updateMissionsUI();
     updateFactionUI();
     updateChroniclePanelUI();
-    selectRecordsTab('ship');
+    selectRecordsTab('missions');
     assert('restored state leaves a permanent tab selected',
-        page('shipPanel').classList.contains('rec-on'));
+        page('missionsPanel').classList.contains('rec-on'));
+};
+
+VERIFY_SUITES.schematic = (assert) => {
+    // Visual-language Slice D: the Ship tab dissolved into the schematic.
+    // Mods pin ◈ onto the slot they modify, the pin's under-the-hood card is
+    // the ONLY place the numbers live, the name engraves on the hull, and the
+    // journal lines land in the Log tab above the galaxy's chronicle.
+    const ship = game.ship;
+    const saved = {
+        mods: (ship.mods || []).slice(), name: ship.name,
+        logLen: (ship.log || []).length
+    };
+
+    assert('the Ship records tab is retired',
+        !document.getElementById('recTab-ship') && !document.getElementById('shipPanel'));
+
+    // Installed parts pin onto the drawing, on the right slot
+    ship.mods = ['grinner_bore', 'vex_compressor'];
+    updateShipPanelUI();
+    assert('installed mods pin onto the schematic',
+        document.querySelectorAll('#svModPins .modpin').length === 2);
+    assert('each pin sits on the slot its part modifies',
+        document.querySelector('#svModPins .modpin[data-mod="grinner_bore"]').getAttribute('data-slot') === 'weapons' &&
+        document.querySelector('#svModPins .modpin[data-mod="vex_compressor"]').getAttribute('data-slot') === 'cargo');
+    assert('the glance layer stays number-free',
+        !document.getElementById('svModPins').textContent.includes('%'));
+
+    // Clicking a pin opens the under-the-hood card — where the numbers live
+    showModCard('grinner_bore');
+    const card = document.getElementById('modCard');
+    assert('a pin opens the under-the-hood card',
+        card.style.display !== 'none' && card.textContent.includes("Old Grinner's Cannon Bore"));
+    assert('the card carries the part\'s facts',
+        card.textContent.includes('laser damage') && card.textContent.includes('+15%') &&
+        card.textContent.includes('laser heat') && card.textContent.includes('source'));
+    showModCard('grinner_bore');
+    assert('clicking the pin again closes the card', card.style.display === 'none');
+
+    // Identity engraves on the hull; the hull line still names the class
+    ship.name = 'Tin Comet';
+    updateShipPanelUI();
+    assert('the name engraves on the hull',
+        document.getElementById('svShipName').textContent === 'TIN COMET');
+    assert('the hull line still names the boat',
+        document.getElementById('hullLine').textContent.includes(currentHull().name));
+
+    // A journal line lands in the Log tab (one history surface)
+    addShipLog('Kicked the tires and called her ready.');
+    assert('a journal line lands in the Log tab',
+        document.getElementById('journalList').textContent.includes('Kicked the tires') &&
+        document.getElementById('chroniclePanel').style.display === 'block' &&
+        document.getElementById('recTab-log').style.display !== 'none');
+
+    // Restore
+    ship.mods = saved.mods;
+    ship.name = saved.name;
+    if (ship.log) ship.log.length = saved.logLen;
+    updateShipPanelUI();
 };
 
 VERIFY_SUITES.now = (assert) => {

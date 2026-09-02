@@ -60,6 +60,8 @@
                                   fill="#04140a" stroke="#55cc66" stroke-width="2.5"/>
                             <path id="svHullDmg" d="M120 20 L150 70 L156 170 L138 250 L120 268 L102 250 L84 170 L90 70 Z"
                                   fill="#ff4d4d" fill-opacity="0"/>
+                            <text id="svShipName" x="120" y="106" text-anchor="middle"
+                                  font-family="'Courier New',monospace" font-size="9" fill="#3a7a4a"></text>
                         </g>
                         <g class="slot" data-slot="weapons">
                             <polygon id="svWeaponMount" points="120,20 134,58 106,58" fill="#06210f" stroke="#00ff00" stroke-width="2"/>
@@ -80,7 +82,6 @@
                             <circle id="svLifeCoreDmg" cx="120" cy="86" r="10" fill="#ff4d4d" fill-opacity="0"/>
                         </g>
                         <g class="slot" data-slot="cargo">
-                            <text x="120" y="108" fill="#5a7a5a" font-size="8" text-anchor="middle" font-family="'Courier New',monospace">CARGO</text>
                             <rect id="svCargoBay" x="94" y="110" width="52" height="80" rx="2" fill="#03150a" stroke="#0a3a0a" stroke-width="1"/>
                             <g id="svCargoGrid"></g>
                         </g>
@@ -88,8 +89,18 @@
                             <rect id="svFuelTank" x="114" y="196" width="12" height="52" rx="3" fill="#0a1a0a" stroke="#0a5a0a" stroke-width="1.5"/>
                             <rect id="svFuelFill" x="114" y="248" width="12" height="0" rx="2" fill="#d9902a"/>
                         </g>
+                        <!-- Mod pins (visual-language Slice D): each installed
+                             mod pins a ◈ at its slot's anchor. Overlay group,
+                             not a .slot — the seven-slot anatomy stays fixed.
+                             Rebuilt by updateShipPanelUI (js/ships.js). -->
+                        <g id="svModPins"></g>
                     </svg>
                 </div>
+                <div id="hullLine"></div>
+                <!-- The under-the-hood card: clicking a ◈ pin opens it, and it
+                     is the ONLY place a mod's numbers live (ship-design-vision
+                     §3 — the schematic glance stays number-free). -->
+                <div id="modCard" style="display: none;"></div>
 
                 <div id="vitalsNums">
                     <div class="vn"><span class="vk">Hull</span><span class="vv"><span id="hull">100</span>/<span id="hullMax">100</span></span></div>
@@ -120,27 +131,24 @@
                 <div id="nowBody"></div>
             </div>
 
-            <!-- Records: the reference panels (Ship / Missions / Crew / Rep /
-                 Log / Ledger) collapsed to one tab at a time (UI Slice 2,
+            <!-- Records: the reference panels (Missions / Crew / Rep / Log /
+                 Ledger) collapsed to one tab at a time (UI Slice 2,
                  mockups/sidebar-redesign.html ★ Contextual Hybrid). The page
                  divs keep their historical ids AND inline style.display as the
                  "this record has content" signal — verify.js asserts on it and
                  the tab row derives visibility from it; which page is actually
-                 SHOWN is the .rec-on class, layered on top in CSS. -->
+                 SHOWN is the .rec-on class, layered on top in CSS.
+                 The Ship tab dissolved into the schematic (visual-language
+                 Slice D): mods pin on the drawing, the name engraves on the
+                 hull, and the ship's journal lives in the Log page above the
+                 galaxy's chronicle. -->
             <div class="panel" id="recordsPanel">
                 <div id="recordsTabs">
-                    <button id="recTab-ship" onclick="selectRecordsTab('ship')">Ship</button>
                     <button id="recTab-missions" onclick="selectRecordsTab('missions')">Missions<span class="rec-badge" id="recBadge-missions" style="display: none;"></span></button>
                     <button id="recTab-crew" style="display: none;" onclick="selectRecordsTab('crew')">Crew</button>
                     <button id="recTab-rep" style="display: none;" onclick="selectRecordsTab('rep')">Rep<span class="rec-badge rec-badge-red" id="recBadge-rep" style="display: none;"></span></button>
                     <button id="recTab-log" style="display: none;" onclick="selectRecordsTab('log')">Log<span class="rec-badge" id="recBadge-log" style="display: none;"></span></button>
                     <button id="recTab-ledger" onclick="selectRecordsTab('ledger')">Ledger</button>
-                </div>
-
-                <div class="rec-page" id="shipPanel">
-                    <div id="shipIdentity"><span style="color:#666;">— unnamed —</span></div>
-                    <div id="shipModsList"></div>
-                    <div id="shipLogList"></div>
                 </div>
 
                 <div class="rec-page" id="missionsPanel">
@@ -158,6 +166,9 @@
                 </div>
 
                 <div class="rec-page" id="chroniclePanel" style="display: none;">
+                    <!-- One history surface: your journal above, the galaxy's
+                         chronicle below (Slice D log merge). -->
+                    <div id="journalList"></div>
                     <div id="chronicleList"></div>
                 </div>
 

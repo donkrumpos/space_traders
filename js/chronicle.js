@@ -93,27 +93,40 @@ function maybeShowChronicleDigest() {
     });
 }
 
-// --- Galaxy Log sidebar panel ----------------------------------------------
-// Hidden until entries exist (offline/solo keeps the sidebar clean). Entries
-// newer than lastSeen glow — "new since you last flew".
+// --- The Log page: one history surface --------------------------------------
+// Your ship's journal above, the galaxy's chronicle below (visual-language
+// Slice D — the old Ship tab's log lines merged in here). Hidden until either
+// has a line (offline/solo keeps the sidebar clean until the ship has a
+// story). Chronicle entries newer than lastSeen glow — "new since you last
+// flew".
 
 function updateChroniclePanelUI() {
     const panel = document.getElementById('chroniclePanel');
     const list = document.getElementById('chronicleList');
+    const journal = document.getElementById('journalList');
     if (!panel || !list) return;
-    if (chronicle.entries.length === 0) {
+    const shipLog = (typeof game !== 'undefined' && game.ship && game.ship.log) || [];
+    if (chronicle.entries.length === 0 && shipLog.length === 0) {
         panel.style.display = 'none';
         updateRecordsTabs();
         return;
     }
     panel.style.display = 'block';
+
+    if (journal) {
+        journal.innerHTML = shipLog.length === 0 ? '' :
+            `<div class="log-sect">ship's log</div>` +
+            shipLog.slice(-6).reverse().map(e => `<div class="log-journal">${e.text}</div>`).join('');
+    }
+
     const recent = chronicle.entries.slice(-8).reverse(); // newest first
-    list.innerHTML = recent.map(e => {
-        const fresh = chronicle.lastSeen > 0 && e.at > chronicle.lastSeen;
-        return `<div style="font-size:10px; margin-top:3px; color:${fresh ? '#ffdd88' : '#8899aa'};">` +
-            `${formatChronicleEntry(e)} <span style="color:#556677;">· ${chronicleTimeAgo(e.at)}</span></div>`;
-    }).join('');
-    updateRecordsTabs(); // Log tab appears with the first entry; badge = unseen
+    list.innerHTML = (recent.length === 0 ? '' : `<div class="log-sect">the reach's chronicle</div>`) +
+        recent.map(e => {
+            const fresh = chronicle.lastSeen > 0 && e.at > chronicle.lastSeen;
+            return `<div style="font-size:10px; margin-top:3px; color:${fresh ? '#ffdd88' : '#8899aa'};">` +
+                `${formatChronicleEntry(e)} <span style="color:#556677;">· ${chronicleTimeAgo(e.at)}</span></div>`;
+        }).join('');
+    updateRecordsTabs(); // Log tab appears with the first line; badge = unseen
 }
 
 // Relative timestamps drift while the panel sits open; a slow re-render keeps
