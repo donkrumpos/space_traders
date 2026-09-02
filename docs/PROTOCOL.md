@@ -54,7 +54,9 @@ docs/RUNBOOK.md          (M5) themisto deploy runbook
   ("Who flies this ship?"). URL param `?pilot=NAME` overrides + persists.
 - `localStorage.space_trader_secret` — family secret. First visit: prompt.
   URL param `?secret=S` overrides + persists. Server env `FAMILY_SECRET`
-  (default `dev-secret` when unset, for local/verify).
+  is **required** — the server refuses to start without it (a guessable
+  default on a public box was the footgun; local/verify pass
+  `FAMILY_SECRET=dev-secret` explicitly).
 - No accounts. Trust model: a father and his six-year-old.
 
 ## SQLite schema (server/db.mjs)
@@ -125,7 +127,7 @@ distinct color, minimap blip. Ghosts are NOT collidable (friendly fire off).
 | `market.update` | s→c *broadcast* | `{ planet, market }` after any trade/drift/event |
 | `market.event` | s→c *broadcast* | `{ marketEvent }` (or `{ marketEvent: null }` when it expires) |
 | `dock` | c→s | `{ planet }` — server runs drift for that planet, returns/broadcasts `market.update`; also triggers char.push |
-| `mission.take` | c→s | `{ planet, missionId }` → `mission.taken { ok, mission }`; boards regenerate server-side |
+| `mission.take` | c→s | `{ planet, missionId, reqId }` → `mission.taken { reqId, ok, mission }`; boards regenerate server-side |
 | `board.update` | s→c *broadcast* | `{ planet, offers }` after any mission.take or board regen |
 | `debug.*` | c→s | verify-only hooks, accepted ONLY when server env `VERIFY_DEBUG=1`: `debug.marketEvent {planetName?, goodType?, side?, multiplier?}` forces a market event now; `debug.snapshot` → server replies `world.snapshot`. Never set in prod. |
 
@@ -171,9 +173,11 @@ base price × its perk multiplier.
 
 **M3 client notes (locked at client build, 2026-07-08):**
 
-- The client sends a `reqId` on `mission.take` too (unknown fields are
-  ignored) and matches `mission.taken` by `reqId` when the reply carries one,
-  falling back to the oldest pending mission request when it doesn't. Pending
+- The client sends a `reqId` on `mission.take` and the server echoes it in
+  `mission.taken` (added 2026-09-02 — before that, double-clicked board
+  offers could resolve the wrong pending promise). The client still falls
+  back to the oldest pending mission request when a reply omits `reqId`
+  (old-server compatibility). Pending
   trade/mission requests reject after 5s or on disconnect; on `ok:false`,
   rejection, or timeout the client shows the existing error feedback and
   mutates nothing.

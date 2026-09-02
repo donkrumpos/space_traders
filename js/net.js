@@ -504,9 +504,9 @@ function netRequest(t, payload, kind) {
     });
 }
 
-// PROTOCOL's mission.taken payload carries no reqId; we send one anyway
-// (unknown fields are ignored) and fall back to the oldest pending request
-// of the right kind when the reply omits it.
+// The server echoes reqId on trade.result / mission.taken / poi.salvaged;
+// the oldest-pending fallback covers replies from servers that predate the
+// mission.taken echo (added 2026-09-02).
 function netResolvePending(msg, kind) {
     let reqId = msg.reqId;
     if (!reqId || !netPending.has(reqId)) {
