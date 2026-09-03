@@ -70,11 +70,22 @@ function formatChronicleEntry(e) {
         case 'poi.occupied':
             return `${e.faction} raiders dug in at ${e.name || e.poi}`;
         case 'poi.liberated':
-            return `${e.pilot} drove the ${e.faction} out of ${e.name || e.poi}`;
+            return `${e.pilot} drove the ${e.faction} out of ${e.name || e.poi}`
+                + (e.by ? ` for the ${e.by}` : '');
+        case 'faction.claimed':
+            return `the ${e.faction} raised their mark over ${e.name || e.poi}`;
         case 'market.event':
             return e.label || `market event at ${e.planet}`;
         case 'boss.killed':
             return e.faction ? `${e.pilot} broke a ${e.faction} raid` : `${e.pilot} broke a raid band`;
+        case 'faction.founded':
+            return `${e.founder} raised the ${e.faction} banner — "${e.want}"`;
+        case 'faction.joined':
+            return `${e.pilot} signed on with the ${e.faction}`;
+        case 'faction.left':
+            return `${e.pilot} walked from the ${e.faction}`;
+        case 'faction.disbanded':
+            return `${e.pilot} folded the ${e.faction} banner`;
         default:
             return `${e.kind}${e.pilot ? ` — ${e.pilot}` : ''}`;
     }

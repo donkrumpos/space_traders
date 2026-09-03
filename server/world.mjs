@@ -46,7 +46,12 @@ function rollBoard(meta) {
 // occupation: { faction, color, since } | undefined — pirates dug in at a
 // charted site; salvage blocked until a pilot breaks the band (combat.mjs).
 // nextOccupationAt: wall-clock stamp of the next occupation roll (persisted).
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0 };
+// factions: { key: { name, color, want: { kind, words }, founder, members: [],
+// invites: [], foundedAt } } — player-founded factions (M7), keyed by
+// lowercased name. A row in the same ledger the Rustfang live in: plain data,
+// same world blob, no schema change. Invites are public registry data (family
+// trust model) — the client sees its own standing invite in the snapshot.
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {} };
 
 // M6 cadence knobs — declared ABOVE the restore block below, which calls the
 // roll helpers at module init (const TDZ would bite otherwise).
@@ -55,6 +60,7 @@ const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
 const OCCUPATION_MIN_MS = 12 * 3600 * 1000;   // occupation roll: 12-24h apart
 const OCCUPATION_JITTER_MS = 12 * 3600 * 1000;
 const OCCUPATION_MAX = 2;
+const CLAIM_OCCUPY_WEIGHT = 2;                // claimed sites draw raiders (M7)
 
 {
     let saved = null;
@@ -75,6 +81,7 @@ const OCCUPATION_MAX = 2;
     if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
     if (saved && saved.poiState) world.poiState = saved.poiState;
     if (saved && saved.nextOccupationAt) world.nextOccupationAt = saved.nextOccupationAt;
+    if (saved && saved.factions) world.factions = saved.factions;
     // Migration: sites charted before caches existed get a cycle seeded now,
     // so a live world's landmarks start regenerating on the next deploy.
     for (const id of Object.keys(world.discoveredPOIs)) {
@@ -142,7 +149,8 @@ function rollOccupationDelay() {
 
 function poiStateMessage(id) {
     const st = world.poiState[id] || {};
-    return { t: 'poi.state', id, nextSalvageAt: st.nextSalvageAt || null, occupation: st.occupation || null };
+    return { t: 'poi.state', id, nextSalvageAt: st.nextSalvageAt || null,
+             occupation: st.occupation || null, claim: st.claim || null };
 }
 
 function occupyPOI(id, faction) {
@@ -168,7 +176,10 @@ function maybeRollOccupation() {
     const candidates = Object.keys(world.discoveredPOIs)
         .filter(id => world.poiState[id] && !world.poiState[id].occupation);
     if (candidates.length === 0) return; // nothing charted yet — quiet sky
-    const id = candidates[Math.floor(Math.random() * candidates.length)];
+    // A raised banner draws the raiders (M7): claimed sites weigh double —
+    // planting your mark is a standing invitation to defend it.
+    const id = CombatCore.weightedPick(candidates,
+        candidates.map(c => world.poiState[c].claim ? CLAIM_OCCUPY_WEIGHT : 1));
     occupyPOI(id, CombatCore.pickRaidFaction(world.grudges));
 }
 
@@ -194,9 +205,46 @@ export function liberatePOI(id, pilot) {
     const faction = st.occupation.faction;
     st.occupation = null;
     st.nextSalvageAt = Date.now();
-    recordChronicle('poi.liberated', { pilot, faction, poi: id, name: meta.name });
+    // M7 liberation credit: repelling raiders from your own claimed site is
+    // the faction's chronicled deed, not just the pilot's.
+    const mine = factionOfPilot(pilot);
+    const by = (st.claim && mine && mine.name === st.claim.faction) ? st.claim.faction : undefined;
+    recordChronicle('poi.liberated', by
+        ? { pilot, faction, poi: id, name: meta.name, by }
+        : { pilot, faction, poi: id, name: meta.name });
     broadcast(poiStateMessage(id));
     markDirty();
+}
+
+// --- Player factions (M7): a banner is a declared want ----------------------
+// Founding is a naming-event: chronicled, broadcast, permanent (lore-bible §9).
+// The server validates shape + uniqueness; the fee and rank gate are client-
+// side like all credit spends (credits are client-authoritative, M3 rule).
+// Charset rules double as innerHTML safety: no <>& ever enters the registry.
+
+const FACTION_MAX = 8;                        // runaway-banner backstop
+const FACTION_NAME_RE = /^[A-Za-z0-9' -]{3,24}$/;
+const FACTION_WORDS_RE = /^[^<>&]{3,60}$/;
+const FACTION_WANT_KINDS = new Set(['place', 'trade', 'grudge']);
+// The authored cartels' names and colors are taken — and so is the Guild's
+// name, which exists in lore but not in PIRATE_FACTIONS.
+const RESERVED_NAMES = new Set([
+    ...CombatCore.PIRATE_FACTIONS.map(f => f.name.toLowerCase()),
+    'meridian guild', 'meridian charter combine',
+]);
+const RESERVED_COLORS = new Set(CombatCore.PIRATE_FACTIONS.map(f => f.color.toLowerCase()));
+
+function factionKey(name) { return String(name).trim().toLowerCase(); }
+
+function factionOfPilot(pilot) {
+    for (const f of Object.values(world.factions)) {
+        if (f.members.includes(pilot)) return f;
+    }
+    return null;
+}
+
+function factionsMessage() {
+    return { t: 'faction.update', factions: world.factions };
 }
 
 export function recordChronicle(kind, detail) {
@@ -309,7 +357,8 @@ export function worldSnapshotMessage() {
         grudges: world.grudges,
         discoveredPOIs: world.discoveredPOIs,
         chronicle: world.chronicle,
-        poiState: world.poiState
+        poiState: world.poiState,
+        factions: world.factions
     };
 }
 
@@ -427,6 +476,141 @@ export function handleWorldMessage(ws, msg, send) {
                        nextSalvageAt: st.nextSalvageAt });
             broadcast(poiStateMessage(id));
             markDirty();
+            return true;
+        }
+
+        case 'faction.found': {
+            // Sign the articles: name + color + want, chronicled forever.
+            const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+            const color = typeof msg.color === 'string' ? msg.color.trim().toLowerCase() : '';
+            const kind = msg.want && msg.want.kind;
+            const words = msg.want && typeof msg.want.words === 'string' ? msg.want.words.trim() : '';
+            const key = factionKey(name);
+            const fail = reason =>
+                send(ws, { t: 'faction.founded', reqId: msg.reqId, ok: false, reason });
+            if (!FACTION_NAME_RE.test(name)) return fail('a banner needs a sayable name (3-24 plain characters)');
+            if (RESERVED_NAMES.has(key) || world.factions[key]) return fail('that name is already in the ledger');
+            if (!/^#[0-9a-f]{6}$/.test(color) || RESERVED_COLORS.has(color)
+                || Object.values(world.factions).some(x => x.color.toLowerCase() === color)) {
+                return fail('that color flies over someone else\'s ships');
+            }
+            if (!FACTION_WANT_KINDS.has(kind) || !FACTION_WORDS_RE.test(words)) return fail('say what your crew wants — a few plain words');
+            if (factionOfPilot(ws.pilot)) return fail('you already fly under a banner');
+            if (Object.keys(world.factions).length >= FACTION_MAX) return fail('the ledger is full of banners nobody buried');
+            const faction = {
+                name, color, want: { kind, words },
+                founder: ws.pilot, members: [ws.pilot], invites: [],
+                foundedAt: Date.now(),
+            };
+            world.factions[key] = faction;
+            send(ws, { t: 'faction.founded', reqId: msg.reqId, ok: true, faction });
+            broadcast(factionsMessage());
+            recordChronicle('faction.founded', { faction: name, founder: ws.pilot, want: words });
+            markDirty();
+            return true;
+        }
+
+        case 'faction.invite': {
+            // Founder names a pilot; the invite sits in the public registry
+            // until they sign on (no expiry — the scale is a family).
+            const f = factionOfPilot(ws.pilot);
+            const pilot = typeof msg.pilot === 'string' ? msg.pilot.trim() : '';
+            const fail = reason =>
+                send(ws, { t: 'faction.invited', reqId: msg.reqId, ok: false, reason });
+            if (!f || f.founder !== ws.pilot) return fail('only the founder signs invitations');
+            if (!/^[^<>&]{1,40}$/.test(pilot) || pilot === ws.pilot) return fail('name a pilot');
+            if (f.members.includes(pilot)) return fail(`${pilot} already flies with you`);
+            if (!f.invites.includes(pilot)) f.invites.push(pilot);
+            send(ws, { t: 'faction.invited', reqId: msg.reqId, ok: true, pilot });
+            broadcast(factionsMessage());
+            markDirty();
+            return true;
+        }
+
+        case 'faction.join': {
+            const key = factionKey(msg.name || '');
+            const f = world.factions[key];
+            const fail = reason =>
+                send(ws, { t: 'faction.joined', reqId: msg.reqId, ok: false, reason });
+            if (!f) return fail('no such banner in the ledger');
+            if (factionOfPilot(ws.pilot)) return fail('you already fly under a banner');
+            if (!f.invites.includes(ws.pilot)) return fail('nobody signed you an invitation');
+            f.invites = f.invites.filter(p => p !== ws.pilot);
+            f.members.push(ws.pilot);
+            send(ws, { t: 'faction.joined', reqId: msg.reqId, ok: true, faction: f });
+            broadcast(factionsMessage());
+            recordChronicle('faction.joined', { faction: f.name, pilot: ws.pilot });
+            markDirty();
+            return true;
+        }
+
+        case 'faction.leave': {
+            // A member walks; a sole-member founder folds the banner (the
+            // chronicle keeps the history — disbanding doesn't unwrite it).
+            const f = factionOfPilot(ws.pilot);
+            const fail = reason =>
+                send(ws, { t: 'faction.left', reqId: msg.reqId, ok: false, reason });
+            if (!f) return fail('you fly under no banner');
+            if (f.founder === ws.pilot && f.members.length > 1) {
+                return fail('the founder holds the banner while anyone still flies it');
+            }
+            if (f.founder === ws.pilot) {
+                delete world.factions[factionKey(f.name)];
+                // A folded banner comes down off the map too
+                for (const [pid, s] of Object.entries(world.poiState)) {
+                    if (s && s.claim && s.claim.faction === f.name) {
+                        s.claim = null;
+                        broadcast(poiStateMessage(pid));
+                    }
+                }
+                recordChronicle('faction.disbanded', { faction: f.name, pilot: ws.pilot });
+            } else {
+                f.members = f.members.filter(p => p !== ws.pilot);
+                recordChronicle('faction.left', { faction: f.name, pilot: ws.pilot });
+            }
+            send(ws, { t: 'faction.left', reqId: msg.reqId, ok: true });
+            broadcast(factionsMessage());
+            markDirty();
+            return true;
+        }
+
+        case 'faction.claim': {
+            // Plant the banner's mark at a charted site (M7 — one per faction).
+            // Proximity is a client rule like salvage; the server owns the rest.
+            const f = factionOfPilot(ws.pilot);
+            const id = typeof msg.poiId === 'string' ? msg.poiId : null;
+            const st = id ? world.poiState[id] : null;
+            const meta = id ? poiMetaById.get(id) : null;
+            const fail = reason =>
+                send(ws, { t: 'faction.claimed', reqId: msg.reqId, ok: false, reason });
+            if (!f) return fail('you fly under no banner');
+            if (!st || !meta || !world.discoveredPOIs[id]) return fail('chart the site before you mark it');
+            if (st.occupation) return fail(`${st.occupation.faction} is dug in here — drive them out first`);
+            if (st.claim) {
+                return fail(st.claim.faction === f.name
+                    ? 'your mark already flies here'
+                    : `the ${st.claim.faction} marked this site first`);
+            }
+            const held = Object.entries(world.poiState)
+                .find(([, s]) => s && s.claim && s.claim.faction === f.name);
+            if (held) {
+                const heldMeta = poiMetaById.get(held[0]);
+                return fail(`your banner already flies over ${heldMeta ? heldMeta.name : 'another site'} — one mark per banner`);
+            }
+            st.claim = { faction: f.name, color: f.color, since: Date.now() };
+            send(ws, { t: 'faction.claimed', reqId: msg.reqId, ok: true, id });
+            recordChronicle('faction.claimed', { faction: f.name, poi: id, name: meta.name });
+            broadcast(poiStateMessage(id));
+            markDirty();
+            return true;
+        }
+
+        case 'debug.liberatePOI': {
+            // Harness hook: liberate an occupied site as the sender without
+            // the full combat path (the real path is combat.mjs boss kill).
+            if (process.env.VERIFY_DEBUG !== '1') return true;
+            const id = typeof msg.id === 'string' && POI_IDS.has(msg.id) ? msg.id : null;
+            if (id) liberatePOI(id, ws.pilot);
             return true;
         }
 

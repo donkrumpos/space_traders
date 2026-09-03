@@ -62,8 +62,10 @@
     // --- Market events (shortages and gluts) ---
 
     const MARKET_EVENT_FLAVORS = {
-        sell: { food: 'Famine', technology: 'Tech crisis', materials: 'Mining strike', luxury: 'Luxury craze' },
-        buy: { food: 'Bumper harvest', technology: 'Factory overrun', materials: 'Ore glut', luxury: 'Warehouse overstock' }
+        sell: { food: 'Famine', technology: 'Tech crisis', materials: 'Mining strike', luxury: 'Luxury craze',
+                medicine: 'Fever outbreak', parts: 'Yard breakdown', contraband: 'Crackdown', relics: 'Relic fever' },
+        buy: { food: 'Bumper harvest', technology: 'Factory overrun', materials: 'Ore glut', luxury: 'Warehouse overstock',
+               medicine: 'Med-bay surplus', parts: 'Salvage flood', contraband: 'Smuggler glut', relics: 'Digger glut' }
     };
 
     // Roll a fresh market event, or null when the picked planet had nothing
@@ -75,7 +77,9 @@
         if (pool.length === 0) return null;
         const goodType = pool[Math.floor(Math.random() * pool.length)];
         const multiplier = side === 'sell' ? 2 + Math.random() : 0.4 + Math.random() * 0.2;
-        const label = `${MARKET_EVENT_FLAVORS[side][goodType]} at ${meta.name}`;
+        const flavor = MARKET_EVENT_FLAVORS[side][goodType] ||
+            (side === 'sell' ? 'Shortage' : 'Glut'); // a good the table forgot still reads
+        const label = `${flavor} at ${meta.name}`;
         return { planetName: meta.name, goodType, side, multiplier, timeLeft: 180, label };
     }
 
@@ -145,6 +149,7 @@
 
     globalThis.EconomyCore = {
         clampPrice, makeMarket, drift, tradeImpact,
-        eventMultiplier, rollMarketEvent, generateMissionOffers
+        eventMultiplier, rollMarketEvent, generateMissionOffers,
+        MARKET_EVENT_FLAVORS
     };
 })();

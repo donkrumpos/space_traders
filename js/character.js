@@ -208,6 +208,32 @@ class CharacterManager {
         game.isEngaged = this.character.gameState.isEngaged;
         game.currentEvent = this.character.gameState.currentEvent;
 
+        // A doc saved while docked must restore the docked SCREEN too, not
+        // just the flag — dock() is deliberately not re-run (customs scans
+        // and landfall XP must not fire twice on reload). The saved planet
+        // is a serialized copy, so re-point at the live object or net.js's
+        // `currentPlanet === planet` market refreshes never match again.
+        const uiEl = document.getElementById('ui');
+        const tradeEl = document.getElementById('tradingPanel');
+        const eventEl = document.getElementById('eventPanel');
+        if (uiEl && tradeEl) {
+            if (game.isDocked && game.currentPlanet) {
+                const live = (game.planets || []).find(p => p.name === game.currentPlanet.name);
+                if (live) game.currentPlanet = live;
+                uiEl.classList.add('trading');
+                tradeEl.style.display = 'block';
+                if (eventEl) eventEl.style.display = 'none';
+                if (typeof updateTradingInterface === 'function') updateTradingInterface(game.currentPlanet);
+            } else if (game.isEngaged && game.currentEvent && typeof engageWithEvent === 'function') {
+                tradeEl.style.display = 'none';
+                engageWithEvent(game.currentEvent);
+            } else {
+                uiEl.classList.remove('trading');
+                tradeEl.style.display = 'none';
+                if (eventEl) eventEl.style.display = 'none';
+            }
+        }
+
         // Apply world state (economy, missions, hazards)
         this.applyWorldToGame();
 

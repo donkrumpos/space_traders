@@ -1297,6 +1297,150 @@ async function occupationSuite(t, { browser, base, wsUrl }) {
     t('the liberated cache pays out', !!claimed && claimed.ok === true, JSON.stringify(claimed));
 }
 
+// M7 [faction]: player-founded factions. Fresh pages (M founds, N joins);
+// the registry is world state, so persistence is checked across a restart.
+async function factionSuite(t, { browser, base, wsUrl, restartServer }) {
+    for (const k of ['G', 'H']) {
+        if (S[k]) { await S[k].context.close().catch(() => {}); S[k] = null; }
+    }
+    const BANNER = 'Reef Wardens';
+    S.M = await newGamePage(browser, 'VerifyM', { stubPerks: true });
+    S.N = await newGamePage(browser, 'VerifyN', { stubPerks: true });
+    await S.M.page.goto(`${base}/index.html?pilot=VerifyM&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.N.page.goto(`${base}/index.html?pilot=VerifyN&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('M online', !!(await until(() => S.M.page.evaluate(() => netStatus().online === true))));
+    t('N online', !!(await until(() => S.N.page.evaluate(() => netStatus().online === true))));
+    const hook = await S.M.page.evaluate(() => typeof netFactions === 'function');
+    t('netFactions console hook present', hook, 'client missing js/factions.js');
+    if (!hook) return;
+
+    // 1. founding: chronicled, broadcast, in both registries
+    const founded = await S.M.page.evaluate(n =>
+        net.factionFound(n, '#44ddaa', { kind: 'place', words: 'the reefs back' }), BANNER);
+    t('M founds a faction (ok:true)', !!(founded && founded.ok), JSON.stringify(founded));
+    const nSees = await until(() => S.N.page.evaluate(n =>
+        Object.values(netFactions().registry).some(f => f.name === n && f.founder === 'VerifyM'), BANNER));
+    t("the registry broadcast reaches N", !!nSees);
+    const mMine = await until(() => S.M.page.evaluate(() =>
+        netFactions().mine && netFactions().mine.name));
+    t("M's own banner resolves", mMine === BANNER, `mine=${mMine}`);
+    const chronF = await until(() => S.N.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'faction.founded' && e.text.includes('VerifyM'))));
+    t('the founding is chronicled (naming-event)', !!chronF);
+
+    // 2. uniqueness: the ledger refuses reruns and cartel names
+    const dup = await S.N.page.evaluate(n =>
+        net.factionFound(n.toUpperCase(), '#ddaa44', { kind: 'trade', words: 'again' }), BANNER);
+    t('duplicate name refused (case-insensitive)', !!(dup && dup.ok === false));
+    const cartel = await S.N.page.evaluate(() =>
+        net.factionFound('Rustfang Cartel', '#ddaa44', { kind: 'grudge', words: 'impostors' }));
+    t('cartel name refused (reserved)', !!(cartel && cartel.ok === false));
+
+    // 3. invite + join: papers at the desk, then two names on the roster
+    const inv = await S.M.page.evaluate(() => net.factionInvite('VerifyN'));
+    t('founder signs an invitation', !!(inv && inv.ok), JSON.stringify(inv));
+    const nInvited = await until(() => S.N.page.evaluate(n =>
+        netFactions().invites.includes(n), BANNER));
+    t('N sees the standing invite', !!nInvited);
+    const joined = await S.N.page.evaluate(n => net.factionJoin(n), BANNER);
+    t('N signs on (ok:true)', !!(joined && joined.ok), JSON.stringify(joined));
+    const roster = await until(() => S.M.page.evaluate(n => {
+        const f = Object.values(netFactions().registry).find(x => x.name === n);
+        return f && f.members.length === 2 && f.members.includes('VerifyN') ? f.members : false;
+    }, BANNER));
+    t('both names on the roster', !!roster, JSON.stringify(roster));
+    const mirror = await until(() => S.N.page.evaluate(() =>
+        game.pilot.faction && game.pilot.faction.name));
+    t("membership mirrors onto N's pilot doc", mirror === BANNER, `mirror=${mirror}`);
+    const tint = await S.N.page.evaluate(() => factionColorOfPilot('VerifyM'));
+    t('ghost tint lookup carries the banner color', tint === '#44ddaa', `tint=${tint}`);
+
+    // 4. the founder holds the banner while anyone still flies it
+    const fLeave = await S.M.page.evaluate(() => net.factionLeave());
+    t('founder leave refused with a member aboard', !!(fLeave && fLeave.ok === false));
+    const nLeave = await S.N.page.evaluate(() => net.factionLeave());
+    t('member walks (ok:true)', !!(nLeave && nLeave.ok));
+    const chronL = await until(() => S.M.page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'faction.left' && e.text.includes('VerifyN'))));
+    t('the leaving is chronicled', !!chronL);
+
+    // 4b. the online charter desk renders the founding form for the unbannered
+    const desk = await S.N.page.evaluate(() => {
+        updateCharterDeskUI();
+        const el = document.getElementById('charterDesk');
+        return el ? el.textContent : '';
+    });
+    t('online charter desk offers the articles', desk.includes('sign the articles'), desk.slice(0, 80));
+
+    // 5. the registry is world state: it survives a server restart
+    const up = await restartServer();
+    t('server restarted for persistence check', !!up);
+    await S.M.page.goto(`${base}/index.html?pilot=VerifyM&ws=${wsUrl}`, { waitUntil: 'load' });
+    const persisted = await until(() => S.M.page.evaluate(n => {
+        if (typeof netFactions !== 'function' || !netStatus().online) return false;
+        const f = Object.values(netFactions().registry).find(x => x.name === n);
+        return f ? { members: f.members, founder: f.founder } : false;
+    }, BANNER), { timeout: 20000 });
+    t('faction survives restart (SQLite world blob)', !!persisted
+        && persisted.founder === 'VerifyM' && persisted.members.length === 1,
+        JSON.stringify(persisted));
+    if (!persisted) return;
+
+    // --- Slice F2: the claim (one mark per banner) ---------------------------
+    const POI = 'wraith_cache'; // charted by VerifyG back in [exploration]
+    await S.N.page.goto(`${base}/index.html?pilot=VerifyN&ws=${wsUrl}`, { waitUntil: 'load' });
+    await until(() => S.N.page.evaluate(() => netStatus().online === true), { timeout: 20000 });
+
+    // 6. M plants the mark; the claim rides poi.state to everyone + chronicle
+    const claim = await S.M.page.evaluate(id => net.factionClaim(id), POI);
+    t('M raises the banner over a charted site', !!(claim && claim.ok), JSON.stringify(claim));
+    const nClaim = await until(() => S.N.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return (p && p.claim && p.claim.faction) || false;
+    }, POI));
+    t("N's map shows whose ground it is", nClaim === BANNER, `claim=${JSON.stringify(nClaim)}`);
+    const chronC = await until(() => S.N.page.evaluate(n =>
+        netChronicle().latest.some(e => e.kind === 'faction.claimed' && e.text.includes(n)), BANNER));
+    t('the claim is chronicled', !!chronC);
+
+    // 7. one mark per banner: M charts a second site, the desk refuses it
+    await S.M.page.evaluate(id => net.discoverPOI(id), 'silent_beacon');
+    await until(() => S.M.page.evaluate(() => {
+        const p = (game.pois || []).find(x => x.id === 'silent_beacon');
+        return !!(p && p.charted);
+    }));
+    const second = await S.M.page.evaluate(() => net.factionClaim('silent_beacon'));
+    t('a second claim is refused (one mark per banner)',
+        !!(second && second.ok === false && /one mark/.test(second.reason || '')), JSON.stringify(second));
+
+    // 8. another banner can't take marked ground
+    const nFound = await S.N.page.evaluate(() =>
+        net.factionFound('Dust Runners', '#ddaa44', { kind: 'trade', words: 'the long hauls' }));
+    t('N founds a rival banner', !!(nFound && nFound.ok), JSON.stringify(nFound));
+    const poach = await S.N.page.evaluate(id => net.factionClaim(id), POI);
+    t('marked ground refuses a rival mark', !!(poach && poach.ok === false));
+
+    // 9. contested: an occupation lands ON the claim; both states coexist
+    await S.M.page.evaluate(id => net.send({ t: 'debug.occupyPOI', id, factionName: 'Iron Shoal' }), POI);
+    const contested = await until(() => S.N.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return !!(p && p.claim && p.occupation) ? { claim: p.claim.faction, occ: p.occupation.faction } : false;
+    }, POI));
+    t('contested site carries both the ring and the flag', !!contested
+        && contested.claim === BANNER && contested.occ === 'Iron Shoal', JSON.stringify(contested));
+
+    // 10. repelling raiders from your own claim credits the faction
+    await S.M.page.evaluate(id => net.send({ t: 'debug.liberatePOI', id }), POI);
+    const credit = await until(() => S.N.page.evaluate(n =>
+        netChronicle().latest.some(e => e.kind === 'poi.liberated' && e.text.includes(`for the ${n}`)), BANNER));
+    t('the repel is chronicled as the faction\'s deed', !!credit);
+    const cleared = await until(() => S.N.page.evaluate(id => {
+        const p = (game.pois || []).find(x => x.id === id);
+        return !!(p && !p.occupation && p.claim);
+    }, POI));
+    t('occupation cleared, claim intact', !!cleared);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1311,6 +1455,7 @@ const SUITES = [
     ['chronicle', chronicleSuite],
     ['salvage', salvageSuite],
     ['occupation', occupationSuite],
+    ['faction', factionSuite],
 ];
 
 // ---------------------------------------------------------------------------

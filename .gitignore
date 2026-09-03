@@ -46,3 +46,5 @@ tmp/
 temp/
 # Multiplayer server (M1+)
 server/world.db*
+# Local faction-test world (throwaway, created by the local-server recipe)
+dev-world.db*

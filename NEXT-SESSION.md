@@ -1,5 +1,124 @@
 # Next Session Roadmap
 
+State as of 2026-09-02 (eleventh session — **DEPLOYED to themisto + VPS
+durability done + player factions F1/F2 BUILT**). Three strands:
+
+1. **The big deploy happened (main `fb86071`, live and verified).**
+   `feature/exploration-poi` merged to main (`4b1b03d`) — M5 exploration +
+   M6 living world + the whole visual-language milestone — plus the
+   2026-08-06 review-hardening fixes that had sat undeployed. Themisto
+   pulled, restarted, wss handshake verified from outside (`welcome` ok),
+   world.db intact (pilot "Dad" preserved; prod had no charted POIs so the
+   M6 boot migration correctly seeded nothing). Node there is v22 — no
+   better-sqlite3 rebuild needed.
+2. **VPS durability (feature/vps-durability, merged to main + DEPLOYED).**
+   - Supervision + wss/TLS were ALREADY in place (unit has Restart=always/
+     RestartSec=3; Apache + certbot serve wss) — verified, documented.
+   - **Backups now exist, two layers, zero new credentials:** daily cron on
+     themisto (3:17am, `server/backup.mjs` — better-sqlite3 online .backup
+     → gzip → rotate 30 in /var/lib/space-traders/backups/) + daily pull
+     to Foggy's Mac (launchd `com.spacetraders.backup-pull`, 9:15am or
+     next wake, rsync over the existing ssh alias → ~/Backups/space-traders/).
+     Both ends tested live. RUNBOOK has the recipes + restore procedure.
+   - Server nits closed: **FAMILY_SECRET is now required** (refuses to
+     start, no dev-secret fallback — prod unit already sets it) and
+     **mission.taken echoes reqId** (new raw-socket net assert).
+3. **Player factions: design pinned, F1+F2 built** on
+   `feature/player-factions` (pushed; **NOT merged, NOT deployed** — the
+   developer hasn't seen it in-browser yet). Riff → mockup
+   (`mockups/faction-founding.html`) + design doc (`docs/faction-design.md`,
+   READ IT — includes the machinery audit) → four forks pinned via
+   AskUserQuestion (all recommended options): **the Claim** as v1 heart,
+   fee+rank founding gate (15k cr + Veteran), invite-only/one-per-pilot
+   membership, structured want + freeform words.
+   - **F1 (3c3cad0):** `world.factions` registry (persisted in the world
+     blob, additive snapshot field, `faction.update` broadcast), founding
+     as chronicle naming-event, invites/join/leave/disband, charter desk
+     in the Shipyard district, banner card atop the Rep tab, ghost
+     name-tag tint, `netFactions()` hook, PROTOCOL **M7** section. Seam
+     fix from the audit: `spawnBand` forced-faction is a direct object
+     lookup now (unknown names fall back loudly, never silently muster
+     the wrong cartel).
+   - **F2 (4a7783b):** `faction.claim` — ONE mark per banner at a charted
+     unoccupied site; claim rides `poi.state` (+ map rings in banner
+     color, Now-zone "raise the banner here" button). Teeth: occupation
+     roll weighs claimed sites ×2 (`CLAIM_OCCUPY_WEIGHT`), repelling
+     raiders from your own claim chronicles `poi.liberated … by` (the
+     faction's deed). Claims survive occupation (contested = your ring,
+     their flag); salvage stays first-come; disband lowers the mark.
+     `debug.liberatePOI` (VERIFY_DEBUG) tests the credit path.
+
+**Post-sync review batch (6db8525, autonomous):** 8-angle review of the
+faction diff → fixed: banner-color uniqueness enforced server-side,
+charter-desk innerHTML guard (broadcasts no longer wipe a half-typed
+name), pilot-name escaping at the banner-card sink, weightedPick shared
+between raid + occupation rolls, claim-ring drawer deduped, unified
+net-fail feedback, lore-voice copy trims. Gates re-verified after.
+
+**Gates at tips: main = solo 219/219 · net 158/158; player-factions =
+solo 221/221 · net 167/167.** (Solo growth: `banner` suite; net: [faction]
+suite, 35 asserts total.)
+
+**Developer look STARTED 2026-09-03, not finished.** Local test recipe
+(run from repo root, then two non-storage-sharing windows):
+
+```bash
+FAMILY_SECRET=dev-secret DB_PATH=./dev-world.db VERIFY_DEBUG=1 STATIC_DIR=. node server/server.mjs
+# http://localhost:8378/index.html?pilot=Dad&secret=dev-secret&ws=ws://127.0.0.1:8378
+# http://localhost:8378/index.html?pilot=Arthur&secret=dev-secret&ws=ws://127.0.0.1:8378  (private window)
+```
+
+The developer got as far as the perk picker + finding the charter desk
+(questions asked: "is the perk thing a class system?", "where's the
+desk?" — mild discoverability signal for the watchlist). Not yet
+verified in-browser: founding, invite/join, ghost tint, the claim flow,
+contested state. `dev-world.db*` is the throwaway test world
+(gitignored). Test checklist: found (needs `grantXP(400)` +
+`game.credits = 20000`) → invite Arthur → both rosters → ghost name-tag
+color → `warpToPOI('wraith_cache')` + chart + "◎ raise the banner
+here" → ring on maps + chronicle → optional contested via
+`net.send({t:'debug.occupyPOI', id:'wraith_cache'})`.
+
+**PLAYTEST NOTE (developer, 2026-09-03): "getting pummelled by pirates
+all the time — I cannot even leave dock."** Diagnosis: pirate pressure
+scales off the RICHEST online pilot's credits (combat.mjs
+runSpawnCadence: wealth ≥ 6000 → maxEnemies 4 (+1 w/ cargo), spawn every
+10-30s, pickEnemyTier gives 80% raider/warlord; band every 240-420s past
+2500 cr) — thresholds are early-economy numbers, and there's NO
+station no-spawn zone or post-undock grace, so pirates camp the dock
+door. Fix shapes (a tuning slice, verified): (a) no-spawn radius around
+planets + undock grace window — fixes "can't leave dock" directly;
+(b) rescale the 2000/6000 wealth bands for the current economy;
+(c) lift maxEnemies/spawnInterval/band cadence into named tuning flags
+(config.mjs server-side; mirror the browser solo cadence in
+js/combat.js so solo matches). pickEnemyTier is pure sim — shared fix.
+Keep the LOVED "pesky flies" chaos (direction memory) — the complaint
+is density+camping, not the combat feel.
+
+**NEXT:**
+1. **Finish the developer look** (checklist above) → then merge
+   `feature/player-factions` + themisto deploy (explicit, per RUNBOOK —
+   server changes: world.mjs registry + claim, combat.mjs seam fix).
+2. **Faction backlog, in rough order:** the Tally (direction C — structured
+   want-kinds start counting member deeds; the `want.kind` field is
+   already stored for exactly this), faction-flavored VENDETTA amnesty
+   (the Choir forgives those who return a core), member salvage priority
+   ONLY if claims feel toothless in play.
+3. **Standing backlog:** nebula mist ambient effect (spec in the
+   ninth-session record), death broadcast (M4 gap), www DNS/cert.
+
+**New tuning flags:** FACTION_FEE 15000 · FACTION_RANK_MIN 3 (Veteran) ·
+FACTION_MAX 8 · CLAIM_OCCUPY_WEIGHT 2 · claim proximity = the POI
+discovery ring (client rule).
+
+**Watchlist:** does the ×2 occupation weight actually land fights on the
+claim at 2-cap/12-24h cadence (may want ×3+ or a guaranteed first
+contest); charter desk discoverability (it's buried in the Shipyard — is
+that the right amount of hidden); invite UX when the invitee is offline
+(HUD nudge lands on next connect — enough?).
+
+--- (tenth-session record follows) ---
+
 State as of 2026-09-01 (tenth session — **visual-language Slice D BUILT —
 THE MILESTONE IS COMPLETE**): commit 968433d on `feature/exploration-poi`
 (pushed; still NOT merged, NOT deployed; nothing server-side changed). One
@@ -512,20 +631,14 @@ fixed, the rest are backlogged below. **The server-side fixes are NOT yet
 deployed to themisto** — first order of business next session.
 (2026-07-08 family playtest record: commit 66689f5.)
 
-## Deploy first (5 minutes)
+## Deploy first — ✅ DONE 2026-09-02 (eleventh session)
 
-- **Also undeployed now:** the `feature/exploration-poi` server changes — POI
-  discovery handler + snapshot field AND the whole M6 layer (chronicle,
-  poiState/salvage, occupations; world.mjs/combat.mjs/server.mjs). Fold into
-  the same themisto deploy once the branch is playtested and merged. The M6
-  boot migration seeds cache windows for any sites already charted on prod.
-- `ssh themisto` pull + restart per RUNBOOK.md to pick up: crash guards
-  (malformed-URL 400, uncaughtException flushes world before dying), ws
-  maxPayload 256KB + hello timeout, Object.hasOwn trade validation, backups
-  pruning (existing bloat shrinks on each pilot's next save).
+All of the below shipped to themisto in the eleventh session (exploration +
+M6 + visual language + review hardening + durability fixes). Kept for
+reference:
 - Note: local dev needed `npm rebuild better-sqlite3` after node hit v25.9 —
-  if themisto's node ever jumps majors, same rebuild applies (an `engines`
-  field in package.json is a backlogged nicety).
+  if themisto's node ever jumps majors (it's on v22), same rebuild applies
+  (an `engines` field in package.json is a backlogged nicety).
 
 ## What the review session shipped (2026-08-06, 5a9623a → 81f8bf8)
 
@@ -557,9 +670,8 @@ deployed to themisto** — first order of business next session.
   `innerHTML +=` every frame; full-map canvas resized (= backing store
   realloc + clear) every frame while open; ~25 getElementById/frame in ui.js;
   per-ghost shadowBlur + per-frame gradient allocs in render.js.
-- **Net nits:** `mission.taken` reply omits reqId → double-clicked board
-  offers can resolve the wrong promise (one-line server echo); `dev-secret`
-  fallback when FAMILY_SECRET env is missing — should refuse to start;
+- **Net nits:** ~~`mission.taken` reqId echo~~ + ~~`dev-secret` fallback~~
+  BOTH FIXED 2026-09-02 (eleventh session);
   same-pilot-two-devices = 30s kick ping-pong with alternating save clobbers;
   market-event timeLeft stale for mid-event joiners (send endsAt);
   damage.claim/cargo.scatter fully client-trusted (cap per-weapon damage).

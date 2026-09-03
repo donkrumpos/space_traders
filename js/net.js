@@ -115,6 +115,23 @@ const net = {
     salvagePOI(id) {
         return netRequest('poi.salvage', { id }, 'salvage');
     },
+    // M7 player factions — request/response like trade. The registry itself
+    // arrives via world.snapshot.factions + faction.update broadcasts.
+    factionFound(name, color, want) {
+        return netRequest('faction.found', { name, color, want }, 'faction');
+    },
+    factionInvite(pilot) {
+        return netRequest('faction.invite', { pilot }, 'faction');
+    },
+    factionJoin(name) {
+        return netRequest('faction.join', { name }, 'faction');
+    },
+    factionLeave() {
+        return netRequest('faction.leave', {}, 'faction');
+    },
+    factionClaim(poiId) {
+        return netRequest('faction.claim', { poiId }, 'faction');
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -381,6 +398,17 @@ function netHandleMessage(msg) {
         case 'chronicle.add':
             if (typeof applyChronicleAdd === 'function') applyChronicleAdd(msg.entry);
             break;
+        // --- M7: player factions ----------------------------------------
+        case 'faction.update':
+            if (typeof applyFactionRegistry === 'function') applyFactionRegistry(msg.factions);
+            break;
+        case 'faction.founded':
+        case 'faction.invited':
+        case 'faction.joined':
+        case 'faction.left':
+        case 'faction.claimed':
+            netResolvePending(msg, 'faction');
+            break;
         // Unknown t: ignored (forward compatibility)
     }
 }
@@ -567,6 +595,10 @@ function netApplySnapshot(snap) {
     // M6: the world's ledger — feeds the Galaxy Log panel + away digest.
     if (snap.chronicle && typeof applyChronicleSnapshot === 'function') {
         applyChronicleSnapshot(snap.chronicle);
+    }
+    // M7: the player-faction registry (banners, rosters, standing invites).
+    if (snap.factions && typeof applyFactionRegistry === 'function') {
+        applyFactionRegistry(snap.factions);
     }
     // M6: cache windows for charted sites (salvage-ready markers).
     if (snap.poiState && typeof applyPOIState === 'function') {

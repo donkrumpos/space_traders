@@ -136,7 +136,10 @@ function renderGhosts(ctx, camera) {
         ctx.fillStyle = 'rgba(0, 12, 18, 0.65)';
         ctx.fillRect(screenX - labelWidth / 2 - 3, labelY - 9, labelWidth + 6, 12);
         ctx.globalAlpha = ghost.docked ? 0.5 : 1;
-        ctx.fillStyle = GHOST_COLOR;
+        // M7: members fly their banner's color on the name tag
+        const bannerColor = (typeof factionColorOfPilot === 'function')
+            ? factionColorOfPilot(ghost.pilot) : null;
+        ctx.fillStyle = bannerColor || GHOST_COLOR;
         ctx.fillText(label, screenX, labelY);
         ctx.globalAlpha = 1;
     });

@@ -130,6 +130,85 @@ VERIFY_SUITES.factions = (assert) => {
     updateFactionUI();
 };
 
+// M7 player factions, solo surface: the banner card renders from the pilot
+// doc's offline mirror; the charter desk needs the living reach (online).
+VERIFY_SUITES.banner = (assert) => {
+    const pilot = game.pilot;
+    pilot.grudges = {};
+    pilot.faction = null;
+    updateFactionUI();
+    assert('no banner + no grudges → Rep page hidden',
+        document.getElementById('factionPanel').style.display === 'none');
+
+    pilot.faction = { name: 'Reef Wardens', color: '#44ddaa', want: { kind: 'place', words: 'the reefs back' } };
+    updateFactionUI();
+    const list = document.getElementById('factionList');
+    assert('offline mirror renders the banner card',
+        document.getElementById('factionPanel').style.display === 'block' &&
+        list.innerHTML.includes('Reef Wardens') && list.innerHTML.includes('#44ddaa'));
+    assert('the want prints on the card', list.innerHTML.includes('the reefs back'));
+
+    pilot.grudges = { 'Iron Shoal': 2 };
+    updateFactionUI();
+    assert('banner and grudges share the page under section headers',
+        list.innerHTML.includes('GRUDGES HELD AGAINST YOU') && list.textContent.includes('Iron Shoal'));
+
+    const desk = document.getElementById('charterDesk');
+    updateCharterDeskUI();
+    assert('the charter desk clerk is out offline',
+        !!desk && desk.textContent.includes('clerk is out'));
+
+    // The founding gate reads the REAL wallet (game.ship.credits — the desk
+    // was checking a property that doesn't exist, leaving "sign the articles"
+    // disabled forever), and a color pick must not eat a half-typed name.
+    // Force the online desk render; identity is null so registry stays empty.
+    const savedGate = { online: net.online, credits: game.ship.credits, rank: pilot.rank, color: charterSel.color };
+    net.online = true;
+    pilot.rank = FACTION_RANK_MIN;
+    game.ship.credits = FACTION_FEE + 500;
+    charterDeskHTML = null;
+    updateCharterDeskUI();
+    const signBtn = () => desk.querySelector('button[onclick="charterFound()"]');
+    assert('a funded Veteran can sign the articles', !!signBtn() && !signBtn().disabled);
+    document.getElementById('charterName').value = 'Reef Wardens';
+    charterPickColor(FACTION_PALETTE[2]);
+    assert('a color pick keeps the half-typed name',
+        document.getElementById('charterName').value === 'Reef Wardens');
+    game.ship.credits = 100;
+    updateCharterDeskUI();
+    assert('a light wallet disables the articles and says why',
+        signBtn().disabled && desk.textContent.includes('the fee is'));
+    net.online = savedGate.online;
+    game.ship.credits = savedGate.credits;
+    pilot.rank = savedGate.rank;
+    charterSel.color = savedGate.color;
+    charterDeskHTML = null;
+    updateCharterDeskUI();
+
+    assert('netFactions() serves the offline mirror',
+        netFactions().mine && netFactions().mine.name === 'Reef Wardens');
+    assert('chronicle lines cover the faction kinds',
+        formatChronicleEntry({ kind: 'faction.founded', founder: 'Dad', faction: 'Reef Wardens', want: 'the reefs back' }).includes('raised the Reef Wardens banner') &&
+        formatChronicleEntry({ kind: 'faction.joined', pilot: 'Arthur', faction: 'Reef Wardens' }).includes('signed on') &&
+        formatChronicleEntry({ kind: 'faction.disbanded', pilot: 'Dad', faction: 'Reef Wardens' }).includes('folded'));
+
+    // Slice F2: the claim rides poi.state onto the map model (render-side)
+    const poi = game.pois && game.pois[0];
+    if (poi) {
+        applyPOIStateUpdate({ id: poi.id, nextSalvageAt: null, occupation: null,
+            claim: { faction: 'Reef Wardens', color: '#44ddaa', since: 1 } });
+        assert('a claim rides poi.state onto the map model',
+            poi.claim && poi.claim.faction === 'Reef Wardens');
+        assert('the claim gate stays shut offline (claims live on the reach)',
+            poiClaimable(poi) === false);
+        poi.claim = null;
+    }
+
+    pilot.faction = null;
+    pilot.grudges = {};
+    updateFactionUI();
+};
+
 VERIFY_SUITES.crew = (assert) => {
     const pilot = game.pilot;
     pilot.crew = [];
@@ -1229,6 +1308,82 @@ VERIFY_SUITES.deals = (assert) => {
         updateBuyingSectionUI();
         updateSellingSectionUI();
     }
+};
+
+VERIFY_SUITES.guards = (assert) => {
+    // Developer-look fixes (2026-09-03): typing must not fire flight hotkeys,
+    // a doc saved docked must restore the docked screen, and every traded
+    // good needs market-event flavor text (missing ones read "undefined").
+
+    // 1) Hotkeys ignore text fields. Space mid-"Reef Wardens" used to undock
+    //    and eat the character; M opened the map over the charter desk.
+    const savedDock = {
+        isDocked: game.isDocked, planet: game.currentPlanet,
+        engaged: game.isEngaged, event: game.currentEvent,
+        map: game.map.showFullMap
+    };
+    const inp = document.createElement('input');
+    document.body.appendChild(inp);
+    const key = (target, code) =>
+        target.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+    game.map.showFullMap = false;
+    key(inp, 'KeyM');
+    assert('M typed in an input leaves the map closed', game.map.showFullMap === false);
+    game.isDocked = true;
+    key(inp, 'Space');
+    assert('Space typed in an input does not undock', game.isDocked === true);
+    key(document.body, 'KeyM');
+    assert('M outside an input still toggles the map', game.map.showFullMap === true);
+    game.map.showFullMap = savedDock.map;
+    inp.remove();
+
+    // 2) Every good a planet produces or demands has event flavor both ways
+    //    (medicine/parts/contraband/relics were missing — labels printed
+    //    "undefined at <port>" into toasts and the permanent chronicle).
+    const goods = new Set();
+    SIM_PLANETS.forEach(p => {
+        Object.keys(p.produces).forEach(g => goods.add(g));
+        Object.keys(p.demands).forEach(g => goods.add(g));
+    });
+    assert('every traded good has shortage and glut flavor text',
+        [...goods].every(g =>
+            EconomyCore.MARKET_EVENT_FLAVORS.sell[g] && EconomyCore.MARKET_EVENT_FLAVORS.buy[g]));
+    let cleanLabels = true;
+    for (let i = 0; i < 200; i++) {
+        const ev = EconomyCore.rollMarketEvent(SIM_PLANETS);
+        if (ev && ev.label.includes('undefined')) cleanLabels = false;
+    }
+    assert('market event labels never read undefined', cleanLabels);
+
+    // 3) A character doc saved while docked restores the docked SCREEN on
+    //    load, and re-points currentPlanet at the live planet object (a
+    //    serialized copy breaks net.js's `currentPlanet === planet` checks).
+    const planet = game.planets[1];
+    game.isDocked = true;
+    game.currentPlanet = planet;
+    game.isEngaged = false;
+    game.currentEvent = null;
+    characterManager.updateCharacterFromGame();
+    characterManager.character.gameState.currentPlanet = JSON.parse(JSON.stringify(planet));
+    document.getElementById('ui').classList.remove('trading');
+    document.getElementById('tradingPanel').style.display = 'none';
+    characterManager.applyCharacterToGame();
+    assert('a doc saved docked restores the docked screen',
+        game.isDocked === true &&
+        document.getElementById('tradingPanel').style.display === 'block' &&
+        document.getElementById('ui').classList.contains('trading'));
+    assert('restore re-points at the live planet object', game.currentPlanet === planet);
+
+    // Put the world back the way this suite found it
+    game.isDocked = savedDock.isDocked;
+    game.currentPlanet = savedDock.planet;
+    game.isEngaged = savedDock.engaged;
+    game.currentEvent = savedDock.event;
+    if (!game.isDocked) {
+        document.getElementById('ui').classList.remove('trading');
+        document.getElementById('tradingPanel').style.display = 'none';
+    }
+    characterManager.updateCharacterFromGame();
 };
 
 function runVerify() {
