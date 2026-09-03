@@ -37,6 +37,7 @@ function dock(planet) {
     // Expand UI panel and show trading
     document.getElementById('ui').classList.add('trading');
     document.getElementById('tradingPanel').style.display = 'block';
+    updateFactionUI(); // The Guild's settle-the-debt table opens with the dock
 
     // Resize canvas to account for expanded UI
     setTimeout(() => {
@@ -113,6 +114,7 @@ function undock() {
     // Collapse UI panel and hide trading
     document.getElementById('ui').classList.remove('trading');
     document.getElementById('tradingPanel').style.display = 'none';
+    updateFactionUI(); // The settle-the-debt table closes with the dock
 
     // Resize canvas back
     setTimeout(() => {
@@ -552,6 +554,7 @@ function buyGood(goodType, qty = 1) {
     updateBuyingSectionUI(); // Prices moved
     updateSellingSectionUI(); // Refresh the selling section with new cargo
     updateMissionsUI(); // Cargo counts toward contracts
+    updateFactionUI(); // Settle-the-debt affordability follows the hold
     updateFuelCost(); // Refresh fuel options
     updateFuelButton();
 
@@ -599,6 +602,7 @@ function sellGood(goodType, qty = 1) {
     updateBuyingSectionUI(); // Prices moved
     updateSellingSectionUI(); // Refresh the selling section
     updateMissionsUI(); // Cargo counts toward contracts
+    updateFactionUI(); // Settle-the-debt affordability follows the hold
     updateFuelCost(); // Refresh fuel options
     updateFuelButton();
 
@@ -642,6 +646,7 @@ function netTradeBuy(planet, goodType, qty, amount) {
         updateBuyingSectionUI();
         updateSellingSectionUI();
         updateMissionsUI();
+        updateFactionUI(); // Settle-the-debt affordability follows the hold
         updateFuelCost();
         updateFuelButton();
         autoSave('trade');
@@ -676,6 +681,7 @@ function netTradeSell(planet, goodType, amount) {
         updateBuyingSectionUI();
         updateSellingSectionUI();
         updateMissionsUI();
+        updateFactionUI(); // Settle-the-debt affordability follows the hold
         updateFuelCost();
         updateFuelButton();
         autoSave('trade');

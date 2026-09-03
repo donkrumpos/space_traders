@@ -222,6 +222,55 @@ VERIFY_SUITES.banner = (assert) => {
     updateFactionUI();
 };
 
+// The Settlement (M7 amnesty): a grudge pays DOWN — tribute per point in the
+// cartel's own wanted good, at the Guild's table while docked. This is the
+// solo path (your own ledger eases); the wire path is verify-net's [amnesty].
+VERIFY_SUITES.amnesty = (assert) => {
+    assert('every cartel carries amnesty terms for a real good',
+        CombatCore.PIRATE_FACTIONS.every(f => f.amnesty &&
+            goods[f.amnesty.good] && f.amnesty.perPoint > 0 &&
+            f.amnesty.offer && f.amnesty.cleared));
+
+    const pilot = game.pilot;
+    const saved = { grudges: pilot.grudges, cargo: game.ship.cargo, docked: game.isDocked };
+    pilot.grudges = { 'Void Choir': 5 };
+    game.ship.cargo = { technology: 6 };
+    game.isDocked = true;
+    updateFactionUI();
+    const list = document.getElementById('factionList');
+    const settleBtn = () => list.querySelector('button[onclick="settleGrudge(\'Void Choir\')"]');
+    assert('docked with tribute aboard, the settle table is open',
+        list.innerHTML.includes('settles one point') && !!settleBtn() && !settleBtn().disabled);
+
+    settleGrudge('Void Choir');
+    assert('a settle eases the grudge a point and hands the tribute over',
+        pilot.grudges['Void Choir'] === 4 && game.ship.cargo.technology === 3);
+    settleGrudge('Void Choir');
+    assert('a second settle spends the last of the hold',
+        pilot.grudges['Void Choir'] === 3 && game.ship.cargo.technology === 0);
+    assert('an empty hold closes the button but keeps the table',
+        !!settleBtn() && settleBtn().disabled && list.innerHTML.includes('you hold 0'));
+    settleGrudge('Void Choir');
+    assert('the broker refuses tribute you do not hold',
+        pilot.grudges['Void Choir'] === 3);
+
+    game.isDocked = false;
+    updateFactionUI();
+    assert('undocked, the settle table folds (the grudge row stays)',
+        !list.innerHTML.includes('settles one point') && list.textContent.includes('Void Choir'));
+
+    assert('the settlement chronicles in the errand\'s words',
+        formatChronicleEntry({ kind: 'grudge.settled', pilot: 'Dad', faction: 'Void Choir',
+            good: 'technology', units: 3, remaining: 2 }).includes('returned 3 cognition cores') &&
+        formatChronicleEntry({ kind: 'grudge.settled', pilot: 'Dad', faction: 'Void Choir',
+            good: 'technology', units: 3, remaining: 0 }).includes('sung off'));
+
+    pilot.grudges = saved.grudges;
+    game.ship.cargo = saved.cargo;
+    game.isDocked = saved.docked;
+    updateFactionUI();
+};
+
 VERIFY_SUITES.crew = (assert) => {
     const pilot = game.pilot;
     pilot.crew = [];

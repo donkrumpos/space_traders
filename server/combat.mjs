@@ -20,7 +20,7 @@
 //   freeze (sim-time based). M3 market-event timers keep running (unchanged).
 import config from './config.mjs';
 import {
-    getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact,
+    getGrudges, getGrudgeAmnesty, mergeGrudgesMax, bumpGrudge, applyTraderImpact,
     recordChronicle, getOccupiedPOIs, liberatePOI, creditPilotDeed
 } from './world.mjs';
 
@@ -115,8 +115,8 @@ export function combatPilotDoc(name, doc) {
         // Doc position seeds spawn anchoring until the first ship.state lands
         if (p.x === undefined && typeof doc.ship.x === 'number') { p.x = doc.ship.x; p.y = doc.ship.y; }
     }
-    if (doc.pilot && mergeGrudgesMax(doc.pilot.grudges)) {
-        broadcast({ t: 'grudge.update', grudges: getGrudges() });
+    if (doc.pilot && mergeGrudgesMax(doc.pilot.grudges, doc.pilot.grudgeAmnesty)) {
+        broadcast({ t: 'grudge.update', grudges: getGrudges(), amnesty: getGrudgeAmnesty() });
     }
 }
 
@@ -391,7 +391,7 @@ export function handleCombatMessage(ws, msg, send) {
             creditPilotDeed(ws.pilot, 'grudge', 1);
             if (outcome.grudgeDelta) {
                 bumpGrudge(outcome.grudgeDelta.faction, outcome.grudgeDelta.amount);
-                broadcast({ t: 'grudge.update', grudges: getGrudges() });
+                broadcast({ t: 'grudge.update', grudges: getGrudges(), amnesty: getGrudgeAmnesty() });
             }
             // A broken band is family news; common-pirate kills are too noisy
             // for the ledger (dozens per session). An occupation boss instead

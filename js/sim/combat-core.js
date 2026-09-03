@@ -71,18 +71,31 @@
     };
 
     // Pirate faction raid bands: 3-4 faction minions escorting a warlord boss.
+    // amnesty = the Settlement: a held grudge can be paid DOWN, one point at a
+    // time, in the cartel's own wanted good (every cartel wants something, not
+    // violence — the tribute settles the errand). perPoint units per grudge
+    // point; the Meridian Guild brokers the handover at any dock.
     const PIRATE_FACTIONS = [
         {
             name: 'Rustfang Cartel', color: '#ff7744', minionTier: 'scout',
-            bossTitle: 'Fang-Boss', bossNames: ['Gnash', 'Korrode', 'Scrapjaw', 'Old Tetanus']
+            bossTitle: 'Fang-Boss', bossNames: ['Gnash', 'Korrode', 'Scrapjaw', 'Old Tetanus'],
+            amnesty: { good: 'materials', perPoint: 6,
+                offer: 'back pay, three generations late',
+                cleared: 'the Rustfang call the wages square' }
         },
         {
             name: 'Void Choir', color: '#bb66ff', minionTier: 'raider',
-            bossTitle: 'Choirmaster', bossNames: ['Dirge', 'Hymnal', 'Echo-of-Nine', 'Vesper']
+            bossTitle: 'Choirmaster', bossNames: ['Dirge', 'Hymnal', 'Echo-of-Nine', 'Vesper'],
+            amnesty: { good: 'technology', perPoint: 3,
+                offer: 'caged voices, sung home',
+                cleared: 'the Choir\'s grudge is sung off' }
         },
         {
             name: 'Iron Shoal', color: '#88ccff', minionTier: 'raider',
-            bossTitle: 'Shoal-Tyrant', bossNames: ['Undertow', 'Riptide', 'Brack', 'Deepmaw']
+            bossTitle: 'Shoal-Tyrant', bossNames: ['Undertow', 'Riptide', 'Brack', 'Deepmaw'],
+            amnesty: { good: 'medicine', perPoint: 4,
+                offer: 'the reefs\' bounty, returned',
+                cleared: 'the Shoal\'s waters go quiet' }
         }
     ];
 

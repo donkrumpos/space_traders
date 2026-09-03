@@ -132,6 +132,12 @@ const net = {
     factionClaim(poiId) {
         return netRequest('faction.claim', { poiId }, 'faction');
     },
+    // The Settlement (M7 amnesty): pay a cartel's grudge down, tribute per
+    // point. The server adjudicates for the whole reach; cargo deduction is
+    // client-side on the ok reply (M3 credits/cargo rule).
+    settleGrudge(faction, points) {
+        return netRequest('grudge.settle', { faction, points }, 'grudge');
+    },
     // Apply the stashed server board for a planet onto the planet object the
     // board UI reads (planet.missionOffers / planet.bountyOffer). Escort
     // offers stay client-local (M3) and are untouched here, so the existing
@@ -381,7 +387,10 @@ function netHandleMessage(msg) {
             netHandleDropTaken(msg);
             break;
         case 'grudge.update':
-            netApplyGrudges(msg.grudges, false);
+            netApplyGrudges(msg.grudges, false, msg.amnesty);
+            break;
+        case 'grudge.settled':
+            netResolvePending(msg, 'grudge');
             break;
         // --- M5: exploration -------------------------------------------
         case 'poi.discovered':
@@ -585,8 +594,9 @@ function netApplySnapshot(snap) {
     }
     // Grudges mirror by MAX on snapshot: the server may not have seeded this
     // pilot's doc yet (char.push races the snapshot), so solo-earned grudges
-    // must survive until grudge.update arrives with the merged truth.
-    if (snap.grudges) netApplyGrudges(snap.grudges, true);
+    // must survive until grudge.update arrives with the merged truth —
+    // except where the snapshot carries a settlement this doc hasn't seen.
+    if (snap.grudges) netApplyGrudges(snap.grudges, true, snap.grudgeAmnesty);
     // Charted POIs become shared landmarks (never a reward — reward is earned
     // per-pilot by flying to the site).
     if (snap.discoveredPOIs && typeof applyDiscoveredPOIsFromServer === 'function') {
@@ -1095,14 +1105,22 @@ function netHandleDropTaken(msg) {
 // Mirror shared grudges into game.pilot.grudges. Direct assignment on
 // grudge.update (server is authority); max-merge on snapshot (see
 // netApplySnapshot). Solo play keeps working offline from the mirrored copy.
-function netApplyGrudges(grudges, seedByMax) {
+// amnesty = the server's per-faction settlement stamps (the Settlement, M7):
+// a faction settled SINCE this doc last saw it takes the server's lower
+// value even on the max-merge path — otherwise a stale local copy would
+// resurrect a debt somebody already paid. The stamps mirror onto the pilot
+// doc so char.push can prove to the server which settlements it has seen.
+function netApplyGrudges(grudges, seedByMax, amnesty) {
     if (!grudges) return;
     net.grudges = grudges;
     if (typeof game === 'undefined' || !game.pilot || !game.pilot.grudges) return;
     const g = game.pilot.grudges;
+    const seen = game.pilot.grudgeAmnesty || (game.pilot.grudgeAmnesty = {});
     Object.keys(grudges).forEach(f => {
-        g[f] = seedByMax ? Math.max(g[f] || 0, grudges[f] || 0) : grudges[f];
+        const unseenSettle = amnesty && amnesty[f] && !(seen[f] >= amnesty[f]);
+        g[f] = (seedByMax && !unseenSettle) ? Math.max(g[f] || 0, grudges[f] || 0) : grudges[f];
     });
+    if (amnesty) Object.assign(seen, amnesty);
     if (typeof updateFactionUI === 'function') updateFactionUI();
 }
 

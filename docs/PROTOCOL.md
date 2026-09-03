@@ -231,7 +231,7 @@ belong to the caller, not the core.
 | `enemy.killed` | s→c *broadcast* | `{ enemyId, by, reward, drops }` — killer gets credits/XP client-side; drops appear for both |
 | `drop.claim` | c→s | `{ dropId }` → `drop.taken { dropId, by }` *broadcast* (first claim wins; claimer applies pickup locally) |
 | `cargo.scatter` | c→s | `{ x, y, cargo: {goodType: qty} }` — sent on own-ship destruction; server scatters the hold as shared cargo pods (≤5 units each, ±120u around the wreck, 90s expiry, 150-unit sanity cap, owner-locked for the first 8s — other pilots' claims are swallowed while the dead pilot spawns back in; their clients retry and succeed once the lock lifts) that ride `world.tick` drops and settle via the normal `drop.claim` race. Fire-and-forget. Offline path spawns equivalent local drops. Not sent when the `reliquary_hold` mod is installed (client-side: the vault hold keeps its cargo through the wreck). |
-| `grudge.update` | s→c *broadcast* | `{ grudges }` — family vendetta is shared world state |
+| `grudge.update` | s→c *broadcast* | `{ grudges, amnesty }` — family vendetta is shared world state. `amnesty` (added with M7's Settlement) = per-faction wall-clock stamps of the last time each grudge was paid DOWN; clients mirror it into `game.pilot.grudgeAmnesty` so their docs can prove which settlements they have seen (see the merge rule below) |
 | `debug.*` (M4) | c→s | verify-only hooks, accepted ONLY when `VERIFY_DEBUG=1`: `debug.spawnEnemy {x,y,tier}` spawns one enemy (bad/missing tier → scout), acked `debug.spawned {enemyId}`, in the world by the next tick; `debug.spawnBand {factionName?}` musters a raid band near a random connected pilot (faction forced by retry-roll when named), acked `debug.spawned {bandId, faction, bossId, enemyIds}`; `debug.state` → server replies `{ t:'debug.state', state: {enemies, traders, drops, pilots, grudges, simNow, tickN} }` (full raw combat state). Never set in prod. |
 
 **M4 authority split (locked at M4 kickoff):**
@@ -249,7 +249,13 @@ belong to the caller, not the core.
   server seeds world grudges as max(existing world value, pilot's doc value)
   per faction; thereafter server increments on band-boss kills and broadcasts
   grudge.update; clients mirror into game.pilot.grudges (so offline solo play
-  still works and re-seeds by max on reconnect).
+  still works and re-seeds by max on reconnect). **Amnesty exception (M7's
+  Settlement):** a doc may only RAISE a faction's grudge if its mirrored
+  `pilot.grudgeAmnesty[faction]` stamp is ≥ the world's — i.e. it has seen
+  the latest settlement. Otherwise every stale doc reconnecting would
+  resurrect a debt somebody already paid; a doc that saw the settlement and
+  earned fresh grudge offline still merges normally. The client applies the
+  same rule to its snapshot max-merge.
 - **Asteroids stay client-local in M4** (deviation from MULTIPLAYER.md's
   original list): mining is solo-scenery at n=2 and syncing rocks adds port
   surface for no felt payoff. Revisit after the family playtest if shared
@@ -552,6 +558,7 @@ snapshot, so there is no separate offer message.
 | `faction.leave` | c→s | `{ reqId }` → `faction.left { reqId, ok, reason? }`. A founder with members still aboard is refused; a sole-member founder disbands (registry row deleted — the chronicle keeps the history) |
 | `faction.update` | s→c *broadcast* | `{ factions }` — the whole registry after any change (tiny at this scale) |
 | `faction.claim` | c→s | `{ reqId, poiId }` → `faction.claimed { reqId, ok, id?, reason? }`. Plant the banner's mark at a charted site: requires membership, site charted, unoccupied, unmarked, and **one claim per faction**. Proximity is a client rule (like salvage). The claim rides `poi.state` as `claim: { faction, color, since } \| null` and persists in `poiState` |
+| `grudge.settle` | c→s | `{ reqId, faction, points }` → `grudge.settled { reqId, ok, faction?, cleared?, units?, remaining?, reason? }`. The Settlement: pay a cartel's grudge DOWN, tribute per point in the cartel's own wanted good (`amnesty: { good, perPoint }` on the shared `PIRATE_FACTIONS` data — Choir takes cognition cores, Rustfang ferrovolt ore, Iron Shoal panacea vials). `points` caps at the grudge held (`cleared` = what actually settled, `units` = cleared × perPoint). Whole-reach clearing: the server lowers the SHARED grudge and broadcasts `grudge.update`; one pilot can settle the family's debt. Cargo is client-authoritative (M3) — the client hands the tribute over on the ok reply; the docked requirement is a client rule (like claim proximity). Chronicles `grudge.settled { pilot, faction, good, units, remaining }`. Player-faction grudges carry no amnesty terms — only the authored cartels forgive |
 | `debug.liberatePOI` | c→s | `{ id }` — VERIFY_DEBUG only: liberate an occupied site as the sender without the combat path |
 
 - Chronicle kinds: `faction.founded { faction, founder, want }`,
