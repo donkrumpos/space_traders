@@ -79,6 +79,22 @@ color → `warpToPOI('wraith_cache')` + chart + "◎ raise the banner
 here" → ring on maps + chronicle → optional contested via
 `net.send({t:'debug.occupyPOI', id:'wraith_cache'})`.
 
+**PLAYTEST NOTE (developer, 2026-09-03): "getting pummelled by pirates
+all the time — I cannot even leave dock."** Diagnosis: pirate pressure
+scales off the RICHEST online pilot's credits (combat.mjs
+runSpawnCadence: wealth ≥ 6000 → maxEnemies 4 (+1 w/ cargo), spawn every
+10-30s, pickEnemyTier gives 80% raider/warlord; band every 240-420s past
+2500 cr) — thresholds are early-economy numbers, and there's NO
+station no-spawn zone or post-undock grace, so pirates camp the dock
+door. Fix shapes (a tuning slice, verified): (a) no-spawn radius around
+planets + undock grace window — fixes "can't leave dock" directly;
+(b) rescale the 2000/6000 wealth bands for the current economy;
+(c) lift maxEnemies/spawnInterval/band cadence into named tuning flags
+(config.mjs server-side; mirror the browser solo cadence in
+js/combat.js so solo matches). pickEnemyTier is pure sim — shared fix.
+Keep the LOVED "pesky flies" chaos (direction memory) — the complaint
+is density+camping, not the combat feel.
+
 **NEXT:**
 1. **Finish the developer look** (checklist above) → then merge
    `feature/player-factions` + themisto deploy (explicit, per RUNBOOK —
