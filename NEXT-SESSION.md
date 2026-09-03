@@ -1,5 +1,85 @@
 # Next Session Roadmap
 
+State as of 2026-09-03 (twelfth session — **developer look FINISHED, factions
+MERGED + DEPLOYED, pirate pressure TUNED + DEPLOYED**). Main `9c2cdb5` is
+live on themisto (wss verified from outside: probe with a wrong secret gets
+`reject: bad secret` through the full TLS/Apache/node path). Three strands:
+
+1. **The developer look (walked in-browser, both pilots).** Whole checklist
+   verified live: found (charter desk, fee, gate) → invite → Arthur signs on →
+   rosters on both Rep cards → ghost name-tag tinted in banner color → the
+   claim (Now-zone button, toast, ring on canvas + minimap, chronicle entry)
+   → contested (pink ring + ⚑ Rustfang flag together). Method: a throwaway
+   `dev-driver.html` (deleted after) wrapping the game in a same-origin
+   iframe with buttons for the console helpers — needed because the browser
+   extension denies raw JS eval; two origins (`localhost` + `arthur.localhost`)
+   gave two clean localStorage identities. **Recipe correction: credits live
+   at `game.ship.credits`** (the old note said `game.credits` — that same
+   wrong property was BUG 4 below).
+2. **Five bugs found by the look, fixed in two verified slices (5b7f063,
+   12ff4ad), all merged with the factions branch (d427581):**
+   - Global hotkeys fired while typing (a SPACE in "Reef Wardens" undocked
+     you mid-founding and ate the character; M opened the map). keydown now
+     ignores INPUT/TEXTAREA/contentEditable.
+   - Reload-while-docked restored the flag but not the docked screen (and a
+     serialized currentPlanet copy broke net.js's `===` market refreshes).
+     applyCharacterToGame now re-points at the live planet and restores the
+     docked/engaged UI without re-running dock() (no double customs/XP).
+   - Market events on medicine/parts/contraband/relics printed "undefined at
+     <port>" into toasts + the permanent chronicle (was live on prod too).
+     Flavor table filled, Shortage/Glut fallback, coverage assert.
+   - The charter desk read `game.credits` (doesn't exist) — "sign the
+     articles" was PERMANENTLY DISABLED in the real UI and the 15k fee was
+     never deducted. Both now read `game.ship.credits`. (The wire-level net
+     suite couldn't see this — it bypasses the desk UI. That's what the
+     developer look is for.)
+   - Picking a color/want re-rendered the desk and wiped the half-typed
+     name; setCharterDesk now carries value + focus + caret across rewrites.
+3. **Pirate-pressure tuning slice (4542e3b, merged 9c2cdb5, DEPLOYED).**
+   The 2026-09-03 "cannot even leave dock" note, three fixes, chaos kept:
+   - All cadence knobs live in **`CombatCore.COMBAT_TUNING`** (shared sim —
+     solo and server read the same numbers; `server/config.mjs combatTuning`
+     overrides at boot). Wealth bands re-scaled: light < 8k (was 2k), full
+     ≥ 25k (was 6k), band gate 8k (was 2.5k). Counts per band unchanged.
+   - **Station no-spawn radius** (600u): spawn spots re-roll clear of every
+     port (shared `pickSpawnSpot`, same 800-2000u envelope).
+   - **Undock grace** (8s): docked/graced pilots are `untargetable` — prey
+     selection ignores them (they still anchor the despawn pass), firing
+     forfeits (fireLaser/fireMissile solo; damage.claim server-side). Server
+     reads the docked flag already on ship.state.
+
+**Gates at tip: solo ?verify 239/239 · verify-net 172/172.** New solo suites:
+`guards` (7), `pressure` (8), banner +3; net `[pressure]` (5). **Net-suite
+flake note:** back-to-back runs with leftover chrome-headless processes
+cascade failures ([occupation]/[faction] + "Connection closed" / detached
+frames) — `pkill -f chrome-headless-shell`, run once, clean runs pass.
+
+**NEXT:**
+1. **The Tally (faction direction C)** — riff-lite forks were put to the
+   developer via AskUserQuestion at session end (which deeds count per
+   want-kind, milestone thresholds, where the tally shows). Build in
+   verified slices once pinned. Machinery notes: tally rides the faction
+   record in the world blob (additive `faction.update` field, free on the
+   wire); server counts deeds at its authority points (trade handler, kill
+   handler, salvage handler); chronicle kind `faction.milestone`.
+2. **Faction backlog:** VENDETTA amnesty faction-flavored (the Choir
+   forgives those who return a core); member salvage priority ONLY if
+   claims feel toothless.
+3. **Standing backlog:** nebula mist ambient (ninth-session spec), death
+   broadcast (M4 gap), www DNS/cert, same-pilot-two-devices kick ping-pong.
+
+**Watchlist (new this session):** does the re-tuned pressure actually fix
+the dock feel in real play (knobs are one config edit away now); charter
+desk discoverability CONFIRMED buried (two walks + a long scroll — decide
+if that's the right amount of hidden before the next faction slice); combat
+suppresses the near-POI Now-zone state, so the "raise the banner" button
+rarely wins under heavy pressure (may deserve a poi-over-combat exception
+when the site is charted + claimable); perk picker re-pops on every dock
+while choices are pending (fine solo, mildly naggy). Carried: ×2 occupation
+weight cadence, invite-while-offline UX.
+
+--- (eleventh-session record follows) ---
+
 State as of 2026-09-02 (eleventh session — **DEPLOYED to themisto + VPS
 durability done + player factions F1/F2 BUILT**). Three strands:
 
