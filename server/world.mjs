@@ -51,7 +51,7 @@ function rollBoard(meta) {
 // lowercased name. A row in the same ledger the Rustfang live in: plain data,
 // same world blob, no schema change. Invites are public registry data (family
 // trust model) — the client sees its own standing invite in the snapshot.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {} };
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, grudgeAmnesty: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {} };
 
 // M6 cadence knobs — declared ABOVE the restore block below, which calls the
 // roll helpers at module init (const TDZ would bite otherwise).
@@ -77,6 +77,7 @@ const CLAIM_OCCUPY_WEIGHT = 2;                // claimed sites draw raiders (M7)
             || rollBoard(meta);
     }
     if (saved && saved.grudges) world.grudges = saved.grudges;
+    if (saved && saved.grudgeAmnesty) world.grudgeAmnesty = saved.grudgeAmnesty;
     if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
     if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
     if (saved && saved.poiState) world.poiState = saved.poiState;
@@ -348,14 +349,27 @@ export function getGrudges() {
     return world.grudges;
 }
 
+// The Settlement's per-faction stamps: when each grudge was last paid DOWN.
+// Rides grudge.update + the snapshot so docs can prove what they've seen.
+export function getGrudgeAmnesty() {
+    return world.grudgeAmnesty;
+}
+
 // Grudge migration (PROTOCOL.md M4): merge a pilot doc's grudges by max.
 // Returns true when anything changed (caller broadcasts grudge.update).
-export function mergeGrudgesMax(map) {
+// seenAmnesty = the doc's mirrored settlement stamps: a doc may only RAISE a
+// settled faction's grudge if it has seen that settlement (stamp >= the
+// world's) — otherwise every stale doc reconnecting would resurrect a debt
+// somebody already paid. A doc that saw the settlement and then earned fresh
+// grudge merges normally (offline deeds still count).
+export function mergeGrudgesMax(map, seenAmnesty) {
     if (!map) return false;
     let changed = false;
     for (const [faction, val] of Object.entries(map)) {
         const n = Number(val);
         if (!Number.isFinite(n)) continue;
+        const settledAt = world.grudgeAmnesty[faction];
+        if (settledAt && !(seenAmnesty && seenAmnesty[faction] >= settledAt)) continue;
         if (n > (world.grudges[faction] || 0)) {
             world.grudges[faction] = n;
             changed = true;
@@ -393,6 +407,7 @@ export function worldSnapshotMessage() {
         marketEvent: world.marketEvent,
         missionBoards: world.missionBoards,
         grudges: world.grudges,
+        grudgeAmnesty: world.grudgeAmnesty,
         discoveredPOIs: world.discoveredPOIs,
         chronicle: world.chronicle,
         poiState: world.poiState,
@@ -646,6 +661,38 @@ export function handleWorldMessage(ws, msg, send) {
             send(ws, { t: 'faction.claimed', reqId: msg.reqId, ok: true, id });
             recordChronicle('faction.claimed', { faction: f.name, poi: id, name: meta.name });
             broadcast(poiStateMessage(id));
+            markDirty();
+            return true;
+        }
+
+        case 'grudge.settle': {
+            // The Settlement (M7 amnesty): tribute per point in the cartel's
+            // wanted good, Guild-brokered at any dock. Cargo is
+            // client-authoritative (M3) — the client hands the goods over on
+            // the ok reply; the server adjudicates the grudge itself, for the
+            // whole reach. The dock requirement is a client rule (like claim
+            // proximity). Part-payment is the design: points caps at what's
+            // held, and every settle stamps grudgeAmnesty so stale docs
+            // can't resurrect the paid-down debt (see mergeGrudgesMax).
+            const f = CombatCore.PIRATE_FACTIONS.find(x => x.name === msg.faction);
+            const points = Math.floor(Number(msg.points));
+            const fail = reason =>
+                send(ws, { t: 'grudge.settled', reqId: msg.reqId, ok: false, reason });
+            if (!f || !f.amnesty) return fail('no broker carries terms for that name');
+            const held = world.grudges[f.name] || 0;
+            if (held <= 0) return fail(`the ${f.name} hold no grudge to settle`);
+            if (!(points >= 1)) return fail('settle at least one point of the grudge');
+            const cleared = Math.min(points, held);
+            const units = cleared * f.amnesty.perPoint;
+            world.grudges[f.name] = held - cleared;
+            world.grudgeAmnesty[f.name] = Date.now();
+            const remaining = world.grudges[f.name];
+            send(ws, { t: 'grudge.settled', reqId: msg.reqId, ok: true,
+                       faction: f.name, cleared, units, remaining });
+            broadcast({ t: 'grudge.update', grudges: world.grudges, amnesty: world.grudgeAmnesty });
+            recordChronicle('grudge.settled', {
+                pilot: ws.pilot, faction: f.name, good: f.amnesty.good, units, remaining
+            });
             markDirty();
             return true;
         }

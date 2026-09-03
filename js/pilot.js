@@ -281,6 +281,59 @@ function recordRaidBroken(factionName) {
     characterManager.saveCharacter(true);
 }
 
+// --- The Settlement: a grudge can be paid down (M7 amnesty) -----------------
+// Tribute per point in the cartel's own wanted good (combat-core amnesty
+// data), handed over at any dock — the Meridian Guild brokers it. Online the
+// server adjudicates and the whole reach is cleared (grudge.update carries
+// the merged truth back); pure solo eases your own copy of the ledger. With
+// a server configured but unreachable there's nobody to carry the tribute —
+// the desk waits, so a paid settlement can't be clobbered on reconnect.
+
+function amnestyOf(factionName) {
+    const f = CombatCore.PIRATE_FACTIONS.find(x => x.name === factionName);
+    return (f && f.amnesty) || null;
+}
+
+function settleBrokerOpen() {
+    if (!window.net) return true;
+    return net.online || net.status === 'idle' || net.status === 'disabled';
+}
+
+function settleGrudge(factionName) {
+    const am = amnestyOf(factionName);
+    if (!am || !game.isDocked || !game.pilot) return;
+    if ((game.pilot.grudges[factionName] || 0) <= 0) return;
+    const have = game.ship.cargo[am.good] || 0;
+    if (have < am.perPoint) {
+        showHudFeedback(`The broker wants ${am.perPoint} ${goods[am.good].name} a point — you hold ${have}`, 'warning', 4000);
+        return;
+    }
+    if (window.net && net.online) {
+        net.settleGrudge(factionName, 1).then(reply => {
+            if (!reply || !reply.ok) {
+                showHudFeedback((reply && reply.reason) || 'the broker waves you off', 'warning', 4000);
+                return;
+            }
+            applySettlement(factionName, am, reply.remaining);
+        }).catch(() => showHudFeedback('the broker waves you off — try again', 'warning', 4000));
+    } else if (settleBrokerOpen()) {
+        const g = game.pilot.grudges;
+        g[factionName] = Math.max(0, (g[factionName] || 0) - 1);
+        applySettlement(factionName, am, g[factionName]);
+    }
+}
+
+function applySettlement(factionName, am, remaining) {
+    game.ship.cargo[am.good] = Math.max(0, (game.ship.cargo[am.good] || 0) - am.perPoint);
+    if (game.pilot && game.pilot.grudges) game.pilot.grudges[factionName] = remaining;
+    addShipLog(`Returned ${am.perPoint} ${goods[am.good].name.toLowerCase()} to the ${factionName} — ${am.offer}`);
+    showHudFeedback(remaining > 0
+        ? `The Guild passes it on — the ${factionName} grudge eases (×${remaining})`
+        : `The debt is paid — ${am.cleared}`, 'info', 5000);
+    updateFactionUI();
+    characterManager.saveCharacter(true);
+}
+
 function updateFactionUI() {
     const panel = document.getElementById('factionPanel');
     const list = document.getElementById('factionList');
@@ -298,8 +351,23 @@ function updateFactionUI() {
     panel.style.display = 'block';
     const grudgeRows = held.map(name => {
         const tier = grudgeTierLabel(grudges[name]);
-        return `<div class="ledger-row"><span>${name}</span>
+        const row = `<div class="ledger-row"><span>${name}</span>
             <span style="color:${tier.color};">${tier.label} ×${grudges[name]}</span></div>`;
+        // The Settlement: docked, the Guild's table takes tribute (only the
+        // authored cartels carry amnesty terms — a player banner's grudge is
+        // personal and stays that way)
+        const am = (typeof amnestyOf === 'function') ? amnestyOf(name) : null;
+        if (!am || !game.isDocked) return row;
+        if (!settleBrokerOpen()) {
+            return row + `<div class="settle-line" style="font-size:10px; color:#667; margin:0 0 4px 8px;">⚖ the Guild's brokers are out of reach</div>`;
+        }
+        const have = (game.ship && game.ship.cargo[am.good]) || 0;
+        const can = have >= am.perPoint;
+        return row + `<div class="settle-line" style="font-size:10px; color:#889; margin:0 0 4px 8px;">
+            <button onclick="settleGrudge('${name}')" ${can ? '' : 'disabled'}
+                title="${am.offer} — the Guild brokers it"
+                style="font-size:10px; padding:1px 6px;">⚖ return ${am.perPoint} ${goods[am.good].name.toLowerCase()}</button>
+            settles one point${can ? '' : ` — you hold ${have}`}</div>`;
     }).join('');
     list.innerHTML = banner +
         (held.length && banner ? `<div style="font-size:10px; color:#888; letter-spacing:1px; margin:4px 0 2px;">GRUDGES HELD AGAINST YOU</div>` : '') +

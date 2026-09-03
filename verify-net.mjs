@@ -1541,6 +1541,72 @@ async function tallySuite(t, { browser, base, wsUrl }) {
     S.T = null;
 }
 
+// The Settlement (M7 amnesty): grudge.settle pays a cartel's grudge down for
+// the WHOLE reach — tribute per point, adjudicated server-side, chronicled —
+// and the amnesty stamps keep stale pilot docs from resurrecting a paid debt
+// through the M4 merge-by-max (the one shape of doc that must still raise:
+// one that has SEEN the settlement and earned fresh grudge since).
+async function amnestySuite(t, { browser, base, wsUrl }) {
+    S.G = await newGamePage(browser, 'VerifyG', { stubPerks: true });
+    const page = S.G.page;
+    await page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('G online', !!(await until(() => page.evaluate(() => netStatus().online === true))));
+
+    // Seed through the REAL migration path: a doc's solo-earned grudges
+    // merge by max on char.push and broadcast back as the shared truth
+    await page.evaluate(() => {
+        game.pilot.grudges['Void Choir'] = 5;
+        characterManager.saveCharacter(true);
+    });
+    const seeded = await until(() => page.evaluate(() =>
+        net.grudges && net.grudges['Void Choir'] === 5));
+    t('a doc\'s grudges merge into the shared vendetta', !!seeded);
+
+    // Tribute per point: 2 points at the Choir's 3 cores each
+    const reply = await page.evaluate(() => net.settleGrudge('Void Choir', 2));
+    t('the settle reply carries the terms (2 points, 6 cores, ×3 left)',
+        !!(reply && reply.ok && reply.cleared === 2 && reply.units === 6 && reply.remaining === 3),
+        JSON.stringify(reply));
+    const eased = await until(() => page.evaluate(() =>
+        net.grudges['Void Choir'] === 3 && game.pilot.grudges['Void Choir'] === 3));
+    t('the eased grudge broadcasts to every mirror', !!eased);
+    const chronicled = await until(() => page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'grudge.settled' &&
+            e.text.includes('returned 6 cognition cores to the Void Choir'))));
+    t('the settlement is chronicled in the errand\'s words', !!chronicled);
+
+    // A STALE doc (never saw the settlement — no amnesty stamps) must not
+    // resurrect the paid-down debt. Messages process in order, so the next
+    // settle's `remaining` proves what the merge did: 2 if the push was
+    // refused, 4 if the stale doc re-raised the grudge to 5.
+    await page.evaluate(() => net.send({ t: 'char.push',
+        doc: { lastPlayed: 1, pilot: { grudges: { 'Void Choir': 5 } } } }));
+    const probe = await page.evaluate(() => net.settleGrudge('Void Choir', 1));
+    t('a stale doc cannot resurrect a settled debt',
+        !!(probe && probe.ok && probe.remaining === 2), JSON.stringify(probe));
+
+    // A doc that HAS seen the settlement still raises — offline deeds count
+    await page.evaluate(() => net.send({ t: 'char.push',
+        doc: { lastPlayed: Date.now(),
+               pilot: { grudges: { 'Void Choir': 6 }, grudgeAmnesty: game.pilot.grudgeAmnesty } } }));
+    const raised = await until(() => page.evaluate(() => net.grudges['Void Choir'] === 6));
+    t('a doc that saw the settlement still merges fresh grudge', !!raised);
+
+    // Overpay caps at what's held (part-payment by design) and leaves zero,
+    // which makes the refusal below deterministic whatever the earlier
+    // suites' boss kills did to the other cartels' grudges
+    const wipe = await page.evaluate(() => net.settleGrudge('Void Choir', 99));
+    t('an overpaid settle caps at the grudge held',
+        !!(wipe && wipe.ok && wipe.cleared === 6 && wipe.remaining === 0), JSON.stringify(wipe));
+    const refused = await page.evaluate(() => net.settleGrudge('Void Choir', 1));
+    t('the broker refuses where no grudge is held',
+        !!(refused && refused.ok === false && /no grudge/.test(refused.reason || '')),
+        JSON.stringify(refused));
+
+    await S.G.context.close().catch(() => {});
+    S.G = null;
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1558,6 +1624,7 @@ const SUITES = [
     ['faction', factionSuite],
     ['pressure', pressureSuite],
     ['tally', tallySuite],
+    ['amnesty', amnestySuite],
 ];
 
 // ---------------------------------------------------------------------------

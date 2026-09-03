@@ -89,6 +89,16 @@ function formatChronicleEntry(e) {
                 : e.want === 'grudge'
                     ? `the ${e.faction} have called in ${e.count} of the cartel's debts`
                     : `the ${e.faction} have made ${e.count} stands at their claim`;
+        case 'grudge.settled': {
+            // The Settlement speaks in the errand's words (lore-bible §8 rule
+            // 4): the tribute leads, and a debt fully paid gets the cartel's
+            // own closing line from the shared amnesty data.
+            const gname = (typeof goods === 'object' && goods[e.good]) ? goods[e.good].name.toLowerCase() : e.good;
+            const am = (typeof amnestyOf === 'function') ? amnestyOf(e.faction) : null;
+            return `${e.pilot} returned ${e.units} ${gname} to the ${e.faction} — ` +
+                (e.remaining > 0 ? `the grudge eases (×${e.remaining})`
+                                 : (am && am.cleared) || 'the debt is settled');
+        }
         case 'faction.left':
             return `${e.pilot} walked from the ${e.faction}`;
         case 'faction.disbanded':
