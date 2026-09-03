@@ -568,6 +568,18 @@ VERIFY_SUITES.cargoScatter = (assert) => {
         x: game.ship.x, y: game.ship.y,
         hull: game.ship.hull, shield: game.ship.shield, streak: game.combatStreak
     };
+    // Every landed hit stamps the shooter's cartel — the killing blow's
+    // faction rides the death report (M4 death broadcast)
+    const guards = { invuln: game.testInvulnerable, docked: game.isDocked };
+    game.testInvulnerable = false; game.isDocked = false;
+    game.damage.invulnerabilityTime = 0;
+    damagePlayer(1, 'Void Choir');
+    assert('a landed hit stamps its cartel', game.damage.lastHitFaction === 'Void Choir');
+    game.damage.invulnerabilityTime = 0;
+    damagePlayer(1);
+    assert('a factionless hit clears the stamp', game.damage.lastHitFaction === null);
+    game.testInvulnerable = guards.invuln; game.isDocked = guards.docked;
+
     const dropsBefore = game.drops.length;
     game.ship.cargo = { food: 7, materials: 3 };
     handlePlayerDestruction();
@@ -826,6 +838,13 @@ VERIFY_SUITES.chronicle = (assert) => {
         formatChronicleEntry({ kind: 'poi.liberated', pilot: 'Foggy', faction: 'Iron Shoal', poi: 'p', name: 'The Site' }) === 'Foggy drove the Iron Shoal out of The Site');
     assert('unknown kinds still print something',
         formatChronicleEntry({ kind: 'future.thing', pilot: 'X' }).includes('future.thing'));
+    assert('a death chronicles in the errand\'s words',
+        formatChronicleEntry({ kind: 'pilot.died', pilot: 'Foggy', faction: 'Rustfang Cartel', near: 'Mining Station 7' })
+            === 'the Rustfang Cartel collected their toll from Foggy off Mining Station 7' &&
+        formatChronicleEntry({ kind: 'pilot.died', pilot: 'Foggy', faction: null, near: 'Agricon Prime' })
+            === "Foggy's ship broke up off Agricon Prime" &&
+        formatChronicleEntry({ kind: 'pilot.died', pilot: 'Foggy', faction: null, near: null })
+            === "Foggy's ship broke up");
 
     // Digest math: lastSeen splits the ledger into seen/unseen
     setChronicleLastSeen(now - 3600 * 1000); // "last flew an hour ago"

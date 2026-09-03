@@ -94,6 +94,12 @@ function formatChronicleEntry(e) {
             return e.label || `market event at ${e.planet}`;
         case 'boss.killed':
             return e.faction ? `${e.pilot} broke a ${e.faction} raid` : `${e.pilot} broke a raid band`;
+        case 'pilot.died':
+            // The ledger's biggest missing event, errand-voiced (§8 rule 4):
+            // the cartel collected what it came for; nobody "was killed".
+            return e.faction
+                ? `the ${e.faction} collected their toll from ${e.pilot}${e.near ? ` off ${e.near}` : ''}`
+                : `${e.pilot}'s ship broke up${e.near ? ` off ${e.near}` : ''}`;
         case 'faction.founded':
             return `${e.founder} raised the ${e.faction} banner — "${e.want}"`;
         case 'faction.joined':

@@ -601,8 +601,11 @@ function checkProjectileCollisions() {
             );
 
             if (distance < playerSize + projectile.size) {
-                // Player hit!
-                damagePlayer(projectile.damage);
+                // Player hit! The shooter's cartel (if any) rides along so a
+                // killing blow can be attributed in the death broadcast.
+                const shooter = projectile.enemyId !== undefined
+                    ? game.enemies.find(en => en.id === projectile.enemyId) : null;
+                damagePlayer(projectile.damage, shooter ? shooter.factionName : null);
                 spawnHitSparks(projectile.x, projectile.y, '#ff8888');
 
                 // Remove projectile
@@ -655,7 +658,7 @@ function maybeDamageSubsystem() {
     addShake(0.4);
 }
 
-function damagePlayer(damage) {
+function damagePlayer(damage, faction) {
     if (game.deathState) return; // the wreck can't be killed twice
     if (game.isDocked) return; // station shielding — dying while docked would strand the respawn in a corrupt docked state
     if (game.testInvulnerable) return; // verify-net plot armor (harness ships park in hostile space)
@@ -664,6 +667,10 @@ function damagePlayer(damage) {
     if (game.damage.invulnerabilityTime > 0) {
         return;
     }
+
+    // Every landed hit records its cartel (or null — rocks, common pirates),
+    // so the killing blow can name the errand in the death report.
+    game.damage.lastHitFaction = faction || null;
 
     // Shields soak damage first; only the overflow reaches the hull
     let remaining = damage;
@@ -743,6 +750,17 @@ function handlePlayerDestruction() {
         }
         game.ship.cargo = {};
         showHudFeedback(`${unitsLost} cargo units adrift at the wreck — race back before someone else scoops them!`, 'warning', 8000);
+    }
+
+    // Peers see the wreck too (M4 death broadcast): report it once — the
+    // server stamps identity from the socket, validates the cartel, names
+    // the nearest world for the ledger, and tells everyone. Offline solo
+    // has no peers to tell.
+    if (typeof net !== 'undefined' && net.online) {
+        net.send({
+            t: 'pilot.death', x: wreckX, y: wreckY,
+            faction: game.damage.lastHitFaction || undefined
+        });
     }
 
     // Lose some credits (25%) — the tax lands at the moment of death
