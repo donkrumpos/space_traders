@@ -60,11 +60,12 @@ leave real grudges on the other cartels).
 
 **NEXT:**
 1. ~~Deploy the Settlement to themisto~~ ✅ DONE same session (see above).
-2. **Charter-desk teaser** (watchlist (b) decision — small slice). Known
-   trap: updateFactionUI hides the Rep page when `held.length === 0 &&
-   !banner` — the teaser must be decoration on an already-visible page
-   (grudges held, no faction), NOT returned as banner content, or every
-   fresh Deckhand gets a Rep tab showing only an ad.
+2. ~~Charter-desk teaser~~ ✅ DONE same session (883db47, merged b5f8a7c):
+   one dim signpost line atop the Rep tab for grudge-holding factionless
+   pilots; rendered AFTER the visibility gate so the teaser never opens the
+   page itself (banner suite +2 guards both directions). Static-only —
+   rides the next themisto pull, no restart needed. Gates: solo 251/251 ·
+   net 187/187.
 3. **Faction backlog:** member salvage priority ONLY if claims feel
    toothless in play.
 4. **Standing backlog:** nebula mist ambient (ninth-session spec), death
