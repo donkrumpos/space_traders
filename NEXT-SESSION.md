@@ -1,5 +1,55 @@
 # Next Session Roadmap
 
+State as of 2026-09-03 (fifteenth session — **the Pilot's Handbook: BUILT +
+DEPLOYED same session**). Main `6fb5e8d` (pushed); **themisto runs
+`6fb5e8d`** — static-only pull (no restart, game server untouched), verified
+live with a 200 + title curl. One strand:
+
+1. **`manual.html` — the game's instruction booklet as a webpage, live at
+   https://siegeperilousstudio.com/manual.html** (feature/pilots-handbook
+   0d8038c, merged 6fb5e8d). A standalone, self-contained page written
+   in-world as a defaced Combine operations manual ("property of whoever's
+   flying now") in the game's phosphor-CRT look — sticky chapter rail with
+   the game's glyphs, scroll-spy, mobile chip-row nav, single-theme dark by
+   design. Thirteen chapters: first flight, the helm (keys from game.js),
+   reading your ship (vitals band / Now zone / Records tabs), making port
+   (Dock vs Shipyard), the trade (all 8 goods with real in-game colors, all
+   7 worlds with nicknames), trouble (cartels as errands, laser systems,
+   heat, grudges), death rules (exact: 25% credits, pod scatter, 25%-hull
+   respawn, the reach sees you fall), fuel/solar sail, progression (9 ranks,
+   12 perks, 5 hulls with real prices, mods, crew), the dark
+   (**spoiler-light: teaches ?-chart-salvage-occupation loop but names NO
+   sites, NO coordinates** — discovery stays the reward), the chronicle,
+   quick reference. Every fact pulled from code/docs, not invented.
+
+**Gates: SKIPPED (docs/static-only — no game or server code touched; the
+booklet is not loaded by index.html).** Deploy carried d3d9e12 (docs) to
+themisto in the same pull.
+
+**NEXT:**
+1. **Watch the first real death in prod** (carried — netChronicle() should
+   show a pilot.died entry; peers should see the blast).
+2. **Link the handbook from the game** — a small gated slice (touches game
+   UI): a "Handbook" link on the join/charter screen and/or in the docked
+   drawer. Until then it's URL-only.
+3. **Handbook upkeep rule:** when a feature lands that changes what a
+   player needs to know, grow manual.html in the same session (it promises
+   "when the game grows, the handbook grows").
+4. **Faction backlog** (carried): member salvage priority ONLY on the
+   play-signal "why did I even claim this place".
+5. **Standing backlog** (carried): nebula mist ambient, www DNS/cert,
+   same-pilot-two-devices kick ping-pong.
+
+**Watchlist (carried from fourteenth, unchanged):** dock feel under the
+re-tuned pressure; Settlement tribute pricing in play; poi-over-combat
+tease line; perk picker re-pops per dock; ×2 occupation weight cadence;
+invite-while-offline UX; 12-entry market cap feel in the Log tab; death FX
+boom radius. New: manual.html is **public** (no family-secret gate — Apache
+serves statics before login; nothing sensitive in it, but vhost-gate it if
+the family wants it private).
+
+--- (fourteenth-session record follows) ---
+
 State as of 2026-09-03 (fourteenth session — **teaser PULLED, chronicle
 noise FIXED, death broadcast BUILT — ALL DEPLOYED**). Main `531dde8`
 (pushed); **themisto runs `531dde8`, restarted clean** — the developer ran
