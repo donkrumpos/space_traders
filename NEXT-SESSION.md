@@ -3,10 +3,19 @@
 State as of 2026-09-03 (thirteenth session — **the Tally DEPLOYED, watchlist
 decided, the Settlement BUILT (the VENDETTA amnesty seed, carried since
 July)**). Main `872393e`; themisto runs `8975e87`.
-**LATE ADDITION, same session: the Settlement is DEPLOYED too** — themisto
-pulled 8975e87 → 21f9e10 (main tip incl. this file), service restarted
-clean, wrong-secret wss probe passed. **Nothing awaits deploy; themisto ==
-main.** Three strands:
+**LATE ADDITIONS, same session:** (1) **the Settlement is DEPLOYED** —
+themisto pulled 8975e87 → 21f9e10, service restarted clean, wrong-secret
+wss probe passed. (2) **The charter-desk teaser was then built + merged**
+(strand 4 below) — main moved past themisto again, so **themisto runs
+21f9e10 and awaits ONE `git pull` for the teaser** (static-only, NO
+restart needed; explicit per the deploy ritual). (3) **The developer
+logged into prod live** — first real-play contact after the deploys: the
+away-digest fired, the Rep tab remembered them. New watchlist item: the
+digest read "100 things happened" = the chronicle is AT ITS CAP, and the
+visible tail was all market events — market-event churn may be drowning
+the ledger's real history (charters, liberations, foundings). Consider:
+exclude market events from CHRONICLE_MAX pressure, give them their own
+short cap, or filter the digest to notable kinds. Four strands:
 
 1. **The Tally deploy (step 1, explicitly authorized).** Themisto pulled
    9c2cdb5 → 8975e87, service restarted clean, outside-in wss probe got
@@ -64,12 +73,22 @@ leave real grudges on the other cartels).
    one dim signpost line atop the Rep tab for grudge-holding factionless
    pilots; rendered AFTER the visibility gate so the teaser never opens the
    page itself (banner suite +2 guards both directions). Static-only —
-   rides the next themisto pull, no restart needed. Gates: solo 251/251 ·
+   **awaits one themisto pull, no restart needed**. Gates: solo 251/251 ·
    net 187/187.
-3. **Faction backlog:** member salvage priority ONLY if claims feel
-   toothless in play.
-4. **Standing backlog:** nebula mist ambient (ninth-session spec), death
-   broadcast (M4 gap), www DNS/cert, same-pilot-two-devices kick ping-pong.
+3. **Chronicle noise pass** (new, from the live login): the world ledger
+   sits at CHRONICLE_MAX=100 and market events dominate it — decide
+   whether market events get their own short cap / stop pressuring the
+   real history out / get filtered from the digest. Diagnose first: count
+   kinds in the live chronicle (`netChronicle()` or the world blob).
+4. **Death broadcast** (M4 gap — the recommended next real build): peers
+   see your ghost sit still 4s then teleport home; slice = one wire msg +
+   ghost explosion FX + a chronicle death entry (the ledger's biggest
+   missing event), PROTOCOL section same slice, ends in a deploy.
+5. **Faction backlog:** member salvage priority ONLY if claims feel
+   toothless in play (trigger: "why did I even claim this place").
+6. **Standing backlog:** nebula mist ambient (ninth-session spec), www
+   DNS/cert (Hover A record + certbot -d ×2), same-pilot-two-devices kick
+   ping-pong (needs a newest-hello-wins takeover rule).
 
 **Watchlist (carried + updated):** dock feel under the re-tuned pressure
 (no signal yet); does the Settlement's tribute pricing land in play
