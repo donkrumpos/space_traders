@@ -476,10 +476,19 @@ shared, persistent fact; the reward is granted per-pilot (co-op friendly).
 
 ### M6 — persistent living world (chronicle: the world remembers)
 
-The world keeps a **chronicle** — a capped ledger (100 entries) of notable
-happenings, persisted inside the singleton `world` JSON blob (same SQLite
-snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
-`{ at, kind, ...detail }`, oldest → newest. Kinds so far:
+The world keeps a **chronicle** — a capped ledger of notable happenings,
+persisted inside the singleton `world` JSON blob (same SQLite snapshot as
+grudges/discoveredPOIs; no schema change). Entries are flat:
+`{ at, kind, ...detail }`, oldest → newest. **The cap is per-kind-class**
+(2026-09-03, the chronicle-noise fix): `market.event` entries trim against
+their own short cap (`CHRONICLE_MARKET_MAX` 12, ≈ the last hour of churn)
+while every other kind — history — keeps the full `CHRONICLE_MAX` 100. Under
+the old shared cap, market events (one every ~5.5 min, around the clock)
+turned the whole ledger over in ~9h and evicted every charter/founding/
+liberation. Unknown future kinds count as history. The trim also runs on
+boot-restore, so a pre-split saved ledger cleans itself; the client mirrors
+the same rule (`js/chronicle.js trimChronicleEntries`) over the snapshot and
+live adds. Wire shape is unchanged. Kinds so far:
 
 | kind | detail | recorded when |
 |------|--------|---------------|
@@ -505,13 +514,16 @@ snapshot as grudges/discoveredPOIs; no schema change). Entries are flat:
   this pilot's stored doc, `0` for a brand-new pilot. This is "when you last
   flew" as the SERVER remembers it — every real save (`char.push`) refreshes it.
 - **Away digest (client, `js/chronicle.js`):** on each (re)connect the client
-  stamps `lastSeen` from welcome, then when the snapshot lands shows ONE
-  "While you were away — N things happened" HUD digest plus the last ≤3 unseen
-  entries (`entry.at > lastSeen`; `lastSeen === 0` ⇒ nothing was missed). The
-  **Galaxy Log** sidebar panel (`#chroniclePanel`) lists the latest 8 entries,
-  unseen ones highlighted; hidden when the ledger is empty (offline/solo).
+  stamps `lastSeen` from welcome, then when the snapshot lands shows ONE HUD
+  digest (`entry.at > lastSeen`; `lastSeen === 0` ⇒ nothing was missed). The
+  headline counts **notable kinds only** ("N things made the chronicle") plus
+  the last ≤3 unseen notable entries; market-only news collapses to one soft
+  line ("only the markets stirred"). The **Galaxy Log** sidebar panel
+  (`#chroniclePanel`) lists the latest 8 entries with market events claiming
+  at most 2 of the visible lines, unseen ones highlighted; hidden when the
+  ledger is empty (offline/solo).
 - **Console hook:** `window.netChronicle()` →
-  `{ count, lastSeen, unseen, digestShown, latest }`.
+  `{ count, kinds, lastSeen, unseen, unseenNotable, digestShown, latest }`.
 - **Regenerating caches (`world.snapshot.poiState`)**: `{ id: { nextSalvageAt } }`,
   persisted in the world blob. Seeded at first charter, re-rolled 12–24h out
   after each claim (jitter kills clockwork farming). Readiness is **computed on

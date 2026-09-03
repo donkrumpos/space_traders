@@ -57,6 +57,25 @@ const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, 
 // roll helpers at module init (const TDZ would bite otherwise).
 const SALVAGE_MIN_MS = 12 * 3600 * 1000;      // cache regen: 12-24h w/ jitter
 const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
+
+// Chronicle caps + trim — also above the restore block: a saved ledger from
+// before the split (or a tampered blob) trims itself on boot. Market events
+// are ambiance, not history: they fire every ~5.5 minutes around the clock,
+// so under one shared cap they turned the whole ledger over in ~9 hours and
+// every charter/founding/liberation was pressured out. They trim against
+// their own short cap instead — recent market news keeps its value, the real
+// history keeps its room. Unknown future kinds count as history.
+const CHRONICLE_MAX = 100;        // notable history
+const CHRONICLE_MARKET_MAX = 12;  // market churn: roughly the last hour
+
+function trimChronicle(list) {
+    let markets = 0;
+    for (const e of list) if (e.kind === 'market.event') markets++;
+    let dropM = markets - CHRONICLE_MARKET_MAX;
+    let dropN = (list.length - markets) - CHRONICLE_MAX;
+    if (dropM <= 0 && dropN <= 0) return list;
+    return list.filter(e => (e.kind === 'market.event' ? --dropM < 0 : --dropN < 0));
+}
 const OCCUPATION_MIN_MS = 12 * 3600 * 1000;   // occupation roll: 12-24h apart
 const OCCUPATION_JITTER_MS = 12 * 3600 * 1000;
 const OCCUPATION_MAX = 2;
@@ -79,7 +98,7 @@ const CLAIM_OCCUPY_WEIGHT = 2;                // claimed sites draw raiders (M7)
     if (saved && saved.grudges) world.grudges = saved.grudges;
     if (saved && saved.grudgeAmnesty) world.grudgeAmnesty = saved.grudgeAmnesty;
     if (saved && saved.discoveredPOIs) world.discoveredPOIs = saved.discoveredPOIs;
-    if (saved && Array.isArray(saved.chronicle)) world.chronicle = saved.chronicle;
+    if (saved && Array.isArray(saved.chronicle)) world.chronicle = trimChronicle(saved.chronicle);
     if (saved && saved.poiState) world.poiState = saved.poiState;
     if (saved && saved.nextOccupationAt) world.nextOccupationAt = saved.nextOccupationAt;
     if (saved && saved.factions) world.factions = saved.factions;
@@ -124,10 +143,10 @@ export function flushWorld() {
 // One append path for every notable happening. Entries are small and flat:
 // { at, kind, ...detail }. Kinds so far: 'poi.charted' { pilot, poi, name },
 // 'market.event' { label, planet }, 'boss.killed' { pilot, faction, tier }.
-// Capped so the snapshot blob can't grow without bound; broadcast so open
-// clients keep their Galaxy Log current without re-snapshotting.
-
-const CHRONICLE_MAX = 100;
+// Capped so the snapshot blob can't grow without bound (CHRONICLE_MAX /
+// CHRONICLE_MARKET_MAX + trimChronicle, declared above the restore block);
+// broadcast so open clients keep their Galaxy Log current without
+// re-snapshotting.
 
 // Regenerating caches (M6): after a charter or a salvage claim, the next
 // salvage window opens 12-24h out — the daily-ish cadence pinned at kickoff.
@@ -289,9 +308,7 @@ export function creditPilotDeed(pilot, kind, amount) {
 export function recordChronicle(kind, detail) {
     const entry = { at: Date.now(), kind, ...detail };
     world.chronicle.push(entry);
-    if (world.chronicle.length > CHRONICLE_MAX) {
-        world.chronicle.splice(0, world.chronicle.length - CHRONICLE_MAX);
-    }
+    world.chronicle = trimChronicle(world.chronicle);
     broadcast({ t: 'chronicle.add', entry });
     markDirty();
     return entry;

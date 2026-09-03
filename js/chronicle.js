@@ -10,13 +10,29 @@
 // offline: no entries → panel hidden, no digest (the solo ?verify gate runs
 // with no net layer at all).
 
-const CHRONICLE_CLIENT_MAX = 100; // mirror of the server cap
+// Mirrors of the server caps: market events are ambiance, not history — they
+// fire every few minutes and trim against their own short cap so churn can't
+// pressure charters/foundings/liberations out. Unknown kinds count as history.
+const CHRONICLE_CLIENT_MAX = 100;        // notable history
+const CHRONICLE_CLIENT_MARKET_MAX = 12;  // market churn: roughly the last hour
 
 const chronicle = {
     entries: [],        // shared ledger, oldest → newest (server order)
     lastSeen: 0,        // welcome.lastSeen; 0 = brand-new pilot (no "away")
     digestShown: false  // one digest per (re)connect
 };
+
+// Same trim rule the server applies to the persisted ledger, so a client that
+// stays connected across many market events converges on the same entries a
+// fresh snapshot would carry.
+function trimChronicleEntries(list) {
+    let markets = 0;
+    for (const e of list) if (e.kind === 'market.event') markets++;
+    let dropM = markets - CHRONICLE_CLIENT_MARKET_MAX;
+    let dropN = (list.length - markets) - CHRONICLE_CLIENT_MAX;
+    if (dropM <= 0 && dropN <= 0) return list;
+    return list.filter(e => (e.kind === 'market.event' ? --dropM < 0 : --dropN < 0));
+}
 
 // welcome landed: stamp lastSeen and re-arm the digest for this connection.
 function setChronicleLastSeen(ts) {
@@ -28,7 +44,7 @@ function setChronicleLastSeen(ts) {
 // connect) surface what happened while this pilot was away.
 function applyChronicleSnapshot(entries) {
     if (!Array.isArray(entries)) return;
-    chronicle.entries = entries.slice(-CHRONICLE_CLIENT_MAX);
+    chronicle.entries = trimChronicleEntries(entries.slice());
     updateChroniclePanelUI();
     maybeShowChronicleDigest();
 }
@@ -39,7 +55,7 @@ function applyChronicleSnapshot(entries) {
 function applyChronicleAdd(entry) {
     if (!entry || !entry.kind) return;
     chronicle.entries.push(entry);
-    if (chronicle.entries.length > CHRONICLE_CLIENT_MAX) chronicle.entries.shift();
+    chronicle.entries = trimChronicleEntries(chronicle.entries);
     updateChroniclePanelUI();
 }
 
@@ -110,13 +126,20 @@ function formatChronicleEntry(e) {
 
 // The once-per-connect "while you were away" digest: a headline plus the
 // last few missed entries, through the same HUD channel everything else uses.
+// The headline counts only what made history — a pilot away overnight missed
+// three deeds, not ninety market wobbles. Market-only news gets one soft line.
 function maybeShowChronicleDigest() {
     if (chronicle.digestShown) return;
     chronicle.digestShown = true;
     const unseen = chronicleUnseen();
     if (unseen.length === 0 || typeof showHudFeedback !== 'function') return;
-    showHudFeedback(`While you were away — ${unseen.length} ${unseen.length === 1 ? 'thing' : 'things'} happened out there`, 'warning', 8000);
-    unseen.slice(-3).forEach(e => {
+    const notable = unseen.filter(e => e.kind !== 'market.event');
+    if (notable.length === 0) {
+        showHudFeedback('While you were away — only the markets stirred', 'info', 8000);
+        return;
+    }
+    showHudFeedback(`While you were away — ${notable.length} ${notable.length === 1 ? 'thing' : 'things'} made the chronicle`, 'warning', 8000);
+    notable.slice(-3).forEach(e => {
         showHudFeedback(`✦ ${formatChronicleEntry(e)} (${chronicleTimeAgo(e.at)})`, 'info', 8000);
     });
 }
@@ -147,7 +170,16 @@ function updateChroniclePanelUI() {
             shipLog.slice(-6).reverse().map(e => `<div class="log-journal">${e.text}</div>`).join('');
     }
 
-    const recent = chronicle.entries.slice(-8).reverse(); // newest first
+    // Newest first, but market events claim at most 2 of the 8 visible lines —
+    // they're always the freshest entries, and unfiltered they'd hide the very
+    // history the per-kind cap preserves.
+    const recent = [];
+    let marketLines = 2;
+    for (let i = chronicle.entries.length - 1; i >= 0 && recent.length < 8; i--) {
+        const e = chronicle.entries[i];
+        if (e.kind === 'market.event' && --marketLines < 0) continue;
+        recent.push(e);
+    }
     list.innerHTML = (recent.length === 0 ? '' : `<div class="log-sect">the reach's chronicle</div>`) +
         recent.map(e => {
             const fresh = chronicle.lastSeen > 0 && e.at > chronicle.lastSeen;
@@ -165,10 +197,15 @@ setInterval(() => {
 
 // Console hook (playtest + verify-net harness)
 window.netChronicle = function () {
+    const kinds = {};
+    for (const e of chronicle.entries) kinds[e.kind] = (kinds[e.kind] || 0) + 1;
+    const unseen = chronicleUnseen();
     return {
         count: chronicle.entries.length,
+        kinds,
         lastSeen: chronicle.lastSeen,
-        unseen: chronicleUnseen().length,
+        unseen: unseen.length,
+        unseenNotable: unseen.filter(e => e.kind !== 'market.event').length,
         digestShown: chronicle.digestShown,
         latest: chronicle.entries.slice(-8).map(e => ({ at: e.at, kind: e.kind, text: formatChronicleEntry(e) }))
     };
