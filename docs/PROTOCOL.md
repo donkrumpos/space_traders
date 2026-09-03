@@ -576,6 +576,21 @@ snapshot, so there is no separate offer message.
   an unknown name now falls back to the grudge roll loudly instead of
   silently mustering a random cartel under the wrong flag.
 - **Console hook:** `window.netFactions()` → `{ registry, mine, invites }`.
+- **The Tally (direction C, 2026-09-03):** the server counts member deeds
+  toward the faction's declared `want.kind` at its own authority points —
+  the trade handler (units SOLD count toward `trade`), the `damage.claim`
+  kill path (each kill counts toward `grudge`), and the claim's two
+  defend paths (`poi.liberated … by` repels and salvage at your own
+  claimed site count toward `place`). The running total rides the
+  registry as an ADDITIVE per-faction field
+  `tally: { count, tier, nextAt }` — no new wire messages; it arrives on
+  the same `faction.update` broadcasts and world snapshots, and old
+  faction records without it are lazily initialised on first credit.
+  Milestones are a short authored ladder per kind
+  (`TALLY_LADDER` in `server/world.mjs`: trade 100/500/2500 · grudge
+  10/50/250 · place 5/25/125); crossing a tier chronicles
+  `faction.milestone { faction, want, count, tier }` once. The banner
+  card renders the quiet count line; the chronicle does the talking.
 
 ## verify-net.mjs (the gate)
 

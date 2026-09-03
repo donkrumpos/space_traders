@@ -191,6 +191,19 @@ VERIFY_SUITES.banner = (assert) => {
         formatChronicleEntry({ kind: 'faction.founded', founder: 'Dad', faction: 'Reef Wardens', want: 'the reefs back' }).includes('raised the Reef Wardens banner') &&
         formatChronicleEntry({ kind: 'faction.joined', pilot: 'Arthur', faction: 'Reef Wardens' }).includes('signed on') &&
         formatChronicleEntry({ kind: 'faction.disbanded', pilot: 'Dad', faction: 'Reef Wardens' }).includes('folded'));
+    assert('the tally milestone speaks in the errand\'s words',
+        formatChronicleEntry({ kind: 'faction.milestone', faction: 'Reef Wardens', want: 'trade', count: 100 }).includes('moved 100 crates') &&
+        formatChronicleEntry({ kind: 'faction.milestone', faction: 'Reef Wardens', want: 'grudge', count: 10 }).includes('called in 10') &&
+        formatChronicleEntry({ kind: 'faction.milestone', faction: 'Reef Wardens', want: 'place', count: 5 }).includes('5 stands'));
+
+    // The Tally's quiet line on the banner card (registry field, additive)
+    pilot.faction = { name: 'Reef Wardens', color: '#44ddaa',
+        want: { kind: 'trade', words: 'the long odds' },
+        tally: { count: 137, tier: 1, nextAt: 500 } };
+    updateFactionUI();
+    assert('the banner card carries the tally toward the want',
+        list.innerHTML.includes('137 crates moved') &&
+        list.innerHTML.includes('500 makes the next mark'));
 
     // Slice F2: the claim rides poi.state onto the map model (render-side)
     const poi = game.pois && game.pois[0];

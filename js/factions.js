@@ -99,13 +99,20 @@ function factionBannerHTML() {
     }).join('') || `<div style="font-size:11px;">${escName(me || 'you')} — founder</div>`;
     const invites = (f.invites || []).length
         ? `<div style="font-size:10px; color:#888;">invited: ${f.invites.map(escName).join(', ')}</div>` : '';
+    // The Tally: a quiet line of progress toward the want; the chronicle
+    // does the talking at milestones
+    const tallyNoun = { trade: 'crates moved', grudge: 'debts called in', place: 'stands made' };
+    const tally = (f.tally && f.want && tallyNoun[f.want.kind])
+        ? `<div class="banner-tally" style="font-size:10px; color:#7a9;">${f.tally.count} ${tallyNoun[f.want.kind]}${
+            f.tally.nextAt ? ` · ${f.tally.nextAt} makes the next mark` : ' · the ledger remembers'}</div>`
+        : '';
     const offline = (window.net && net.online) ? '' :
         `<div style="font-size:10px; color:#667;">(the roster lives on the reach — offline copy)</div>`;
     return `<div style="border:1px solid ${f.color}; padding:6px 8px; margin-bottom:8px;">
         <div><span style="display:inline-block; width:10px; height:10px; background:${f.color};"></span>
         <strong style="color:${f.color};">${f.name}</strong></div>
         <div style="font-size:11px; font-style:italic; color:#8aa;">"${(f.want && f.want.words) || ''}"</div>
-        ${roster}${invites}${offline}</div>`;
+        ${tally}${roster}${invites}${offline}</div>`;
 }
 
 // --- The charter desk (Shipyard district) -----------------------------------

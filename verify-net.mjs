@@ -1495,6 +1495,52 @@ async function pressureSuite(t, { browser, base, wsUrl }) {
     S.P = null;
 }
 
+// The Tally (M7 direction C): the server counts member deeds toward the
+// declared want.kind at its authority points; the running total rides the
+// registry (additive tally field) and milestones chronicle once per tier.
+async function tallySuite(t, { browser, base, wsUrl }) {
+    S.T = await newGamePage(browser, 'VerifyT', { stubPerks: true });
+    const page = S.T.page;
+    await page.goto(`${base}/index.html?pilot=VerifyT&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('T online', !!(await until(() => page.evaluate(() => netStatus().online === true))));
+
+    const founded = await page.evaluate(() =>
+        net.factionFound('Verify Haulers', '#66bb33', { kind: 'trade', words: 'the long odds cargo' }));
+    t('T founds a trade-want banner', !!(founded && founded.ok), JSON.stringify(founded));
+
+    // A server-adjudicated sell credits the tally; buys never do
+    await page.evaluate(() => {
+        net.send({ t: 'trade', reqId: 'tly-b', planet: 'Agricon Prime', good: 'food', side: 'buy', qty: 5 });
+        net.send({ t: 'trade', reqId: 'tly-s', planet: 'Agricon Prime', good: 'technology', side: 'sell', qty: 3 });
+    });
+    const credited = await until(() => page.evaluate(() => {
+        const f = netFactions().mine;
+        return (f && f.tally && f.tally.count === 3 && f.tally.nextAt === 100) ? f.tally : false;
+    }));
+    t('sold units land on the tally (buys ignored)', !!credited, JSON.stringify(credited));
+
+    // Crossing the first rung chronicles the milestone and advances the ladder
+    await page.evaluate(() => net.send({ t: 'trade', reqId: 'tly-m', planet: 'Agricon Prime', good: 'technology', side: 'sell', qty: 97 }));
+    const milestone = await until(() => page.evaluate(() =>
+        netChronicle().latest.some(e => e.kind === 'faction.milestone' &&
+            e.text.includes('Verify Haulers') && e.text.includes('100 crates'))));
+    t('the first rung is chronicled in the errand\'s words', !!milestone);
+    const laddered = await until(() => page.evaluate(() => {
+        const f = netFactions().mine;
+        return (f && f.tally && f.tally.tier === 1 && f.tally.nextAt === 500) ? f.tally : false;
+    }));
+    t('the ladder advances to the next mark', !!laddered, JSON.stringify(laddered));
+
+    const cardLine = await until(() => page.evaluate(() => {
+        if (typeof updateFactionUI === 'function') updateFactionUI();
+        return document.getElementById('factionList').innerHTML.includes('crates moved');
+    }));
+    t('the banner card carries the quiet tally line', !!cardLine);
+
+    await S.T.context.close().catch(() => {});
+    S.T = null;
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1511,6 +1557,7 @@ const SUITES = [
     ['occupation', occupationSuite],
     ['faction', factionSuite],
     ['pressure', pressureSuite],
+    ['tally', tallySuite],
 ];
 
 // ---------------------------------------------------------------------------
