@@ -2,7 +2,11 @@
 
 State as of 2026-09-03 (thirteenth session — **the Tally DEPLOYED, watchlist
 decided, the Settlement BUILT (the VENDETTA amnesty seed, carried since
-July)**). Main `872393e`; themisto runs `8975e87`. Three strands:
+July)**). Main `872393e`; themisto runs `8975e87`.
+**LATE ADDITION, same session: the Settlement is DEPLOYED too** — themisto
+pulled 8975e87 → 21f9e10 (main tip incl. this file), service restarted
+clean, wrong-secret wss probe passed. **Nothing awaits deploy; themisto ==
+main.** Three strands:
 
 1. **The Tally deploy (step 1, explicitly authorized).** Themisto pulled
    9c2cdb5 → 8975e87, service restarted clean, outside-in wss probe got
@@ -55,9 +59,12 @@ refusal assert is deliberately self-contained — earlier suites' boss kills
 leave real grudges on the other cartels).
 
 **NEXT:**
-1. **Deploy the Settlement to themisto** (explicit, per RUNBOOK — one pull +
-   restart; server-side world.mjs/combat.mjs changed).
-2. **Charter-desk teaser** (watchlist (b) decision — small slice).
+1. ~~Deploy the Settlement to themisto~~ ✅ DONE same session (see above).
+2. **Charter-desk teaser** (watchlist (b) decision — small slice). Known
+   trap: updateFactionUI hides the Rep page when `held.length === 0 &&
+   !banner` — the teaser must be decoration on an already-visible page
+   (grudges held, no faction), NOT returned as banner content, or every
+   fresh Deckhand gets a Rep tab showing only an ad.
 3. **Faction backlog:** member salvage priority ONLY if claims feel
    toothless in play.
 4. **Standing backlog:** nebula mist ambient (ninth-session spec), death
