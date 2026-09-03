@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pilot's Handbook — Space Traders</title>
+<style>
+/*
+ * The handbook renders as a shipboard terminal document — deliberately
+ * single-theme dark, like the game screen it sits beside.
+ */
+:root {
+    --void:    #020805;
+    --panel:   #04170c;
+    --panel2:  #052010;
+    --ink:     #9dffb0;
+    --bright:  #00ff66;
+    --cyan:    #66ccff;
+    --amber:   #ffdd44;
+    --violet:  #c398ff;
+    --danger:  #ff5555;
+    --dim:     #5d8a6b;
+    --line:    rgba(0, 255, 102, 0.22);
+    --line-soft: rgba(0, 255, 102, 0.12);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .cursor { animation: none !important; }
+}
+
+body {
+    margin: 0;
+    background: var(--void);
+    color: var(--ink);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+a { color: var(--cyan); text-decoration: none; }
+a:hover, a:focus-visible { text-decoration: underline; }
+a:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+
+/* ---------- frame: rail + page ---------- */
+
+.frame { display: flex; min-height: 100vh; }
+
+nav.rail {
+    position: sticky; top: 0; align-self: flex-start;
+    height: 100vh; overflow-y: auto;
+    width: 230px; flex-shrink: 0;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    padding: 22px 0 30px;
+}
+.rail .rail-title {
+    color: var(--dim); font-size: 10px; letter-spacing: 3px;
+    text-transform: uppercase; padding: 0 18px 12px;
+}
+.rail a {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 7px 18px; color: var(--dim); font-size: 12.5px;
+    border-left: 2px solid transparent;
+}
+.rail a .g { width: 16px; text-align: center; color: var(--bright); opacity: 0.55; }
+.rail a:hover { color: var(--ink); text-decoration: none; background: var(--panel2); }
+.rail a.here {
+    color: var(--bright); border-left-color: var(--bright);
+    background: var(--panel2);
+}
+.rail a.here .g { opacity: 1; }
+
+main { flex: 1; min-width: 0; }
+.page { max-width: 880px; margin: 0 auto; padding: 0 28px 90px; }
+
+/* mobile: rail becomes a scrolling chip row */
+@media (max-width: 900px) {
+    .frame { display: block; }
+    nav.rail {
+        width: 100%; height: auto; position: sticky; top: 0; z-index: 50;
+        display: flex; overflow-x: auto; overflow-y: hidden;
+        border-right: none; border-bottom: 1px solid var(--line);
+        padding: 8px 10px; gap: 2px;
+    }
+    .rail .rail-title { display: none; }
+    .rail a { flex-shrink: 0; border-left: none; border-bottom: 2px solid transparent; padding: 6px 10px; }
+    .rail a.here { border-bottom-color: var(--bright); }
+    .page { padding: 0 16px 70px; }
+}
+
+/* ---------- cover ---------- */
+
+header.cover {
+    position: relative; overflow: hidden;
+    padding: 90px 0 70px;
+    border-bottom: 1px solid var(--line);
+}
+header.cover::after {
+    /* static CRT scanline texture, cover only */
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+        to bottom, transparent 0 2px, rgba(0, 0, 0, 0.22) 2px 4px);
+}
+.stamp {
+    display: inline-block; border: 1px solid var(--dim);
+    color: #7fb08d; font-size: 10.5px; letter-spacing: 3px;
+    text-transform: uppercase; padding: 6px 14px;
+}
+.stamp s { text-decoration-color: var(--danger); text-decoration-thickness: 2px; }
+.stamp .handed { color: var(--amber); text-transform: none; letter-spacing: 1px; }
+.cover h1 {
+    margin: 34px 0 6px; color: var(--bright);
+    font-size: clamp(30px, 6vw, 52px); line-height: 1.05;
+    letter-spacing: 2px; text-wrap: balance;
+    text-shadow: 0 0 24px rgba(0, 255, 102, 0.35);
+}
+.cover .sub {
+    color: var(--cyan); font-size: clamp(14px, 2.4vw, 18px); letter-spacing: 1px;
+}
+.cover .motto {
+    margin-top: 30px; color: var(--dim); font-size: 13px; max-width: 62ch;
+}
+.cursor {
+    display: inline-block; width: 0.6em; height: 1.1em;
+    background: var(--bright); vertical-align: text-bottom;
+    animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---------- sections as terminal panels ---------- */
+
+section { margin-top: 54px; scroll-margin-top: 70px; }
+
+.panel-head {
+    display: flex; align-items: baseline; gap: 12px;
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--bright);
+    background: var(--panel);
+    padding: 10px 16px;
+}
+.panel-head .g { color: var(--bright); }
+.panel-head h2 {
+    margin: 0; font-size: 15px; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--cyan); font-weight: bold;
+}
+.panel-head .no { margin-left: auto; color: var(--dim); font-size: 11px; letter-spacing: 2px; }
+
+.panel-body { padding: 20px 4px 0; }
+.panel-body > p, .panel-body > ul, .panel-body > ol { max-width: 66ch; }
+.panel-body p { margin: 0 0 16px; }
+.panel-body ul, .panel-body ol { margin: 0 0 16px; padding-left: 22px; }
+.panel-body li { margin-bottom: 7px; }
+.panel-body h3 {
+    margin: 28px 0 10px; color: var(--bright); font-size: 13.5px;
+    letter-spacing: 2px; text-transform: uppercase;
+}
+
+.flavor {
+    border-left: 2px solid var(--violet);
+    color: var(--violet); font-style: italic;
+    padding: 2px 0 2px 14px; margin: 0 0 18px; max-width: 60ch;
+    font-size: 13.5px;
+}
+
+.note {
+    border: 1px solid rgba(255, 221, 68, 0.4); background: rgba(255, 221, 68, 0.05);
+    color: var(--amber); font-size: 13px; padding: 10px 14px;
+    margin: 0 0 16px; max-width: 66ch;
+}
+.note b { letter-spacing: 1px; }
+
+.danger-note {
+    border: 1px solid rgba(255, 85, 85, 0.45); background: rgba(255, 85, 85, 0.06);
+    color: var(--danger);
+}
+
+/* ---------- keys ---------- */
+
+kbd {
+    display: inline-block; font-family: inherit; font-size: 12.5px;
+    color: var(--bright); background: var(--panel2);
+    border: 1px solid var(--line); border-bottom-width: 3px;
+    border-radius: 3px; padding: 0 8px; line-height: 1.7;
+    white-space: nowrap;
+}
+
+.keygrid {
+    display: grid; grid-template-columns: auto 1fr; gap: 8px 18px;
+    align-items: baseline; margin: 0 0 16px; max-width: 66ch;
+}
+.keygrid .k { text-align: right; }
+.keygrid .d { font-size: 13.5px; }
+.keygrid .d small { color: var(--dim); display: block; font-size: 12px; }
+
+/* ---------- tables ---------- */
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line-soft); margin: 0 0 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th {
+    text-align: left; color: var(--dim); font-size: 10.5px;
+    letter-spacing: 2px; text-transform: uppercase;
+    padding: 9px 12px; border-bottom: 1px solid var(--line);
+    background: var(--panel); white-space: nowrap;
+}
+td {
+    padding: 8px 12px; border-bottom: 1px solid var(--line-soft);
+    vertical-align: top; font-variant-numeric: tabular-nums;
+}
+tr:last-child td { border-bottom: none; }
+td.num { text-align: right; white-space: nowrap; }
+td .muted, p .muted, li .muted { color: var(--dim); }
+.swatch {
+    display: inline-block; width: 10px; height: 10px;
+    margin-right: 8px; vertical-align: baseline;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+/* ---------- misc components ---------- */
+
+.lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 0 0 18px; }
+.lane { border: 1px solid var(--line-soft); background: var(--panel); padding: 14px 16px; }
+.lane h4 { margin: 0 0 10px; font-size: 12px; letter-spacing: 2px; }
+.lane.fighter h4 { color: #ff6666; }
+.lane.trader h4 { color: var(--amber); }
+.lane.explorer h4 { color: #66ffcc; }
+.lane ul { margin: 0; padding-left: 16px; font-size: 12.5px; }
+.lane li { margin-bottom: 6px; }
+.lane li b { color: var(--ink); }
+.lane li span { color: var(--dim); }
+
+.glyphrow { display: flex; flex-wrap: wrap; gap: 10px 26px; margin: 0 0 18px; font-size: 13px; }
+.glyphrow span b { color: var(--bright); margin-right: 6px; }
+
+footer.backcover {
+    margin-top: 70px; border-top: 1px solid var(--line);
+    padding: 40px 0 20px; color: var(--dim); font-size: 12.5px;
+}
+footer.backcover .sig { color: var(--violet); font-style: italic; margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+<nav class="rail" aria-label="Chapters">
+    <div class="rail-title">Handbook</div>
+    <a href="#what"><span class="g">◈</span>What this is</a>
+    <a href="#first-flight"><span class="g">▸</span>First flight</a>
+    <a href="#controls"><span class="g">⌨</span>The helm</a>
+    <a href="#your-ship"><span class="g">⬡</span>Reading your ship</a>
+    <a href="#making-port"><span class="g">⌂</span>Making port</a>
+    <a href="#the-trade"><span class="g">⚖</span>The trade</a>
+    <a href="#trouble"><span class="g">⚔</span>Trouble</a>
+    <a href="#dying"><span class="g">✝</span>When you die</a>
+    <a href="#fuel"><span class="g">◮</span>Fuel &amp; the sail</a>
+    <a href="#somebody"><span class="g">✪</span>Becoming somebody</a>
+    <a href="#the-dark"><span class="g">?</span>The dark</a>
+    <a href="#world-moves"><span class="g">✦</span>The world moves</a>
+    <a href="#reference"><span class="g">≡</span>Quick reference</a>
+</nav>
+
+<main>
+<div class="page">
+
+<header class="cover">
+    <div class="stamp">
+        <s>Meridian Charter Combine · Reach Operations · Doc 7-C</s><br>
+        <span class="handed">property of whoever's flying now</span>
+    </div>
+    <h1>PILOT'S HANDBOOK<span class="cursor" aria-hidden="true"></span></h1>
+    <div class="sub">Space Traders — flying, trading, and staying alive in the Reach</div>
+    <p class="motto">Nothing in the reach is new. Everything — this ship, this manual,
+    you — is inherited, salvaged, or grown. Read it anyway. The pilots who didn't
+    are the reason there are salvage sites.</p>
+</header>
+
+<!-- ==================================================================== -->
+<section id="what">
+    <div class="panel-head"><span class="g">◈</span><h2>What this is</h2><span class="no">§ 01</span></div>
+    <div class="panel-body">
+        <p>Space Traders is a physics-flight game over a living trading world.
+        You fly a small ship between seven worlds: buy goods where they're cheap,
+        sell them where they're wanted, fight off the cartels who'd rather take
+        them, and spend the profit making your ship more yours.</p>
+        <p>It's also a <b>shared world</b>. Everyone in the family flies in the same
+        universe on the same server. You'll see each other's ships, race each other
+        to salvage, watch each other's discoveries appear on your map — and the
+        world keeps moving while you're logged out. Come back after a day away and
+        the game will tell you what you missed.</p>
+        <p class="flavor">The Combine built this reach, named everything like a
+        spreadsheet, then vanished mid-shift. Everyone here is descended from the
+        stranded. There's no navy and no law — just docks, debts, and nerve.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="first-flight">
+    <div class="panel-head"><span class="g">▸</span><h2>First flight</h2><span class="no">§ 02</span></div>
+    <div class="panel-body">
+        <p>You start in a <b>Sparrow Skiff</b> — a cockpit, an engine, and hope —
+        floating near <b>Agricon Prime</b>, the farm world the locals call the
+        Lantern. Do this, in order:</p>
+        <ol>
+            <li><b>Fly.</b> Hold <kbd>↑</kbd> to thrust. Notice you keep drifting
+            when you let go — there's no friction in space. Turn with
+            <kbd>←</kbd> <kbd>→</kbd> and thrust the <em>other</em> way to slow down
+            (or tap <kbd>↓</kbd> to reverse-thrust). Flying well is half the game.</li>
+            <li><b>Open the map</b> with <kbd>M</kbd>. Find the other worlds. Close it
+            with <kbd>M</kbd> or <kbd>Esc</kbd>.</li>
+            <li><b>Dock.</b> Fly close to Agricon Prime until the sidebar says you're
+            in docking range, then press <kbd>Space</kbd>.</li>
+            <li><b>Buy Glowgrain.</b> It's grown here, so it's cheap here. Fill your
+            little hold.</li>
+            <li><b>Haul it to Mining Station 7</b> — the industrial world can't feed
+            itself, so it pays well for food. Dock, sell, pocket the difference.</li>
+            <li><b>Repeat</b> until you can afford your first upgrade — a bigger
+            hold or a better engine. Now you're a trader.</li>
+        </ol>
+        <p>Everything else in this book — combat, exploration, crews, the dark —
+        grows out of that loop. Fuel isn't free and pirates exist, so read on before
+        you wander far.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="controls">
+    <div class="panel-head"><span class="g">⌨</span><h2>The helm</h2><span class="no">§ 03</span></div>
+    <div class="panel-body">
+        <div class="keygrid">
+            <div class="k"><kbd>↑</kbd> <kbd>↓</kbd></div>
+            <div class="d">Thrust forward / reverse-thrust
+                <small>you drift until you counter-thrust — this is a feature</small></div>
+            <div class="k"><kbd>←</kbd> <kbd>→</kbd></div>
+            <div class="d">Rotate the ship</div>
+            <div class="k"><kbd>Space</kbd></div>
+            <div class="d">Dock when in range · undock when docked</div>
+            <div class="k"><kbd>M</kbd></div>
+            <div class="d">Full galaxy map on / off</div>
+            <div class="k"><kbd>X</kbd></div>
+            <div class="d">Fire laser</div>
+            <div class="k"><kbd>C</kbd></div>
+            <div class="d">Fire missile <small>limited ammo — rearm at any dock</small></div>
+            <div class="k"><kbd>Z</kbd></div>
+            <div class="d">Cycle between laser systems you own</div>
+            <div class="k"><kbd>R</kbd></div>
+            <div class="d">Field-repair a knocked-out subsystem
+                <small>costs one Repair Kit from your cargo</small></div>
+            <div class="k"><kbd>E</kbd></div>
+            <div class="d">Interact with an event when a planet is also in range</div>
+            <div class="k"><kbd>Esc</kbd></div>
+            <div class="d">Close the map · leave an encounter · undock — the
+                "get me out of this screen" key</div>
+        </div>
+        <p><span class="muted">Panic exit: if you're docked or engaged and hit any
+        arrow key, the ship undocks/disengages and flies. The game assumes that if
+        you're mashing thrust, you mean it.</span></p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="your-ship">
+    <div class="panel-head"><span class="g">⬡</span><h2>Reading your ship</h2><span class="no">§ 04</span></div>
+    <div class="panel-body">
+        <p>The top of the sidebar is a <b>drawn schematic of your actual ship</b>.
+        It isn't decoration — it's the instrument panel. You should be able to read
+        your whole situation from the shape, mid-fight, without reading a number:</p>
+        <ul>
+            <li><b>Cargo</b> is the bay grid, filling cell by cell in each good's own
+            color — a glance tells you "mostly ore, two relics."</li>
+            <li><b>Shields</b> are the blue envelope around the hull. It thins and
+            fades as charge drops. A bigger shield bank is a visibly thicker envelope.</li>
+            <li><b>Upgrades are size.</b> Bigger engines draw bigger nacelles, a
+            bigger weapon a bigger nose mount, a bigger tank a wider fuel spine.
+            No level badges — the ship just grows.</li>
+            <li><b>Damage flashes the exact part red.</b> Hull outline goes amber,
+            then red and pulsing when critical. A knocked-out engine flashes where
+            the engine lives. When something's out, the strip below shows
+            "<kbd>R</kbd> to repair" with your kit count.</li>
+            <li><b>The thruster glow breathes with your real thrust.</b></li>
+        </ul>
+        <h3>The Now zone</h3>
+        <p>Below the vitals sits a panel that reads your situation and shows only
+        what matters right now — cruising shows your heading and nearest world;
+        docking range shows "SPACE to dock"; combat shows hostile count, range, and
+        a blinking <b style="color:var(--danger)">SHIELDS DOWN</b> alarm when it
+        matters; an empty tank shows the nearest fuel stop. When it changes color,
+        your situation changed. Trust it.</p>
+        <h3>Records</h3>
+        <p>Beneath that, a small tab row — Ship, Missions, Ledger to start. Crew,
+        Reputation, and the Galaxy Log appear only once you've earned a crew member,
+        a grudge, or a place in history. Badges on the tabs mean news: active
+        contracts, factions that hold a grudge, world events you haven't read yet.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="making-port">
+    <div class="panel-head"><span class="g">⌂</span><h2>Making port</h2><span class="no">§ 05</span></div>
+    <div class="panel-body">
+        <p>Every dock has two districts, split by how fast you're deciding:</p>
+        <h3>The Dock — the seconds loop</h3>
+        <p>Where <kbd>Space</kbd> always lands you. Three service gauges up top —
+        <b>refuel, rearm, repair</b> — each showing its fill level and top-off cost
+        at a glance. Below them: the market (buy and sell), the mission board
+        (delivery contracts and bounties), and crew for hire.</p>
+        <h3>The Shipyard — the considered purchases</h3>
+        <p>Walk through the "⇱ walk to the Shipyard" door for the big-ticket stuff:
+        new hulls, ship upgrades, weapon systems, and the mechanic's bench where the
+        one-of-a-kind mods live. Nothing out there is an impulse buy; that's why it's
+        a separate room.</p>
+        <p class="flavor">"Nothing here is new — inherited, salvaged, or grown."
+        The junkyard voice at the shipyard door isn't apologizing. It's the sales pitch.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="the-trade">
+    <div class="panel-head"><span class="g">⚖</span><h2>The trade</h2><span class="no">§ 06</span></div>
+    <div class="panel-body">
+        <p>The rule is one sentence: <b>buy where they make it, sell where they
+        can't.</b> Every world's market shows prices before you commit. Watch the
+        Galaxy Log for market events — a glut or shortage somewhere is free money
+        for whoever flies first.</p>
+        <div class="tablewrap"><table>
+            <thead><tr><th>Good</th><th>What it is</th><th>The play</th></tr></thead>
+            <tbody>
+                <tr><td><span class="swatch" style="background:#ffff00"></span><b>Glowgrain</b></td>
+                    <td>Engineered staple crop — banks light all day, pays it out all night</td>
+                    <td>Cheap at Agricon Prime; feed the worlds that can't farm</td></tr>
+                <tr><td><span class="swatch" style="background:#00ffff"></span><b>Cognition Cores</b></td>
+                    <td>Shipmind lattices grown at the Dreamworks; each hums one constant note</td>
+                    <td>Tech Hub Alpha exports; farm and mining worlds pay up</td></tr>
+                <tr><td><span class="swatch" style="background:#ff8800"></span><b>Ferrovolt Ore</b></td>
+                    <td>Charge-bearing iron, warm to the touch — the reason the Combine came</td>
+                    <td>Dug at Mining Station 7; industry elsewhere wants it</td></tr>
+                <tr><td><span class="swatch" style="background:#ff00ff"></span><b>Nebula Silk</b></td>
+                    <td>Gas-harvested polymer, woven wealth — the reach's only new-made luxury</td>
+                    <td>Core World Central's game; sell where money settles</td></tr>
+                <tr><td><span class="swatch" style="background:#66ff99"></span><b>Panacea Vials</b></td>
+                    <td>Reef-lab cure-alls from Meridian Deep; each vial glows faintly</td>
+                    <td>The Guild's monopoly — everyone needs medicine</td></tr>
+                <tr><td><span class="swatch" style="background:#cc99ff"></span><b>Precursor Relics</b></td>
+                    <td>Fragments of the builders, still transmitting</td>
+                    <td>Dug from Ossuary Drift; collectors pay, the Void Choir boards</td></tr>
+                <tr><td><span class="swatch" style="background:#ff44cc"></span><b>Voidbloom</b></td>
+                    <td>A psychoactive flower that grows only where the signal is strong</td>
+                    <td><span style="color:var(--danger)">Contraband.</span> Banned at
+                        lawful ports; the frontier asks no questions</td></tr>
+                <tr><td><span class="swatch" style="background:#88ffee"></span><b>Repair Kits</b></td>
+                    <td>Sealed Combine surplus, guaranteed by a company that no longer exists</td>
+                    <td>Carry some always — they're what <kbd>R</kbd> spends</td></tr>
+            </tbody>
+        </table></div>
+
+        <h3>The seven worlds</h3>
+        <div class="tablewrap"><table>
+            <thead><tr><th>Charter name</th><th>Locals say</th><th>Type</th><th>Worth knowing</th></tr></thead>
+            <tbody>
+                <tr><td><b>Agricon Prime</b></td><td>"the Lantern"</td><td>agricultural</td>
+                    <td>Gentlest world in the reach. Exports calories, imports everything clever. You start here.</td></tr>
+                <tr><td><b>Mining Station 7</b></td><td>"the Drum"</td><td>industrial</td>
+                    <td>Ferrovolt lode; the seams sing when the drills bite. Rustfang territory.</td></tr>
+                <tr><td><b>Tech Hub Alpha</b></td><td>"the Dreamworks"</td><td>technology</td>
+                    <td>Orbital foundries where shipminds dream themselves into being. Best engines and shields.</td></tr>
+                <tr><td><b>Frontier Outpost</b></td><td>"Lastlight"</td><td>frontier</td>
+                    <td>Last dock before the dark. No customs, no questions, no refunds. Serious weapons.</td></tr>
+                <tr><td><b>Core World Central</b></td><td>"the Ledger"</td><td>core</td>
+                    <td>Old money and an appetite for everything the rim digs up.</td></tr>
+                <tr><td><b>Meridian Deep</b></td><td>"the Deep"</td><td>ocean</td>
+                    <td>Storm-wracked reef-labs; the reach's medicine. Iron Shoal waters.</td></tr>
+                <tr><td><b>Ossuary Drift</b></td><td>—</td><td>ruins</td>
+                    <td>A shattered precursor necropolis. Relics pay well because diggers don't always come back.</td></tr>
+            </tbody>
+        </table></div>
+
+        <p><b>Contracts.</b> The mission board at any Dock posts delivery contracts
+        and bounties. Contracts pay better than spot trading if the route suits you —
+        and certain perks and mods sweeten them further.</p>
+        <p><b>Events on the road.</b> Space isn't empty between worlds: fuel depots,
+        derelicts, asteroid fields, distress signals. They appear as objects in
+        space — fly close and use <kbd>Space</kbd> (or <kbd>E</kbd> if a planet is
+        hogging the key). Nothing forces you; "keep flying" is always an option.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="trouble">
+    <div class="panel-head"><span class="g">⚔</span><h2>Trouble</h2><span class="no">§ 07</span></div>
+    <div class="panel-body">
+        <p>Three cartels raid these lanes, and each is somebody's grievance with a
+        paint job. Every fight is somebody's errand:</p>
+        <ul>
+            <li><b style="color:#ff8844">Rustfang Cartel</b> — the Drum's abandoned
+            shift crews, three generations feral. They hit cargo, not crews; in
+            their telling, the reach still owes them back pay.</li>
+            <li><b style="color:var(--violet)">Void Choir</b> — signal-survey techs
+            who listened too long. They raid for relics and shipminds, never money.
+            Carrying relics makes you interesting to them. You don't want to be
+            interesting to them.</li>
+            <li><b style="color:#88aacc">Iron Shoal</b> — Meridian Deep's
+            dispossessed harvest crews. They fly like divers: patient, then sudden.</li>
+        </ul>
+        <h3>Your guns</h3>
+        <p>Lasers build <b>heat</b> — an overheated barrel glows amber on the
+        schematic and won't fire until it cools. Missiles (<kbd>C</kbd>) hit hard
+        but come out of a finite rack; rearm at any Dock. Buy new laser systems at
+        shipyards and cycle what you own with <kbd>Z</kbd>:</p>
+        <div class="tablewrap"><table>
+            <thead><tr><th>System</th><th>Character</th></tr></thead>
+            <tbody>
+                <tr><td><b>Single</b></td><td>Standard forward cannon. The trunk of the tree.</td></tr>
+                <tr><td><b>Twin</b></td><td>Two parallel barrels — wide hits, moderate heat.</td></tr>
+                <tr><td><b>Spread</b></td><td>Three-shot fan — crowd control, runs hot.</td></tr>
+                <tr><td><b>Seeker</b></td><td>Precursor guidance — shots curve toward pirates. It hums when it locks.</td></tr>
+            </tbody>
+        </table></div>
+        <p>Shields recharge on their own after a few calm seconds; hull does not —
+        repair at a Dock, or use <kbd>R</kbd> and a Repair Kit to field-fix a
+        knocked-out subsystem (dead engine, dark life support) in the middle of the
+        fight.</p>
+        <h3>Bounties, streaks, and grudges</h3>
+        <p>Kills chain into a <b>streak</b> that multiplies bounty payouts — dying
+        resets it. Named cartel bosses carry posted bounties. And the cartels keep
+        books too: hurt a faction enough and it holds a <b>grudge</b> (check the
+        Reputation tab) — grudged factions hunt you harder, mount raid bands with a
+        shielded boss who only unshields when the minions are down, and their
+        grudges literally shape which sites they occupy out in the dark.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="dying">
+    <div class="panel-head"><span class="g">✝</span><h2>When you die</h2><span class="no">§ 08</span></div>
+    <div class="panel-body">
+        <p>Hull hits zero, and the ship shatters where it flew. Death is real here,
+        but it isn't the end — it's an expensive, recoverable moment:</p>
+        <ul>
+            <li><b>You lose 25% of your credits</b>, on the spot.</li>
+            <li><b>Your cargo doesn't die with the ship.</b> It scatters at the wreck
+            as drifting pods — and anyone can scoop them, including the family member
+            who watched you blow up. Race back from respawn; the pods have a long
+            fuse, not an infinite one.</li>
+            <li><b>Your bounty streak resets.</b></li>
+            <li>After a few seconds watching the wreck burn, you respawn near
+            Agricon Prime — hull at 25%, shields full, dignity negotiable.</li>
+        </ul>
+        <div class="note danger-note"><b>THE REACH SEES YOU FALL.</b> Online, your
+        wreck appears on every pilot's screen, and the world's chronicle records
+        who fell and where. Fly like people are watching, because they are.</div>
+        <p><span class="muted">XP, rank, perks, charted discoveries, your ship, and
+        its upgrades all survive death. Only the credits tax, the scattered hold,
+        and the streak are on the line.</span></p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="fuel">
+    <div class="panel-head"><span class="g">◮</span><h2>Fuel &amp; the sail</h2><span class="no">§ 09</span></div>
+    <div class="panel-body">
+        <p>Thrust burns fuel. Watch the gauge in the vitals strip, and top off at
+        every Dock — it's the first gauge-button for a reason.</p>
+        <p>Run the tank dry out in the black and the ship doesn't die — it unfurls
+        <b>solar sails</b> and crawls on starlight at a twentieth of your speed.
+        The Now zone flips to EMERGENCY POWER and points you at the nearest fuel
+        stop. It is survivable. It is also extremely humbling, possibly in front of
+        your siblings.</p>
+        <p>Fuel depot events out in space sell emergency fuel at emergency prices.
+        Better engines and the right perks stretch every unit further.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="somebody">
+    <div class="panel-head"><span class="g">✪</span><h2>Becoming somebody</h2><span class="no">§ 10</span></div>
+    <div class="panel-body">
+        <p>Credits buy things; <b>XP makes you somebody</b>. Kills, trades,
+        deliveries, and discoveries all feed it, and it only ever goes up — it
+        belongs to you, not the ship. Rank isn't a navy's ladder (there are no
+        navies); it's your reputation among dockhands and dispatchers:</p>
+        <div class="glyphrow">
+            <span><b>·</b>Deckhand</span><span><b>▸</b>Runner</span>
+            <span><b>★</b>Pilot</span><span><b>★★</b>Veteran</span>
+            <span><b>✦</b>Ace</span><span><b>✪</b>Captain</span>
+            <span><b>✪✪</b>Shipmaster</span><span><b>❂</b>Chartbreaker</span>
+            <span><b>❂❂</b>Living Legend</span>
+        </div>
+        <h3>Perks — one choice per promotion</h3>
+        <p>Every rank-up offers one perk from each of three lanes. This is where two
+        pilots flying the same hull become different people:</p>
+        <div class="lanes">
+            <div class="lane fighter"><h4>⚔ FIGHTER</h4><ul>
+                <li><b>Gunner's Instinct</b> <span>— lasers cycle 15% faster</span></li>
+                <li><b>Missile Racks</b> <span>— +3 missile capacity</span></li>
+                <li><b>Cold Barrels</b> <span>— shots build 25% less heat</span></li>
+                <li><b>Warhead Tuning</b> <span>— missiles hit 30% harder</span></li>
+            </ul></div>
+            <div class="lane trader"><h4>⚖ TRADER</h4><ul>
+                <li><b>Silver Tongue</b> <span>— sell everything for 5% more</span></li>
+                <li><b>Packrat</b> <span>— +3 cargo space</span></li>
+                <li><b>Market Savvy</b> <span>— buy everything 5% cheaper</span></li>
+                <li><b>Contract Broker</b> <span>— contracts pay 20% more</span></li>
+            </ul></div>
+            <div class="lane explorer"><h4>✧ EXPLORER</h4><ul>
+                <li><b>Fuel Sipper</b> <span>— burn 20% less fuel</span></li>
+                <li><b>Long-Range Scanner</b> <span>— minimap sees 40% further</span></li>
+                <li><b>Emergency Thrusters</b> <span>— damaged engines limp at 60%</span></li>
+                <li><b>Deflector Tuning</b> <span>— +10 shield capacity</span></li>
+            </ul></div>
+        </div>
+        <h3>The hull ladder</h3>
+        <p>The hull is the ship's body — it sets the bunks, the hold, and how far
+        every upgrade track can go. Buying a new one is THE progression moment, and
+        naming it is what makes it a character instead of a stat sheet. Everyone
+        starts in a one-seater, dreaming at shipyard windows:</p>
+        <div class="tablewrap"><table>
+            <thead><tr><th>Hull</th><th>Class</th><th class="num">Price</th><th class="num">Hold</th><th class="num">Bunks</th><th>Character</th></tr></thead>
+            <tbody>
+                <tr><td><b>Sparrow Skiff</b></td><td>one-seater</td><td class="num">$2,500</td><td class="num">10</td><td class="num">0</td>
+                    <td>A cockpit, an engine, and hope.</td></tr>
+                <tr><td><b>Magpie Courier</b></td><td>two-seater</td><td class="num">$6,000</td><td class="num">16</td><td class="num">1</td>
+                    <td>Quick little packet-runner with a spare bunk.</td></tr>
+                <tr><td><b>Pelican Freighter</b></td><td>hauler</td><td class="num">$18,000</td><td class="num">40</td><td class="num">2</td>
+                    <td>A flying warehouse. Slow, stubborn, pays for itself.</td></tr>
+                <tr><td><b>Kestrel Gunship</b></td><td>warbird</td><td class="num">$24,000</td><td class="num">14</td><td class="num">2</td>
+                    <td>Twin spinal mounts and a temper. Raiders know the silhouette.</td></tr>
+                <tr><td><b>Albatross Clipper</b></td><td>legend</td><td class="num">$60,000</td><td class="num">30</td><td class="num">3</td>
+                    <td>The ship they paint on station walls.</td></tr>
+            </tbody>
+        </table></div>
+        <h3>Mods, upgrades &amp; crew</h3>
+        <ul>
+            <li><b>Upgrades</b> (engines, cargo, fuel tank, hull plate, shields,
+            weapons) are sold at shipyards — each world specializes, and the
+            frontier sells the serious hardware. Your hull caps each track.</li>
+            <li><b>Named mods</b> live at the mechanic's bench: one-of-a-kind used
+            parts with a past, and most carry a quirk alongside the gift — the
+            compressor that runs your lasers hot, the plating that's grown rather
+            than forged. Two ships with the same hull diverge here.</li>
+            <li><b>Crew</b> hire on at Docks and fill your hull's bunks — each hand
+            brings a bonus, and higher rank opens more of them to you.</li>
+        </ul>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="the-dark">
+    <div class="panel-head"><span class="g">?</span><h2>The dark</h2><span class="no">§ 11</span></div>
+    <div class="panel-body">
+        <p>Past the charted worlds, the map just… stops. It shouldn't. Out in the
+        dark are places the charts don't show — derelicts, beacons, anomalies,
+        things the dockhands only trade rumors about. They say seven. They argue
+        about which seven.</p>
+        <ul>
+            <li><b>The tease.</b> Fly far enough out and your sensors may ping a
+            faint <b>?</b> — an unknown contact, bearing only. Your scanner range
+            sets how far you can smell one.</li>
+            <li><b>The chart.</b> Reach it and you <b>chart</b> it: a discovery
+            banner, a real reward, and the site becomes a permanent landmark on the
+            <em>family's shared map</em> — stamped "first charted by" whoever got
+            there first. Everyone who visits later still gets their own discovery
+            reward; only the name is first-come.</li>
+            <li><b>✦ Salvage.</b> Charted sites regenerate a salvage cache every
+            12–24 hours of real time — even while the server sleeps. A ready cache
+            glows on the map, and it's <b>first-come, galaxy-wide</b>. Fly out
+            before your brother does.</li>
+            <li><b>⚑ Occupations.</b> Every so often a cartel digs in at a charted
+            site — salvage blocked, their flag on your map. Fly out and the band
+            musters at the site to meet you. Break it, kill the boss, and the site
+            is liberated, the cache opens on the spot, and the chronicle credits
+            you by name.</li>
+        </ul>
+        <p class="flavor">Some of what's out there hums. Some of it has gone
+        quiet, which is worse. Chart it anyway — that's what the reach remembers
+        you for.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="world-moves">
+    <div class="panel-head"><span class="g">✦</span><h2>The world moves</h2><span class="no">§ 12</span></div>
+    <div class="panel-body">
+        <p>The server keeps a <b>chronicle</b> — the reach's own history book.
+        Charters, boss kills, market swings, salvages, occupations, liberations,
+        and yes, deaths: if it mattered, it's written down, with names.</p>
+        <ul>
+            <li><b>While you were away.</b> Log in after time away and you get a
+            digest — "While you were away, N things happened" — before you've even
+            undocked.</li>
+            <li><b>The Galaxy Log</b> tab holds the full ledger, newest first, with
+            unread entries highlighted and a badge pulling your eye when history
+            happens while you're busy.</li>
+            <li><b>Other pilots are real.</b> You'll see the family flying live —
+            and traffic, raid bands, market prices, occupations, and loot drops are
+            all shared. Kill loot and salvage are first-come; discovery rewards are
+            per-visitor. Nobody can take your XP.</li>
+        </ul>
+        <p>The long game in the reach isn't a throne — there are no thrones. It's
+        <b>your name in the chronicle</b>, over and over, until the dockhands tell
+        stories about you.</p>
+    </div>
+</section>
+
+<!-- ==================================================================== -->
+<section id="reference">
+    <div class="panel-head"><span class="g">≡</span><h2>Quick reference</h2><span class="no">§ 13</span></div>
+    <div class="panel-body">
+        <div class="tablewrap"><table>
+            <thead><tr><th>Key</th><th>Does</th><th>Key</th><th>Does</th></tr></thead>
+            <tbody>
+                <tr><td><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></td><td>fly</td>
+                    <td><kbd>X</kbd></td><td>laser</td></tr>
+                <tr><td><kbd>Space</kbd></td><td>dock / undock / interact</td>
+                    <td><kbd>C</kbd></td><td>missile</td></tr>
+                <tr><td><kbd>M</kbd></td><td>map</td>
+                    <td><kbd>Z</kbd></td><td>switch laser system</td></tr>
+                <tr><td><kbd>Esc</kbd></td><td>back out of anything</td>
+                    <td><kbd>R</kbd></td><td>field repair (uses a kit)</td></tr>
+                <tr><td><kbd>E</kbd></td><td>event when planet blocks Space</td>
+                    <td></td><td></td></tr>
+            </tbody>
+        </table></div>
+        <ul>
+            <li>Buy where they make it, sell where they can't.</li>
+            <li>Top off fuel at every dock. Carry Repair Kits.</li>
+            <li>Shields come back on their own; hull doesn't.</li>
+            <li>Dying costs 25% of your credits and scatters your cargo at the
+            wreck — race back for the pods.</li>
+            <li>✦ on the map means salvage is ready — first one there takes it.</li>
+            <li>⚑ on the map means a fight and a payout for whoever clears it.</li>
+            <li>A faint <b>?</b> means the map is about to get bigger. Go look.</li>
+        </ul>
+    </div>
+</section>
+
+<footer class="backcover">
+    <div>SPACE TRADERS · the Reach · played on the family server</div>
+    <div>This handbook describes the game as currently deployed. When the game
+    grows, the handbook grows.</div>
+    <p class="sig">Fly safe. And if your instruments ever start singing along with
+    something out there — write down the tune before you run.</p>
+</footer>
+
+</div>
+</main>
+</div>
+
+<script>
+// Scroll-spy: light the chapter you're reading. Purely cosmetic; the page
+// works fully without it.
+(function () {
+    if (!('IntersectionObserver' in window)) return;
+    const links = Array.from(document.querySelectorAll('nav.rail a'));
+    const byId = {};
+    links.forEach(a => { byId[a.getAttribute('href').slice(1)] = a; });
+    const seen = new Map();
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => seen.set(e.target.id, e.isIntersecting));
+        const current = Array.from(seen.entries()).find(([, v]) => v);
+        if (!current) return;
+        links.forEach(a => a.classList.remove('here'));
+        const link = byId[current[0]];
+        if (link) link.classList.add('here');
+    }, { rootMargin: '-15% 0px -70% 0px' });
+    document.querySelectorAll('section[id]').forEach(s => io.observe(s));
+})();
+</script>
+
+</body>
+</html>
