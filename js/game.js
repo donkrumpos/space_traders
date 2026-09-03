@@ -190,6 +190,11 @@ function init() {
 
     // Event listeners
     document.addEventListener('keydown', (e) => {
+        // Typing in a text field (charter desk, any rename input) must not
+        // fire flight hotkeys: Space would undock mid-word (and preventDefault
+        // eats the character), M opens the map, X/C/Z/E/R all act.
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
         game.keys[e.code] = true;
         if (game.deathState) { e.preventDefault(); return; } // the wreck takes no orders
         if (e.code === 'Space') {

@@ -1283,6 +1283,82 @@ VERIFY_SUITES.deals = (assert) => {
     }
 };
 
+VERIFY_SUITES.guards = (assert) => {
+    // Developer-look fixes (2026-09-03): typing must not fire flight hotkeys,
+    // a doc saved docked must restore the docked screen, and every traded
+    // good needs market-event flavor text (missing ones read "undefined").
+
+    // 1) Hotkeys ignore text fields. Space mid-"Reef Wardens" used to undock
+    //    and eat the character; M opened the map over the charter desk.
+    const savedDock = {
+        isDocked: game.isDocked, planet: game.currentPlanet,
+        engaged: game.isEngaged, event: game.currentEvent,
+        map: game.map.showFullMap
+    };
+    const inp = document.createElement('input');
+    document.body.appendChild(inp);
+    const key = (target, code) =>
+        target.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+    game.map.showFullMap = false;
+    key(inp, 'KeyM');
+    assert('M typed in an input leaves the map closed', game.map.showFullMap === false);
+    game.isDocked = true;
+    key(inp, 'Space');
+    assert('Space typed in an input does not undock', game.isDocked === true);
+    key(document.body, 'KeyM');
+    assert('M outside an input still toggles the map', game.map.showFullMap === true);
+    game.map.showFullMap = savedDock.map;
+    inp.remove();
+
+    // 2) Every good a planet produces or demands has event flavor both ways
+    //    (medicine/parts/contraband/relics were missing — labels printed
+    //    "undefined at <port>" into toasts and the permanent chronicle).
+    const goods = new Set();
+    SIM_PLANETS.forEach(p => {
+        Object.keys(p.produces).forEach(g => goods.add(g));
+        Object.keys(p.demands).forEach(g => goods.add(g));
+    });
+    assert('every traded good has shortage and glut flavor text',
+        [...goods].every(g =>
+            EconomyCore.MARKET_EVENT_FLAVORS.sell[g] && EconomyCore.MARKET_EVENT_FLAVORS.buy[g]));
+    let cleanLabels = true;
+    for (let i = 0; i < 200; i++) {
+        const ev = EconomyCore.rollMarketEvent(SIM_PLANETS);
+        if (ev && ev.label.includes('undefined')) cleanLabels = false;
+    }
+    assert('market event labels never read undefined', cleanLabels);
+
+    // 3) A character doc saved while docked restores the docked SCREEN on
+    //    load, and re-points currentPlanet at the live planet object (a
+    //    serialized copy breaks net.js's `currentPlanet === planet` checks).
+    const planet = game.planets[1];
+    game.isDocked = true;
+    game.currentPlanet = planet;
+    game.isEngaged = false;
+    game.currentEvent = null;
+    characterManager.updateCharacterFromGame();
+    characterManager.character.gameState.currentPlanet = JSON.parse(JSON.stringify(planet));
+    document.getElementById('ui').classList.remove('trading');
+    document.getElementById('tradingPanel').style.display = 'none';
+    characterManager.applyCharacterToGame();
+    assert('a doc saved docked restores the docked screen',
+        game.isDocked === true &&
+        document.getElementById('tradingPanel').style.display === 'block' &&
+        document.getElementById('ui').classList.contains('trading'));
+    assert('restore re-points at the live planet object', game.currentPlanet === planet);
+
+    // Put the world back the way this suite found it
+    game.isDocked = savedDock.isDocked;
+    game.currentPlanet = savedDock.planet;
+    game.isEngaged = savedDock.engaged;
+    game.currentEvent = savedDock.event;
+    if (!game.isDocked) {
+        document.getElementById('ui').classList.remove('trading');
+        document.getElementById('tradingPanel').style.display = 'none';
+    }
+    characterManager.updateCharacterFromGame();
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');
