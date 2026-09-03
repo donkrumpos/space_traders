@@ -59,11 +59,30 @@ net-fail feedback, lore-voice copy trims. Gates re-verified after.
 solo 221/221 · net 167/167.** (Solo growth: `banner` suite; net: [faction]
 suite, 35 asserts total.)
 
+**Developer look STARTED 2026-09-03, not finished.** Local test recipe
+(run from repo root, then two non-storage-sharing windows):
+
+```bash
+FAMILY_SECRET=dev-secret DB_PATH=./dev-world.db VERIFY_DEBUG=1 STATIC_DIR=. node server/server.mjs
+# http://localhost:8378/index.html?pilot=Dad&secret=dev-secret&ws=ws://127.0.0.1:8378
+# http://localhost:8378/index.html?pilot=Arthur&secret=dev-secret&ws=ws://127.0.0.1:8378  (private window)
+```
+
+The developer got as far as the perk picker + finding the charter desk
+(questions asked: "is the perk thing a class system?", "where's the
+desk?" — mild discoverability signal for the watchlist). Not yet
+verified in-browser: founding, invite/join, ghost tint, the claim flow,
+contested state. `dev-world.db*` is the throwaway test world
+(gitignored). Test checklist: found (needs `grantXP(400)` +
+`game.credits = 20000`) → invite Arthur → both rosters → ghost name-tag
+color → `warpToPOI('wraith_cache')` + chart + "◎ raise the banner
+here" → ring on maps + chronicle → optional contested via
+`net.send({t:'debug.occupyPOI', id:'wraith_cache'})`.
+
 **NEXT:**
-1. **Developer look at the faction build** (serve local, found a banner
-   with two browsers) → then merge `feature/player-factions` + themisto
-   deploy (explicit, per RUNBOOK — server changes: world.mjs registry +
-   claim, combat.mjs seam fix).
+1. **Finish the developer look** (checklist above) → then merge
+   `feature/player-factions` + themisto deploy (explicit, per RUNBOOK —
+   server changes: world.mjs registry + claim, combat.mjs seam fix).
 2. **Faction backlog, in rough order:** the Tally (direction C — structured
    want-kinds start counting member deeds; the `want.kind` field is
    already stored for exactly this), faction-flavored VENDETTA amnesty
