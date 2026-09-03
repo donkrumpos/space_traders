@@ -82,6 +82,13 @@ function formatChronicleEntry(e) {
             return `${e.founder} raised the ${e.faction} banner — "${e.want}"`;
         case 'faction.joined':
             return `${e.pilot} signed on with the ${e.faction}`;
+        case 'faction.milestone':
+            // The Tally speaks in the errand's own words (lore-bible §8 rule 4)
+            return e.want === 'trade'
+                ? `the ${e.faction} have moved ${e.count} crates the reach wouldn't`
+                : e.want === 'grudge'
+                    ? `the ${e.faction} have called in ${e.count} of the cartel's debts`
+                    : `the ${e.faction} have made ${e.count} stands at their claim`;
         case 'faction.left':
             return `${e.pilot} walked from the ${e.faction}`;
         case 'faction.disbanded':

@@ -212,6 +212,8 @@ export function liberatePOI(id, pilot) {
     recordChronicle('poi.liberated', by
         ? { pilot, faction, poi: id, name: meta.name, by }
         : { pilot, faction, poi: id, name: meta.name });
+    // The Tally: repelling raiders from your own claim is a stand made
+    if (by) creditFactionDeed(mine, 'place', 1);
     broadcast(poiStateMessage(id));
     markDirty();
 }
@@ -245,6 +247,42 @@ function factionOfPilot(pilot) {
 
 function factionsMessage() {
     return { t: 'faction.update', factions: world.factions };
+}
+
+// --- The Tally (M7, faction direction C): deeds counted toward the want ----
+// Authority-point deeds only — every hook sits where the server already
+// adjudicates the event: the trade handler (units members sell), the
+// damage.claim kill path in combat.mjs (raiders broken), and the claim's
+// liberation credit + claimed-site salvage below (stands made). A deed
+// counts only for the faction whose declared want.kind matches. Milestones
+// are a short authored ladder (three tiers, ~×5); each tier chronicles once
+// (faction.milestone) and the tally rides the registry — faction.update and
+// the world snapshot carry it with no new wire messages.
+const TALLY_LADDER = {
+    trade: [100, 500, 2500],   // units sold by members
+    grudge: [10, 50, 250],     // raiders' errands ended by members
+    place: [5, 25, 125],       // stands made at the claim (repels + salvages)
+};
+
+function creditFactionDeed(faction, kind, amount) {
+    if (!faction || !faction.want || faction.want.kind !== kind) return;
+    const ladder = TALLY_LADDER[kind] || [];
+    const t = faction.tally ||
+        (faction.tally = { count: 0, tier: 0, nextAt: ladder[0] || null });
+    t.count += amount;
+    while (t.tier < ladder.length && t.count >= ladder[t.tier]) {
+        t.tier++;
+        recordChronicle('faction.milestone', {
+            faction: faction.name, want: kind, count: ladder[t.tier - 1], tier: t.tier
+        });
+    }
+    t.nextAt = t.tier < ladder.length ? ladder[t.tier] : null;
+    broadcast(factionsMessage());
+    markDirty();
+}
+
+export function creditPilotDeed(pilot, kind, amount) {
+    creditFactionDeed(factionOfPilot(pilot), kind, amount);
 }
 
 export function recordChronicle(kind, detail) {
@@ -386,6 +424,8 @@ export function handleWorldMessage(ws, msg, send) {
             EconomyCore.tradeImpact(market, meta, msg.good, msg.side, qty);
             send(ws, { t: 'trade.result', reqId: msg.reqId, ok: true, prices });
             broadcast({ t: 'market.update', planet: msg.planet, market });
+            // The Tally: units a member sells count toward a 'trade' want
+            if (msg.side === 'sell') creditPilotDeed(ws.pilot, 'trade', qty);
             markDirty();
             return true;
         }
@@ -471,6 +511,11 @@ export function handleWorldMessage(ws, msg, send) {
             }
             st.nextSalvageAt = rollNextSalvageAt();
             recordChronicle('poi.salvaged', { pilot: ws.pilot, poi: id, name: meta.name });
+            // The Tally: working your own claimed site is a stand made
+            const salvagerBanner = factionOfPilot(ws.pilot);
+            if (st.claim && salvagerBanner && salvagerBanner.name === st.claim.faction) {
+                creditPilotDeed(ws.pilot, 'place', 1);
+            }
             send(ws, { t: 'poi.salvaged', reqId: msg.reqId, ok: true, id,
                        reward: meta.salvage || { credits: 200, xp: 15 },
                        nextSalvageAt: st.nextSalvageAt });

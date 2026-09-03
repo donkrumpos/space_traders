@@ -21,7 +21,7 @@
 import config from './config.mjs';
 import {
     getGrudges, mergeGrudgesMax, bumpGrudge, applyTraderImpact,
-    recordChronicle, getOccupiedPOIs, liberatePOI
+    recordChronicle, getOccupiedPOIs, liberatePOI, creditPilotDeed
 } from './world.mjs';
 
 // Side-effect imports set the globals (same files, no fork — PROTOCOL.md
@@ -387,6 +387,8 @@ export function handleCombatMessage(ws, msg, send) {
                 reward: Math.round(outcome.reward),
                 drops: wireDrops
             });
+            // The Tally: a raider's errand ended counts toward a 'grudge' want
+            creditPilotDeed(ws.pilot, 'grudge', 1);
             if (outcome.grudgeDelta) {
                 bumpGrudge(outcome.grudgeDelta.faction, outcome.grudgeDelta.amount);
                 broadcast({ t: 'grudge.update', grudges: getGrudges() });
