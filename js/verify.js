@@ -140,6 +140,16 @@ VERIFY_SUITES.banner = (assert) => {
     assert('no banner + no grudges → Rep page hidden',
         document.getElementById('factionPanel').style.display === 'none');
 
+    // The charter-desk teaser: a factionless pilot with grudges gets the
+    // signpost — but the teaser alone must never open the page (the clean
+    // pilot above stays hidden: decoration, not content)
+    pilot.grudges = { 'Iron Shoal': 2 };
+    updateFactionUI();
+    assert('factionless with grudges → the charter-desk signpost shows',
+        document.getElementById('factionPanel').style.display === 'block' &&
+        document.getElementById('factionList').innerHTML.includes('charter desk is in any shipyard'));
+    pilot.grudges = {};
+
     pilot.faction = { name: 'Reef Wardens', color: '#44ddaa', want: { kind: 'place', words: 'the reefs back' } };
     updateFactionUI();
     const list = document.getElementById('factionList');
@@ -152,6 +162,8 @@ VERIFY_SUITES.banner = (assert) => {
     updateFactionUI();
     assert('banner and grudges share the page under section headers',
         list.innerHTML.includes('GRUDGES HELD AGAINST YOU') && list.textContent.includes('Iron Shoal'));
+    assert('members are not advertised to (no teaser under a banner)',
+        !list.innerHTML.includes('charter desk is in any shipyard'));
 
     const desk = document.getElementById('charterDesk');
     updateCharterDeskUI();

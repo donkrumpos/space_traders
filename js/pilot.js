@@ -369,7 +369,14 @@ function updateFactionUI() {
                 style="font-size:10px; padding:1px 6px;">⚖ return ${am.perPoint} ${goods[am.good].name.toLowerCase()}</button>
             settles one point${can ? '' : ` — you hold ${have}`}</div>`;
     }).join('');
-    list.innerHTML = banner +
+    // Factionless with grudges held: the reach is against you — a quiet
+    // signpost to the charter desk (faction-design.md UI sketch). Decoration
+    // on an already-visible page, never the reason the page shows: the
+    // visibility gate above ran first, so a clean pilot keeps a clean sidebar.
+    const teaser = (!banner && held.length)
+        ? `<div style="font-size:10px; font-style:italic; color:#667; margin-bottom:6px;">a banner needs a want — the charter desk is in any shipyard</div>`
+        : '';
+    list.innerHTML = teaser + banner +
         (held.length && banner ? `<div style="font-size:10px; color:#888; letter-spacing:1px; margin:4px 0 2px;">GRUDGES HELD AGAINST YOU</div>` : '') +
         grudgeRows;
     updateRecordsTabs(); // Rep tab appears/badges with held grudges
