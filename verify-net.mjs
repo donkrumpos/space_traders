@@ -1075,6 +1075,36 @@ async function chronicleSuite(t, { browser, base, wsUrl }) {
     t('world.snapshot carries the chronicle', Array.isArray(snapLedger) && snapLedger.length >= 2,
         `snapshot chronicle: ${JSON.stringify(snapLedger).slice(0, 120)}`);
 
+    // 3.5 per-kind caps: market events trim against their own short cap (12),
+    // so churn can never pressure the charter out of the notable history. In
+    // prod the old shared cap turned the whole ledger over in ~9 hours.
+    const tapBase = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    for (let i = 0; i < 14; i++) {
+        await S.G.page.evaluate(() => net.send({
+            t: 'debug.marketEvent', planetName: 'Meridian Deep', goodType: 'food', side: 'sell', multiplier: 2
+        }));
+    }
+    const floodSeen = await until(() => S.G.page.evaluate(s =>
+        (window.__wsTap || []).slice(s).filter(m => m && m.t === 'chronicle.add'
+            && m.entry && m.entry.kind === 'market.event').length >= 14, tapBase));
+    t('14 market events flooded through', !!floodSeen);
+    const churn = await until(() => S.G.page.evaluate(() => {
+        const v = netChronicle();
+        return (v.kinds['market.event'] === 12 && (v.kinds['poi.charted'] || 0) >= 1) ? v : false;
+    }));
+    t('market churn trims to its own cap client-side (charter survives)', !!churn,
+        `kinds=${JSON.stringify(await S.G.page.evaluate(() => netChronicle().kinds))}`);
+    const sinceTrim = await S.G.page.evaluate(() => (window.__wsTap || []).length);
+    await S.G.page.evaluate(() => net.send({ t: 'debug.snapshot' }));
+    const srvLedger = await until(() => S.G.page.evaluate(s => {
+        const snaps = (window.__wsTap || []).slice(s).filter(m => m && m.t === 'world.snapshot' && Array.isArray(m.chronicle));
+        return snaps.length ? snaps[snaps.length - 1].chronicle : false;
+    }, sinceTrim));
+    const srvMarkets = Array.isArray(srvLedger) ? srvLedger.filter(e => e.kind === 'market.event').length : -1;
+    t('server ledger holds the market cap too (charter survives)',
+        srvMarkets === 12 && srvLedger.some(e => e.kind === 'poi.charted'),
+        `server chronicle markets=${srvMarkets} len=${Array.isArray(srvLedger) ? srvLedger.length : 'n/a'}`);
+
     // 4. the away digest: G saves (stamping the server's lastSeen for the
     // pilot), leaves; the world makes news; a returning G sees it as unseen.
     const ackBase = await S.G.page.evaluate(() => netStatus().lastSaveAck || 0);
@@ -1106,6 +1136,10 @@ async function chronicleSuite(t, { browser, base, wsUrl }) {
         netChronicle().latest.some(e => e.at > ls && e.text.includes('Agricon Prime')),
         digest ? digest.lastSeen : 0);
     t('the unseen entry is the away-time news', !!digest && unseenIsNews);
+    // The away news above was market churn only — the digest fired (soft
+    // line path) but nothing "made the chronicle" (per-kind digest split).
+    t('market-only away news counts as churn, not history',
+        !!digest && (await S.G.page.evaluate(() => netChronicle().unseenNotable)) === 0);
 }
 
 // M6 [salvage]: regenerating caches. A charted site's cache reopens on a

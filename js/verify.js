@@ -852,11 +852,53 @@ VERIFY_SUITES.chronicle = (assert) => {
     setChronicleLastSeen(0);
     assert('new pilot has no unseen backlog', netChronicle().unseen === 0);
 
-    // Ledger cap holds
-    const flood = [];
-    for (let i = 0; i < 150; i++) flood.push({ at: now - i, kind: 'market.event', label: `e${i}`, planet: 'X' });
+    // Per-kind caps: market churn trims against its own short cap, so a flood
+    // of market events can never pressure real history out of the ledger.
+    const flood = [{ at: now - 9 * 3600 * 1000, kind: 'poi.charted', pilot: 'Old', poi: 'o', name: 'Old Site' }];
+    for (let i = 150; i > 0; i--) flood.push({ at: now - i * 1000, kind: 'market.event', label: `e${i}`, planet: 'X' });
     applyChronicleSnapshot(flood);
-    assert('client ledger caps at 100', netChronicle().count === 100);
+    view = netChronicle();
+    assert('market churn trims to its own short cap',
+        view.kinds['market.event'] === CHRONICLE_CLIENT_MARKET_MAX &&
+        view.count === CHRONICLE_CLIENT_MARKET_MAX + 1);
+    assert('a market flood cannot evict history', view.kinds['poi.charted'] === 1);
+    applyChronicleAdd({ at: now, kind: 'market.event', label: 'live one', planet: 'X' });
+    view = netChronicle();
+    assert('live market adds trim the same way',
+        view.kinds['market.event'] === CHRONICLE_CLIENT_MARKET_MAX &&
+        view.kinds['poi.charted'] === 1 &&
+        view.latest.some(e => e.text === 'live one'));
+
+    // The panel gives markets at most 2 of its 8 visible lines — the freshest
+    // churn stays news, the history behind it stays visible.
+    updateChroniclePanelUI();
+    const listHTML = document.getElementById('chronicleList').innerHTML;
+    assert('panel shows history behind the market tail',
+        listHTML.includes('Old charted Old Site') &&
+        (listHTML.match(/e\d+|live one/g) || []).length === 2);
+
+    // The digest speaks history-first: the headline counts only notable kinds;
+    // market-only news gets one soft line. Recorder swap catches the HUD text.
+    const hudLines = [];
+    const realHud = window.showHudFeedback;
+    window.showHudFeedback = (msg) => hudLines.push(msg);
+    setChronicleLastSeen(now - 3600 * 1000);
+    applyChronicleSnapshot([
+        { at: now - 60 * 1000, kind: 'market.event', label: 'wobble', planet: 'X' },
+        { at: now - 30 * 1000, kind: 'poi.charted', pilot: 'Peer', poi: 'p', name: 'Site' }
+    ]);
+    assert('digest headline counts only what made the chronicle',
+        hudLines.some(l => l.includes('1 thing made the chronicle')) &&
+        !hudLines.some(l => l.includes('wobble')) &&
+        netChronicle().unseenNotable === 1);
+    hudLines.length = 0;
+    setChronicleLastSeen(now - 3600 * 1000);
+    applyChronicleSnapshot([
+        { at: now - 60 * 1000, kind: 'market.event', label: 'wobble', planet: 'X' }
+    ]);
+    assert('market-only news gets the soft line',
+        hudLines.length === 1 && hudLines[0].includes('only the markets stirred'));
+    window.showHudFeedback = realHud;
 
     // Restore — the Log page hides again only when BOTH histories are empty
     // (the ship's journal shares the page since Slice D)
