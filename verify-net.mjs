@@ -1641,6 +1641,75 @@ async function amnestySuite(t, { browser, base, wsUrl }) {
     S.G = null;
 }
 
+// M4 [death]: peers see the wreck. Own-ship destruction reports itself once
+// (pilot.death); the server stamps identity from the socket, validates the
+// killing cartel, names the nearest world, broadcasts pilot.died, and
+// chronicles it errand-voiced. Peer ghosts vanish in the blast and return
+// only after the respawn — no more 4s corpse + silent teleport home.
+async function deathSuite(t, { browser, base, wsUrl }) {
+    S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
+    S.H = await newGamePage(browser, 'VerifyH', { tap: true, stubPerks: true });
+    await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.H.page.goto(`${base}/index.html?pilot=VerifyH&ws=${wsUrl}`, { waitUntil: 'load' });
+    const both = await until(() => S.G.page.evaluate(() => netStatus().online === true))
+        && await until(() => S.H.page.evaluate(() => netStatus().online === true));
+    t('G+H online', !!both);
+
+    const ghostUp = await until(() => S.H.page.evaluate(() =>
+        netGhosts().some(g => g.pilot === 'VerifyG')));
+    t("H sees G's ghost pre-death", !!ghostUp);
+
+    // The real client path: park G off a known world, stamp the killing
+    // cartel the way the fatal bolt would, and run the destruction.
+    const wreck = await S.G.page.evaluate(() => {
+        game.ship.x = 2300; game.ship.y = 1200; // nearest world: Mining Station 7
+        game.damage.lastHitFaction = 'Rustfang Cartel';
+        handlePlayerDestruction();
+        return game.deathState ? { x: game.deathState.x, y: game.deathState.y } : null;
+    });
+    t('G entered the death sequence', !!wreck && wreck.x === 2300);
+
+    const died = await until(() => S.H.page.evaluate(() =>
+        (window.__wsTap || []).find(m => m && m.t === 'pilot.died' && m.pilot === 'VerifyG') || false));
+    t('pilot.died broadcast carries wreck + cartel',
+        !!died && died.x === 2300 && died.y === 1200 && died.faction === 'Rustfang Cartel',
+        JSON.stringify(died));
+
+    t('the wreck blooms on H', !!(await until(() => S.H.page.evaluate(() =>
+        effects.particles.length > 0 || effects.rings.length > 0), { timeout: 3000 })));
+    const gone = await until(() => S.H.page.evaluate(() =>
+        !netGhosts().some(g => g.pilot === 'VerifyG')));
+    t("G's ghost vanishes in the blast", !!gone);
+
+    const entry = await until(() => S.H.page.evaluate(() =>
+        netChronicle().latest.find(e => e.kind === 'pilot.died') || false));
+    t('the ledger records the death, errand-voiced and placed',
+        !!entry && entry.text === 'the Rustfang Cartel collected their toll from VerifyG off Mining Station 7',
+        entry && entry.text);
+
+    // A rapid re-report is one death, not two (the 10s ledger-spam guard) —
+    // and an unknown cartel from another pilot sanitizes to null.
+    await S.G.page.evaluate(() => net.send({ t: 'pilot.death', x: 1, y: 2, faction: 'Total Fabrication' }));
+    await S.H.page.evaluate(() => net.send({ t: 'pilot.death', x: 300, y: 400, faction: 'Total Fabrication' }));
+    const hDied = await until(() => S.G.page.evaluate(() =>
+        (window.__wsTap || []).find(m => m && m.t === 'pilot.died' && m.pilot === 'VerifyH') || false));
+    t('an unknown cartel sanitizes to null', !!hDied && hDied.faction === null, JSON.stringify(hDied));
+    await sleep(400); // G's swallowed re-report rides its own socket — let it land
+    const gDeaths = await S.H.page.evaluate(() =>
+        (window.__wsTap || []).filter(m => m && m.t === 'pilot.died' && m.pilot === 'VerifyG').length);
+    t('a rapid re-report is swallowed (one wreck per death)', gDeaths === 1, `saw ${gDeaths}`);
+
+    // G's 4s sequence runs live: the ghost returns only at the respawn point
+    const back = await until(() => S.H.page.evaluate(() =>
+        netGhosts().find(g => g.pilot === 'VerifyG' && Math.abs(g.x - 1050) < 400) || false),
+        { timeout: 12000 });
+    t("G's ghost returns at the respawn point, not the wreck", !!back);
+
+    await S.G.context.close().catch(() => {});
+    await S.H.context.close().catch(() => {});
+    S.G = S.H = null;
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1659,6 +1728,7 @@ const SUITES = [
     ['pressure', pressureSuite],
     ['tally', tallySuite],
     ['amnesty', amnestySuite],
+    ['death', deathSuite],
 ];
 
 // ---------------------------------------------------------------------------

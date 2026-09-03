@@ -70,6 +70,14 @@ const net = {
         for (const [pilot, g] of netGhostMap) {
             const ageMs = now - g.at;
             if (ageMs > NET_GHOST_EXPIRY_MS) { netGhostMap.delete(pilot); continue; }
+            // A dead pilot's ghost vanished in the blast; it returns after the
+            // respawn window, wherever its peer.state says it is by then — so
+            // the old corpse-then-teleport-home is invisible.
+            const deadUntil = netDeadPilots.get(pilot);
+            if (deadUntil) {
+                if (now < deadUntil) continue;
+                netDeadPilots.delete(pilot);
+            }
             const dt = Math.min(ageMs, NET_GHOST_EXTRAP_CAP_MS) / 1000; // seconds
             out.push({
                 pilot: g.pilot,
@@ -194,8 +202,10 @@ const NET_HEARTBEAT_MS = 1000;         // always send at least this often
 const NET_DRIFT_EPSILON = 0.5;         // x/y drift below this = "unchanged"
 const NET_GHOST_EXPIRY_MS = 5000;      // drop ghosts 5s after last update
 const NET_GHOST_EXTRAP_CAP_MS = 500;   // cap dead-reckoning extrapolation
+const NET_GHOST_DEAD_MS = 4500;        // hide a dead ghost through its respawn (4s) + margin
 
 const netGhostMap = new Map();         // pilot -> last peer.state + at timestamp
+const netDeadPilots = new Map();       // pilot -> wall-clock ts when the ghost may return
 let netSendTimer = null;
 let netLastSent = null;
 let netLastSentAt = 0;
@@ -331,6 +341,7 @@ function netHandleMessage(msg) {
         case 'peer.leave': {
             net.peers = net.peers.filter(p => p !== msg.pilot);
             netGhostMap.delete(msg.pilot);
+            netDeadPilots.delete(msg.pilot);
             if (msg.pilot !== netIdentity.pilot && typeof showHudFeedback === 'function') {
                 showHudFeedback(`${msg.pilot} has left the sector`, 'info', 3000);
             }
@@ -350,6 +361,24 @@ function netHandleMessage(msg) {
                 thrusting: !!msg.thrusting, docked: !!msg.docked,
                 at: Date.now()
             });
+            break;
+        }
+        case 'pilot.died': {
+            // A peer's ship broke up (M4 death broadcast): the wreck blooms
+            // where it happened and the ghost hides through the respawn
+            // window. Before this, peers saw a 4s corpse then a silent
+            // teleport home. Own deaths already play locally — skip self.
+            if (!msg.pilot || msg.pilot === netIdentity.pilot) break;
+            netDeadPilots.set(msg.pilot, Date.now() + NET_GHOST_DEAD_MS);
+            if (typeof spawnExplosion === 'function' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+                spawnExplosion(msg.x, msg.y, '#00ff00', 0, 0);
+                spawnExplosion(msg.x + 22, msg.y - 14, '#ffaa44', 0, 0);
+                // The boom carries only if the wreck is close to your ship
+                if (typeof playExplosionSound === 'function' && typeof game !== 'undefined' && game.ship) {
+                    const dx = msg.x - game.ship.x, dy = msg.y - game.ship.y;
+                    if (dx * dx + dy * dy < 1200 * 1200) playExplosionSound();
+                }
+            }
             break;
         }
         // --- M3: shared world -------------------------------------------

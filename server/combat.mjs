@@ -450,6 +450,29 @@ export function handleCombatMessage(ws, msg, send) {
             return true;
         }
 
+        case 'pilot.death': {
+            // Own-ship destruction is client-authoritative (M4 split), so the
+            // client reports its wreck; everything else is server-stamped —
+            // identity from the socket (never the payload), the cartel
+            // validated against the authored factions, the nearest world
+            // named for the ledger's sense of place.
+            const x = Number(msg.x), y = Number(msg.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+            const now = Date.now();
+            if (ws.lastDeathAt && now - ws.lastDeathAt < 10000) return true; // one wreck per death — no ledger spam
+            ws.lastDeathAt = now;
+            const faction = CombatCore.PIRATE_FACTIONS.some(f => f.name === msg.faction)
+                ? msg.faction : null;
+            let near = null, best = Infinity;
+            for (const p of SIM_PLANETS) {
+                const d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
+                if (d < best) { best = d; near = p.name; }
+            }
+            broadcast({ t: 'pilot.died', pilot: ws.pilot, x, y, faction });
+            recordChronicle('pilot.died', { pilot: ws.pilot, faction, near });
+            return true;
+        }
+
         case 'debug.spawnEnemy': {
             if (process.env.VERIFY_DEBUG !== '1') return true;
             const tier = CombatCore.ENEMY_TIERS[msg.tier] ? msg.tier : 'scout';
