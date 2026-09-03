@@ -158,6 +158,33 @@ VERIFY_SUITES.banner = (assert) => {
     assert('the charter desk clerk is out offline',
         !!desk && desk.textContent.includes('clerk is out'));
 
+    // The founding gate reads the REAL wallet (game.ship.credits — the desk
+    // was checking a property that doesn't exist, leaving "sign the articles"
+    // disabled forever), and a color pick must not eat a half-typed name.
+    // Force the online desk render; identity is null so registry stays empty.
+    const savedGate = { online: net.online, credits: game.ship.credits, rank: pilot.rank, color: charterSel.color };
+    net.online = true;
+    pilot.rank = FACTION_RANK_MIN;
+    game.ship.credits = FACTION_FEE + 500;
+    charterDeskHTML = null;
+    updateCharterDeskUI();
+    const signBtn = () => desk.querySelector('button[onclick="charterFound()"]');
+    assert('a funded Veteran can sign the articles', !!signBtn() && !signBtn().disabled);
+    document.getElementById('charterName').value = 'Reef Wardens';
+    charterPickColor(FACTION_PALETTE[2]);
+    assert('a color pick keeps the half-typed name',
+        document.getElementById('charterName').value === 'Reef Wardens');
+    game.ship.credits = 100;
+    updateCharterDeskUI();
+    assert('a light wallet disables the articles and says why',
+        signBtn().disabled && desk.textContent.includes('the fee is'));
+    net.online = savedGate.online;
+    game.ship.credits = savedGate.credits;
+    pilot.rank = savedGate.rank;
+    charterSel.color = savedGate.color;
+    charterDeskHTML = null;
+    updateCharterDeskUI();
+
     assert('netFactions() serves the offline mirror',
         netFactions().mine && netFactions().mine.name === 'Reef Wardens');
     assert('chronicle lines cover the faction kinds',

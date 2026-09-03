@@ -119,8 +119,30 @@ function charterPickWant(k) { charterSel.kind = k; updateCharterDeskUI(); }
 let charterDeskHTML = null;
 function setCharterDesk(el, html) {
     if (html === charterDeskHTML) return;
+    // The template string changes on a color/want pick (and on roster
+    // broadcasts), so carry typed text — and the caret — across the rewrite.
+    const keep = {};
+    ['charterName', 'charterWords', 'charterInvitee'].forEach(id => {
+        const inp = document.getElementById(id);
+        if (inp && el.contains(inp)) {
+            keep[id] = {
+                value: inp.value,
+                focused: document.activeElement === inp,
+                selStart: inp.selectionStart, selEnd: inp.selectionEnd
+            };
+        }
+    });
     charterDeskHTML = html;
     el.innerHTML = html;
+    Object.keys(keep).forEach(id => {
+        const inp = document.getElementById(id);
+        if (!inp) return;
+        inp.value = keep[id].value;
+        if (keep[id].focused) {
+            inp.focus();
+            try { inp.setSelectionRange(keep[id].selStart, keep[id].selEnd); } catch (e) {}
+        }
+    });
 }
 
 function updateCharterDeskUI() {
@@ -152,10 +174,10 @@ function updateCharterDeskUI() {
          left papers for you — "<em>${(f.want && f.want.words) || ''}</em>"
          <button onclick="charterJoin('${f.name.replace(/'/g, "\\'")}')">sign on</button></div>`).join('');
     const rank = (game.pilot && game.pilot.rank) || 0;
-    const gateOK = rank >= FACTION_RANK_MIN && game.credits >= FACTION_FEE;
+    const gateOK = rank >= FACTION_RANK_MIN && game.ship.credits >= FACTION_FEE;
     const gateNote = rank < FACTION_RANK_MIN
         ? `the clerk wants a ${PILOT_RANKS[FACTION_RANK_MIN].title}'s name on the articles (you're a ${PILOT_RANKS[rank].title})`
-        : (game.credits < FACTION_FEE ? `the fee is ${FACTION_FEE.toLocaleString()} cr — the desk keeps it either way` : '');
+        : (game.ship.credits < FACTION_FEE ? `the fee is ${FACTION_FEE.toLocaleString()} cr — the desk keeps it either way` : '');
     const swatches = FACTION_PALETTE.map(c =>
         `<span onclick="charterPickColor('${c}')" style="display:inline-block; width:16px; height:16px;
          background:${c}; cursor:pointer; margin-right:4px;
@@ -182,11 +204,11 @@ function charterFound() {
     const name = (document.getElementById('charterName') || {}).value || '';
     const words = (document.getElementById('charterWords') || {}).value || '';
     const rank = (game.pilot && game.pilot.rank) || 0;
-    if (rank < FACTION_RANK_MIN || game.credits < FACTION_FEE) return;
+    if (rank < FACTION_RANK_MIN || game.ship.credits < FACTION_FEE) return;
     net.factionFound(name.trim(), charterSel.color, { kind: charterSel.kind, words: words.trim() })
         .then(res => {
             if (!res.ok) { showHudFeedback(res.reason || 'the clerk shakes their head', 'warning', 5000); return; }
-            game.credits -= FACTION_FEE;
+            game.ship.credits -= FACTION_FEE;
             showHudFeedback(`The ${res.faction.name} banner is in the ledger now — that's forever`, 'success', 6000);
             addShipLog(`Signed the articles: the ${res.faction.name} flies`);
             characterManager.saveCharacter(true);
