@@ -90,15 +90,70 @@
         return (grudges && grudges[name]) || 0;
     }
 
+    // Pirate-pressure tuning (2026-09-03 playtest: "pummelled — cannot even
+    // leave dock"). Every knob the spawn cadence reads, in ONE place so solo
+    // and server pressure match; the server may override via config.mjs
+    // combatTuning (Object.assign at boot). Wealth = credits on the richest
+    // online pilot (server) or the solo pilot. The old 2000/6000 bands were
+    // early-economy numbers — anyone past their first hull upgrade lived at
+    // full pressure.
+    const COMBAT_TUNING = {
+        wealthMid: 8000,            // below this: light pressure (was 2000)
+        wealthHigh: 25000,          // above this: full pressure (was 6000)
+        maxEnemiesByBand: [2, 3, 4],
+        cargoBonusEnemies: 1,       // hauling makes you actively hunted
+        spawnIntervalSec: { hunted: [10, 20], idle: [15, 30] },
+        raidBandGateCredits: 8000,  // bands muster once you're worth robbing (was 2500)
+        raidBandCadenceSec: [240, 420],
+        stationNoSpawnRadius: 600,  // fresh hostiles never spawn this close to a port
+        undockGraceSec: 8           // a just-undocked pilot isn't prey yet
+    };
+
     // Tier pick scales with the target's wealth
     function pickEnemyTier(wealth) {
         const roll = Math.random();
-        if (wealth < 2000) {
+        if (wealth < COMBAT_TUNING.wealthMid) {
             return roll < 0.85 ? 'scout' : 'raider';
-        } else if (wealth < 6000) {
+        } else if (wealth < COMBAT_TUNING.wealthHigh) {
             return roll < 0.45 ? 'scout' : (roll < 0.9 ? 'raider' : 'warlord');
         }
         return roll < 0.2 ? 'scout' : (roll < 0.65 ? 'raider' : 'warlord');
+    }
+
+    function maxEnemiesFor(wealth, hasCargo) {
+        const T = COMBAT_TUNING;
+        const band = wealth < T.wealthMid ? 0 : wealth < T.wealthHigh ? 1 : 2;
+        return T.maxEnemiesByBand[band] + (hasCargo ? T.cargoBonusEnemies : 0);
+    }
+
+    function rollSpawnIntervalSec(hasCargo) {
+        const [lo, hi] = COMBAT_TUNING.spawnIntervalSec[hasCargo ? 'hunted' : 'idle'];
+        return lo + Math.random() * (hi - lo);
+    }
+
+    function rollRaidCadenceSec() {
+        const [lo, hi] = COMBAT_TUNING.raidBandCadenceSec;
+        return lo + Math.random() * (hi - lo);
+    }
+
+    // A spawn spot 800-2000u off the anchor that keeps clear of every port's
+    // approach (the dock-camping fix: pirates stop materialising at the door).
+    // A few re-rolls, then the clearest attempt wins — never throws.
+    function pickSpawnSpot(anchor, planets) {
+        let best = null, bestClear = -Infinity;
+        for (let i = 0; i < 8; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = 800 + Math.random() * 1200;
+            const spot = { x: anchor.x + Math.cos(a) * d, y: anchor.y + Math.sin(a) * d };
+            let clear = Infinity;
+            (planets || []).forEach(p => {
+                const dd = Math.hypot(spot.x - p.x, spot.y - p.y);
+                if (dd < clear) clear = dd;
+            });
+            if (clear >= COMBAT_TUNING.stationNoSpawnRadius) return spot;
+            if (clear > bestClear) { bestClear = clear; best = spot; }
+        }
+        return best;
     }
 
     function makeEnemy(tierKey, x, y) {
@@ -346,10 +401,13 @@
 
             // Pick prey: raid bands and bounty bosses came for a PILOT (the
             // nearest one); common pirates chase whichever target is closer —
-            // a pilot or a hauling freighter
-            let prey = targets[0];
+            // a pilot or a hauling freighter. Targets flagged untargetable
+            // (docked in a station, or inside the undock grace window) are
+            // invisible to prey selection but still anchor the despawn pass.
+            let prey = null;
             let bestSq = Infinity;
             targets.forEach(p => {
+                if (p.untargetable) return;
                 const dSq = Math.pow(enemy.x - p.x, 2) + Math.pow(enemy.y - p.y, 2);
                 if (dSq < bestSq) { bestSq = dSq; prey = p; }
             });
@@ -612,8 +670,9 @@
     }
 
     globalThis.CombatCore = {
-        ENEMY_TIERS, PIRATE_FACTIONS,
-        pickEnemyTier, makeEnemy, makeNamedWarlord,
+        ENEMY_TIERS, PIRATE_FACTIONS, COMBAT_TUNING,
+        pickEnemyTier, maxEnemiesFor, rollSpawnIntervalSec, rollRaidCadenceSec,
+        pickSpawnSpot, makeEnemy, makeNamedWarlord,
         weightedPick, pickRaidFaction, makeRaidBand,
         updateEnemies, applyDamage
     };

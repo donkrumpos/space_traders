@@ -1441,6 +1441,60 @@ async function factionSuite(t, { browser, base, wsUrl, restartServer }) {
     t('occupation cleared, claim intact', !!cleared);
 }
 
+// Pirate-pressure tuning (2026-09-03): the server tracks docked pilots and an
+// undock grace window off the relayed ship.state docked flag — docked/graced
+// pilots are invisible to prey selection, and opening fire (damage.claim)
+// forfeits the grace. The shared COMBAT_TUNING flags ship to the client.
+async function pressureSuite(t, { browser, base, wsUrl }) {
+    S.P = await newGamePage(browser, 'VerifyP', {
+        charDoc: seedCharDoc({ shipName: 'Verify Grace', x: 9000, y: 9000 }),
+        tap: true, stubPerks: true,
+    });
+    const page = S.P.page;
+    await page.goto(`${base}/index.html?pilot=VerifyP&ws=${wsUrl}`, { waitUntil: 'load' });
+    t('P online', !!(await until(() => page.evaluate(() => netStatus().online === true))));
+
+    const tuning = await page.evaluate(() => ({
+        mid: CombatCore.COMBAT_TUNING.wealthMid,
+        gate: CombatCore.COMBAT_TUNING.raidBandGateCredits,
+        radius: CombatCore.COMBAT_TUNING.stationNoSpawnRadius,
+        grace: CombatCore.COMBAT_TUNING.undockGraceSec,
+    }));
+    t('re-scaled tuning flags ship to the client',
+        tuning.mid > 2000 && tuning.gate > 2500 && tuning.radius > 0 && tuning.grace > 0,
+        JSON.stringify(tuning));
+
+    // dock → undock transition opens the grace window server-side (the
+    // client's own 10Hz ship.state stream supplies the closing docked:false)
+    await page.evaluate(() => net.send({ t: 'ship.state', x: 9000, y: 9000, vx: 0, vy: 0, docked: true }));
+    const graced = await until(async () => {
+        const st = await debugState(page);
+        const p = st && st.pilots && st.pilots.VerifyP;
+        return (p && !p.docked && (p.graceUntil || 0) > st.simNow) ? p : false;
+    });
+    t('undocking opens the server-side grace window', !!graced);
+
+    // opening fire forfeits it — damage.claim zeroes the shooter's grace.
+    // Spawn within the 3000u despawn anchor radius of P or the server's
+    // despawn pass eats the enemy before the client ever sees it.
+    const enemy = await spawnEnemyNear(page, 9600, 9000, 'scout');
+    t('debug enemy spawns for the forfeit check', !!enemy);
+    if (enemy) {
+        // No fresh docked:true here — the client's 10Hz docked:false stream
+        // would re-open a window after the claim and race the assert. The
+        // part-1 grace stamp (expired or not) is what the claim must zero.
+        await page.evaluate(id => net.send({ t: 'damage.claim', enemyId: id, damage: 1 }), enemy.id);
+        const forfeited = await until(async () => {
+            const st = await debugState(page);
+            const p = st && st.pilots && st.pilots.VerifyP;
+            return (p && (p.graceUntil || 0) === 0) ? p : false;
+        });
+        t('opening fire forfeits the grace', !!forfeited);
+    }
+    await S.P.context.close().catch(() => {});
+    S.P = null;
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1456,6 +1510,7 @@ const SUITES = [
     ['salvage', salvageSuite],
     ['occupation', occupationSuite],
     ['faction', factionSuite],
+    ['pressure', pressureSuite],
 ];
 
 // ---------------------------------------------------------------------------

@@ -55,6 +55,7 @@ function laserUpgradeCost(mode, target) {
 }
 
 function fireLaser() {
+    game.undockGraceTimer = 0; // opening fire forfeits undock grace
     const lasers = game.ship.weapons.lasers;
     if (game.ship.systems && game.ship.systems.lasers === 'damaged') {
         showHudFeedback('LASERS OFFLINE — field-repair (R) or dock', 'error', 2000);
@@ -187,6 +188,7 @@ function cycleLaserMode() {
 }
 
 function fireMissile() {
+    game.undockGraceTimer = 0; // opening fire forfeits undock grace
     if (game.ship.weapons.missiles.cooldown > 0 || game.ship.weapons.missiles.ammo <= 0) {
         return; // Still cooling down or no ammo
     }
@@ -249,15 +251,10 @@ function makeEnemyFromTier(tierKey, x, y) {
 }
 
 function spawnEnemyShip() {
-    // Spawn enemy ships at random locations away from the player
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 800 + Math.random() * 1200; // 800-2000 units away
-
-    const enemy = makeEnemyFromTier(
-        pickEnemyTier(),
-        game.ship.x + Math.cos(angle) * distance,
-        game.ship.y + Math.sin(angle) * distance
-    );
+    // Spawn 800-2000u off the player, re-rolled clear of every port's
+    // approach (shared pickSpawnSpot — the dock-camping fix)
+    const spot = CombatCore.pickSpawnSpot(game.ship, game.planets);
+    const enemy = makeEnemyFromTier(pickEnemyTier(), spot.x, spot.y);
 
     if (!game.enemies) {
         game.enemies = [];
@@ -284,12 +281,12 @@ let raidBandTimer = 150; // seconds until the first band can muster
 
 function updateRaidBands(deltaTime) {
     // Bands only muster once you're worth robbing, and only one at a time
-    if (game.ship.credits < 2500) return;
+    if (game.ship.credits < CombatCore.COMBAT_TUNING.raidBandGateCredits) return;
     if ((game.enemies || []).some(e => e.bandId)) return;
     raidBandTimer -= deltaTime;
     if (raidBandTimer <= 0) {
         spawnRaidBand();
-        raidBandTimer = 240 + Math.random() * 180;
+        raidBandTimer = CombatCore.rollRaidCadenceSec();
     }
 }
 
@@ -322,6 +319,12 @@ function updateEnemies(deltaTime) {
         game.enemies = [];
     }
 
+    // Undock grace ticks down on frame time (rAF-driven deltaTime, per the
+    // repo timing rule). While docked or graced the ship is untargetable —
+    // the server runs the same rule online from the relayed docked flag.
+    if (game.undockGraceTimer > 0) game.undockGraceTimer -= deltaTime;
+    const shipUntargetable = !!game.isDocked || game.undockGraceTimer > 0;
+
     // M4 online: the server owns enemy spawn/AI/band scheduling — the whole
     // local cadence below is bypassed. game.enemies becomes the extrapolated
     // server set merged with the client-local exceptions, which KEEP their
@@ -333,7 +336,7 @@ function updateEnemies(deltaTime) {
         if (locals.length > 0) {
             const targets = [{ x: game.ship.x, y: game.ship.y,
                 vx: game.ship.velocity.x * 60, vy: game.ship.velocity.y * 60, // units/second for gunnery lead
-                cargoUnits: cargoUnitsCarried() }];
+                cargoUnits: cargoUnitsCarried(), untargetable: shipUntargetable }];
             const { shots } = CombatCore.updateEnemies(
                 { enemies: locals, targets, traders: game.traders || [] },
                 deltaTime, COMBAT_FX);
@@ -347,8 +350,8 @@ function updateEnemies(deltaTime) {
     // server). Cadence and pack size scale with how tempting a target you
     // are. Hauling cargo makes you actively hunted.
     const hasCargo = cargoUnitsCarried() > 0;
-    const maxEnemies = (game.ship.credits < 2000 ? 2 : game.ship.credits < 6000 ? 3 : 4) + (hasCargo ? 1 : 0);
-    const spawnInterval = hasCargo ? 10000 + Math.random() * 10000 : 15000 + Math.random() * 15000;
+    const maxEnemies = CombatCore.maxEnemiesFor(game.ship.credits, hasCargo);
+    const spawnInterval = CombatCore.rollSpawnIntervalSec(hasCargo) * 1000;
     if (game.enemies.length < maxEnemies && (!game.lastEnemySpawn || Date.now() - game.lastEnemySpawn > spawnInterval)) {
         spawnEnemyShip();
         game.lastEnemySpawn = Date.now();
@@ -361,7 +364,7 @@ function updateEnemies(deltaTime) {
     // as projectile objects (the client owns its projectile list)
     const targets = [{ x: game.ship.x, y: game.ship.y,
                 vx: game.ship.velocity.x * 60, vy: game.ship.velocity.y * 60, // units/second for gunnery lead
-                cargoUnits: cargoUnitsCarried() }];
+                cargoUnits: cargoUnitsCarried(), untargetable: shipUntargetable }];
     const { shots } = CombatCore.updateEnemies(
         { enemies: game.enemies, targets, traders: game.traders || [] },
         deltaTime, COMBAT_FX);

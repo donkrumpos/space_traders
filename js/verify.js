@@ -1386,6 +1386,60 @@ VERIFY_SUITES.guards = (assert) => {
     characterManager.updateCharacterFromGame();
 };
 
+VERIFY_SUITES.pressure = (assert) => {
+    // Pirate-pressure tuning slice (2026-09-03): wealth bands rescaled for
+    // the current economy, spawn spots keep clear of ports, docked/graced
+    // pilots aren't prey. All knobs live in CombatCore.COMBAT_TUNING.
+    const T = CombatCore.COMBAT_TUNING;
+
+    let sawWarlordPoor = false;
+    for (let i = 0; i < 120; i++) {
+        if (CombatCore.pickEnemyTier(T.wealthMid - 1) === 'warlord') sawWarlordPoor = true;
+    }
+    assert('below the mid band no warlords come for you', !sawWarlordPoor);
+    assert('maxEnemies walks the re-scaled bands',
+        CombatCore.maxEnemiesFor(T.wealthMid - 1, false) === 2 &&
+        CombatCore.maxEnemiesFor(T.wealthMid + 1, true) === 3 + T.cargoBonusEnemies &&
+        CombatCore.maxEnemiesFor(T.wealthHigh + 1, false) === 4);
+    assert('band gate and cadence read the tuning flags',
+        T.raidBandGateCredits > 2500 && T.raidBandCadenceSec.length === 2);
+
+    // Spawn spots re-roll clear of ports: a planet planted inside the spawn
+    // ring never ends up with a hostile at its door
+    const fakePlanets = [{ x: 1000, y: 0 }];
+    let allClear = true;
+    for (let i = 0; i < 20; i++) {
+        const s = CombatCore.pickSpawnSpot({ x: 0, y: 0 }, fakePlanets);
+        if (Math.hypot(s.x - 1000, s.y - 0) < T.stationNoSpawnRadius) allClear = false;
+    }
+    assert('spawn spots keep clear of the station approach', allClear);
+
+    // Untargetable targets are invisible to prey selection: the enemy holds
+    // station instead of accelerating in
+    const mk = () => CombatCore.makeEnemy('scout', 0, 0);
+    const step = (enemy, untargetable) => {
+        for (let i = 0; i < 30; i++) {
+            CombatCore.updateEnemies({ enemies: [enemy],
+                targets: [{ x: 400, y: 0, vx: 0, vy: 0, cargoUnits: 0, untargetable }],
+                traders: [] }, 1 / 60, null);
+        }
+        return Math.hypot(enemy.velocity.x, enemy.velocity.y);
+    };
+    assert('an eligible target draws the enemy in', step(mk(), false) > 0);
+    assert('a docked/graced target does not', step(mk(), true) === 0);
+
+    // Solo wiring: undocking opens the grace window, opening fire forfeits it
+    const savedDock = { isDocked: game.isDocked, planet: game.currentPlanet, grace: game.undockGraceTimer };
+    game.isDocked = true;
+    undock();
+    assert('undocking opens the grace window', game.undockGraceTimer === T.undockGraceSec);
+    fireLaser();
+    assert('opening fire forfeits the grace', game.undockGraceTimer === 0);
+    game.isDocked = savedDock.isDocked;
+    game.currentPlanet = savedDock.planet;
+    game.undockGraceTimer = savedDock.grace;
+};
+
 function runVerify() {
     const params = new URLSearchParams(location.search);
     const wanted = params.get('verify');

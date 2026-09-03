@@ -6,7 +6,7 @@
 // wire, the 10Hz world.tick broadcast, and the damage/drop claim handlers.
 //
 // Server-build choices (documented in PROTOCOL.md "M4 server authority"):
-// - Wealth gates (pickEnemyTier, maxEnemies, the credits>2500 band gate) read
+// - Wealth gates (pickEnemyTier, maxEnemies, the band credits-gate) read
 //   the RICHEST connected pilot's credits from their last char doc (hello's
 //   stored doc or char.push). ship.state doesn't carry credits. When no
 //   connected pilot has a doc yet, wealth defaults to 0 for tier/max picks
@@ -40,6 +40,12 @@ const GOOD_TYPES = [...new Set(SIM_PLANETS.flatMap(
     p => [...Object.keys(p.produces), ...Object.keys(p.demands)]))];
 
 const SUB_DT = 1 / 60; // sim substep (matches browser frame rate)
+
+// Pirate-pressure knobs live in the shared core (COMBAT_TUNING) so solo and
+// server cadence read the same numbers; config.mjs combatTuning entries
+// override them here at boot for server-side rebalancing without a sim edit.
+Object.assign(CombatCore.COMBAT_TUNING, config.combatTuning || {});
+const TUNING = CombatCore.COMBAT_TUNING;
 
 // --- State -------------------------------------------------------------------
 
@@ -76,8 +82,15 @@ function positionedTargets() {
     const targets = [];
     for (const [name, p] of pilots) {
         if (typeof p.x === 'number' && typeof p.y === 'number') {
-            // vx/vy ride ship.state in units/second — CombatCore gunnery lead
-            targets.push({ name, x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0, cargoUnits: p.cargoUnits || 0 });
+            // vx/vy ride ship.state in units/second — CombatCore gunnery lead.
+            // Docked pilots and fresh undocks (grace window) are invisible to
+            // prey selection but still anchor the despawn pass — the fix for
+            // pirates camping the dock door.
+            targets.push({
+                name, x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0,
+                cargoUnits: p.cargoUnits || 0,
+                untargetable: !!p.docked || (p.graceUntil || 0) > simNow
+            });
         }
     }
     return targets;
@@ -114,6 +127,11 @@ export function combatPilotState(name, msg) {
     if (typeof msg.y === 'number') p.y = msg.y;
     if (typeof msg.vx === 'number') p.vx = msg.vx;
     if (typeof msg.vy === 'number') p.vy = msg.vy;
+    // Docked → undocked transition opens the grace window: a pilot leaving
+    // the station isn't prey until it expires (or until they open fire).
+    const nowDocked = !!msg.docked;
+    if (p.docked && !nowDocked) p.graceUntil = simNow + TUNING.undockGraceSec;
+    p.docked = nowDocked;
 }
 
 export function combatPilotLeft(name) {
@@ -133,11 +151,10 @@ for (let i = 0; i < TrafficCore.TRADER_COUNT; i++) spawnTrader();
 
 function spawnCommonEnemy(targets, wealth) {
     const anchor = targets[Math.floor(Math.random() * targets.length)];
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 800 + Math.random() * 1200; // same envelope as the browser adapter
-    const e = CombatCore.makeEnemy(CombatCore.pickEnemyTier(wealth),
-        anchor.x + Math.cos(angle) * dist,
-        anchor.y + Math.sin(angle) * dist);
+    // Shared spot picker: same 800-2000u envelope as before, but re-rolled
+    // clear of every port's stationNoSpawnRadius (dock-camping fix)
+    const spot = CombatCore.pickSpawnSpot(anchor, SIM_PLANETS);
+    const e = CombatCore.makeEnemy(CombatCore.pickEnemyTier(wealth), spot.x, spot.y);
     e.id = newId('e');
     state.enemies.push(e);
 }
@@ -187,8 +204,8 @@ function runSpawnCadence(dt, targets) {
     const wealth = credits === null ? 0 : credits;
     const hasCargo = targets.some(t => t.cargoUnits > 0);
 
-    const maxEnemies = (wealth < 2000 ? 2 : wealth < 6000 ? 3 : 4) + (hasCargo ? 1 : 0);
-    const spawnInterval = hasCargo ? 10 + Math.random() * 10 : 15 + Math.random() * 15; // seconds
+    const maxEnemies = CombatCore.maxEnemiesFor(wealth, hasCargo);
+    const spawnInterval = CombatCore.rollSpawnIntervalSec(hasCargo);
     if (state.enemies.length < maxEnemies && simNow - lastEnemySpawnAt > spawnInterval) {
         spawnCommonEnemy(targets, wealth);
         lastEnemySpawnAt = simNow;
@@ -196,12 +213,12 @@ function runSpawnCadence(dt, targets) {
 
     // Bands only muster once someone's worth robbing (credits gate skipped
     // when no doc has arrived), and only one band at a time
-    if (credits !== null && credits < 2500) return;
+    if (credits !== null && credits < TUNING.raidBandGateCredits) return;
     if (state.enemies.some(e => e.bandId)) return;
     raidBandTimer -= dt;
     if (raidBandTimer <= 0) {
         spawnBand(targets, null);
-        raidBandTimer = 240 + Math.random() * 180;
+        raidBandTimer = CombatCore.rollRaidCadenceSec();
     }
 }
 
@@ -348,6 +365,9 @@ export function handleCombatMessage(ws, msg, send) {
         case 'damage.claim': {
             // Fire-and-forget, last-writer-wins, no validation (family trust
             // model). Hull changes ride the next world.tick; kills broadcast.
+            // Opening fire forfeits any undock grace — no shooting from cover.
+            const shooter = ensurePilot(ws.pilot);
+            shooter.graceUntil = 0;
             const enemy = state.enemies.find(e => e.id === msg.enemyId);
             const damage = Number(msg.damage);
             if (!enemy || !(damage > 0)) return true;
