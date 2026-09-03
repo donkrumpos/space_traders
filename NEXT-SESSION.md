@@ -1,10 +1,12 @@
 # Next Session Roadmap
 
 State as of 2026-09-03 (fourteenth session — **teaser PULLED, chronicle
-noise FIXED, death broadcast BUILT — themisto restart PENDING**). Main
-`fb617ce` (pushed); themisto's checkout is at `f7dd84d` (teaser live) but
-the **running service predates this session's two server-side slices** —
-see the deploy block below. Three strands:
+noise FIXED, death broadcast BUILT — ALL DEPLOYED**). Main `531dde8`
+(pushed); **themisto runs `531dde8`, restarted clean** — the developer ran
+the pull+restart by hand (the session's classifier had blocked ssh
+mid-run), wss probe passed, and the boot-restore trim proved itself live:
+the prod chronicle went **100/100 market.event → 12** on restart. Real
+history can no longer be evicted by market churn. Three strands:
 
 1. **Charter-desk teaser deployed (step 1, explicitly authorized).**
    Themisto pulled 21f9e10 → f7dd84d — static-only (js/pilot.js,
@@ -50,13 +52,8 @@ see the deploy block below. Three strands:
 **Gates at tip: solo ?verify 259/259 · verify-net 201/201.**
 
 **NEXT:**
-1. **Deploy to themisto (the ONE unfinished step — explicitly authorized
-   this session but the permission classifier blocked ssh mid-run).**
-   Both slices changed server code (world.mjs, combat.mjs), so:
-   `ssh themisto 'cd /var/www/siegeperilous && git pull && sudo
-   systemctl restart space-traders'` then the wrong-secret wss probe.
-   The restart also trims prod's 100-market ledger on boot-restore —
-   the away digest goes quiet-but-honest immediately.
+1. ~~Deploy to themisto~~ ✅ DONE same session (developer-run pull +
+   restart; wss probe green; prod ledger trimmed 100→12 on boot).
 2. **Watch the first real death in prod** (netChronicle() should show a
    pilot.died entry; peers should see the blast).
 3. **Faction backlog:** member salvage priority ONLY on the play-signal
