@@ -1,5 +1,77 @@
 # Next Session Roadmap
 
+State as of 2026-09-03 (thirteenth session — **the Tally DEPLOYED, watchlist
+decided, the Settlement BUILT (the VENDETTA amnesty seed, carried since
+July)**). Main `872393e`; themisto runs `8975e87`. Three strands:
+
+1. **The Tally deploy (step 1, explicitly authorized).** Themisto pulled
+   9c2cdb5 → 8975e87, service restarted clean, outside-in wss probe got
+   `{"t":"reject","reason":"bad secret"}` through the full TLS/Apache/node
+   path (scratch `wss-probe.mjs`, no junk pilot). Everything through the
+   Tally is now LIVE.
+2. **Watchlist pass (decided, deliberately not built):**
+   - **(a) dock feel** under the re-tuned pressure: no real-play signal yet
+     (the re-tune only went live this morning) — keep watching; knobs are
+     one `config.mjs combatTuning` edit away.
+   - **(b) charter desk:** the burial itself is right (the Shipyard walk is
+     deliberate), but the design sketch's one-line Rep-tab teaser for
+     factionless pilots ("a banner needs a want — the charter desk is in
+     any shipyard", faction-design.md UI sketch) was NEVER BUILT —
+     `factionBannerHTML()` returns `''` when factionless. DECISION: build
+     the teaser as a small next slice; it rides the same Rep surface the
+     Settlement just touched, and it surfaces exactly when grudges make
+     the tab visible.
+   - **(c) combat-over-near-POI Now-zone priority:** KEEP the order —
+     combat info is safety-critical, and you don't raise a banner
+     mid-firefight (clearing the field IS the 'place' deed). If play still
+     hides the claim button too much, the fix is ONE tease line inside the
+     combat state when a charted claimable site sits within 600u ("clear
+     the field — the site waits"), not a state swap.
+3. **The Settlement (feature/grudge-amnesty e389b8f, merged 872393e, NOT
+   deployed — server-side world.mjs/combat.mjs changed).** Forks pinned via
+   AskUserQuestion (all recommended options taken): **tribute per point** ·
+   **one mechanic, per-cartel goods** (`amnesty { good, perPoint, offer,
+   cleared }` on shared PIRATE_FACTIONS — Choir cognition cores ×3/point,
+   Rustfang ferrovolt ore ×6, Iron Shoal panacea vials ×4; player banners
+   carry no terms) · **Guild-brokered at any dock** (settle button on the
+   Rep tab's grudge rows; affordability follows the hold via the trade/dock
+   tails) · **whole-reach clearing** (one pilot settles the family's debt;
+   chronicled errand-voiced, the cartel's own closing line when the debt
+   zeroes). Wire: `grudge.settle`/`grudge.settled`, amnesty stamps ride
+   `grudge.update` + the snapshot. **Merge re-infection guard** (the subtle
+   part): `world.grudgeAmnesty` stamps every pay-down and a doc may only
+   RAISE a settled faction's grudge if its mirrored `pilot.grudgeAmnesty`
+   stamp proves it has seen the settlement — otherwise every stale doc
+   reconnecting would resurrect the paid debt; offline-earned grudges still
+   merge (client applies the same rule to its snapshot max-merge). Solo
+   parity: same Rep-tab table eases your own ledger; with a server
+   configured but unreachable the desk waits (no reconnect clobber).
+   PROTOCOL: M7 wire row + M4 merge-rule amendment in the same slice.
+
+**Gates at tip: solo ?verify 249/249 · verify-net 187/187.** New: solo
+`amnesty` (8 asserts incl. per-cartel terms coverage), net `[amnesty]` (9
+asserts incl. the stale-doc and seen-stamp merge paths; the no-grudge
+refusal assert is deliberately self-contained — earlier suites' boss kills
+leave real grudges on the other cartels).
+
+**NEXT:**
+1. **Deploy the Settlement to themisto** (explicit, per RUNBOOK — one pull +
+   restart; server-side world.mjs/combat.mjs changed).
+2. **Charter-desk teaser** (watchlist (b) decision — small slice).
+3. **Faction backlog:** member salvage priority ONLY if claims feel
+   toothless in play.
+4. **Standing backlog:** nebula mist ambient (ninth-session spec), death
+   broadcast (M4 gap), www DNS/cert, same-pilot-two-devices kick ping-pong.
+
+**Watchlist (carried + updated):** dock feel under the re-tuned pressure
+(no signal yet); does the Settlement's tribute pricing land in play
+(perPoint 6/3/4 — consts on PIRATE_FACTIONS.amnesty; a VENDETTA ×5 with
+the Choir costs 15 cores); poi-over-combat tease line if the claim button
+still hides; perk picker re-pops on every dock while choices pend; ×2
+occupation weight cadence; invite-while-offline UX.
+
+--- (twelfth-session record follows) ---
+
 State as of 2026-09-03 (twelfth session — **developer look FINISHED, factions
 MERGED + DEPLOYED, pirate pressure TUNED + DEPLOYED**). Main `9c2cdb5` is
 live on themisto (wss verified from outside: probe with a wrong secret gets
