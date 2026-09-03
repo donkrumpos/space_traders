@@ -54,14 +54,22 @@ flake note:** back-to-back runs with leftover chrome-headless processes
 cascade failures ([occupation]/[faction] + "Connection closed" / detached
 frames) — `pkill -f chrome-headless-shell`, run once, clean runs pass.
 
+**LATE ADDITION, same session: the Tally is BUILT and merged (8463c9d →
+main 6788b41) but NOT deployed.** Forks pinned via AskUserQuestion (all
+recommended options taken): authority-point deeds (units SOLD → 'trade';
+damage.claim kills → 'grudge'; own-claim repels + own-claim salvage →
+'place'), short authored ladder (`TALLY_LADDER` in server/world.mjs: trade
+100/500/2500 · grudge 10/50/250 · place 5/25/125, three tiers then "the
+ledger remembers"), quiet banner-card line + chronicle speaks only at
+milestones (`faction.milestone`, errand-voiced). The tally rides the
+registry as an additive field — no new wire messages; PROTOCOL M7 has the
+details. Gates after: **solo 241/241 · net 178/178** (banner +2, net
+[tally] 6).
+
 **NEXT:**
-1. **The Tally (faction direction C)** — riff-lite forks were put to the
-   developer via AskUserQuestion at session end (which deeds count per
-   want-kind, milestone thresholds, where the tally shows). Build in
-   verified slices once pinned. Machinery notes: tally rides the faction
-   record in the world blob (additive `faction.update` field, free on the
-   wire); server counts deeds at its authority points (trade handler, kill
-   handler, salvage handler); chronicle kind `faction.milestone`.
+1. **Deploy the Tally to themisto** (explicit, per RUNBOOK — one pull +
+   restart; server-side world.mjs/combat.mjs changed). Everything else is
+   already live.
 2. **Faction backlog:** VENDETTA amnesty faction-flavored (the Choir
    forgives those who return a core); member salvage priority ONLY if
    claims feel toothless.
