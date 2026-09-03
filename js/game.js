@@ -65,6 +65,7 @@ const game = {
     camera: { x: 0, y: 0 },
     keys: {},
     planets: [],
+    undockGraceTimer: 0, // seconds of not-prey after undocking (combat.js ticks it)
     pois: [],
     stars: [],
     projectiles: [],

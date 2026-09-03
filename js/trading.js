@@ -106,6 +106,10 @@ function undock() {
     game.isDocked = false;
     game.currentPlanet = null;
 
+    // Leaving the station opens the undock grace window: not prey until it
+    // expires or you open fire (dock-camping fix; server mirrors this rule)
+    game.undockGraceTimer = CombatCore.COMBAT_TUNING.undockGraceSec;
+
     // Collapse UI panel and hide trading
     document.getElementById('ui').classList.remove('trading');
     document.getElementById('tradingPanel').style.display = 'none';
