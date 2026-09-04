@@ -329,8 +329,17 @@ function netHandleMessage(msg) {
             if (msg.reason === 'bad secret') {
                 try { localStorage.removeItem('space_trader_secret'); } catch (e) {}
             }
+            // Same footgun shape for names: a stored name the server's
+            // boundary rules refuse (too long, markup, control chars) would
+            // wedge this browser into silent offline forever. Drop it so the
+            // next load re-prompts.
+            if (msg.reason === 'bad pilot name') {
+                try { localStorage.removeItem('space_trader_pilot'); } catch (e) {}
+            }
             if (typeof showHudFeedback === 'function') {
-                const why = msg.reason === 'bad secret' ? 'Wrong family secret' : 'Server said no';
+                const why = msg.reason === 'bad secret' ? 'Wrong family secret'
+                    : msg.reason === 'bad pilot name' ? 'That pilot name won\'t fly (letters and digits, up to 24)'
+                    : 'Server said no';
                 showHudFeedback(`${why} — playing offline. Reload to try again.`, 'error', 10000);
             }
             break;
