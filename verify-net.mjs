@@ -32,8 +32,14 @@ function record(suite, name, pass, detail) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Poll an async condition instead of fixed sleeps. Returns last truthy value or false.
+// CI runners are 2-core and everything takes longer — VERIFY_TIMEOUT_SCALE
+// stretches every wait (until + the whole-run cap) without touching local
+// runs. Waits return as soon as their condition lands, so a bigger scale
+// only lengthens failure paths.
+const TIMEOUT_SCALE = Math.max(1, Number(process.env.VERIFY_TIMEOUT_SCALE) || 1);
+
 async function until(fn, { timeout = 10000, every = 150 } = {}) {
-    const end = Date.now() + timeout;
+    const end = Date.now() + timeout * TIMEOUT_SCALE;
     while (Date.now() < end) {
         try {
             const v = await fn();
@@ -2004,11 +2010,11 @@ async function main() {
     let exitCode = 1;
 
     const watchdog = setTimeout(() => {
-        console.error(`VERIFY-NET-FAIL (run exceeded ${RUN_TIMEOUT_MS / 1000}s)`);
+        console.error(`VERIFY-NET-FAIL (run exceeded ${RUN_TIMEOUT_MS * TIMEOUT_SCALE / 1000}s)`);
         try { if (srv.proc) srv.proc.kill('SIGKILL'); } catch {}
         if (browser) browser.close().catch(() => {}).finally(() => process.exit(1));
         else process.exit(1);
-    }, RUN_TIMEOUT_MS);
+    }, RUN_TIMEOUT_MS * TIMEOUT_SCALE);
 
     try {
         srv.proc = spawnServer(port, dbPath, serverLog);

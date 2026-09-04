@@ -13,7 +13,7 @@ on:
 jobs:
   gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30  # net-gate worst case is RUN_TIMEOUT × VERIFY_TIMEOUT_SCALE
     steps:
       - uses: actions/checkout@v4
 
@@ -37,3 +37,7 @@ jobs:
 
       - name: Run both gates
         run: npm test
+        env:
+          # 2-core runners need longer waits than a dev laptop; waits return
+          # early on success, so this only stretches failure paths
+          VERIFY_TIMEOUT_SCALE: '3'
