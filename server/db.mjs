@@ -27,6 +27,7 @@ const stmts = {
     pruneBackups: db.prepare(`DELETE FROM backups WHERE pilot = ? AND id NOT IN
         (SELECT id FROM backups WHERE pilot = ? ORDER BY id DESC LIMIT 20)`),
     getWorld: db.prepare('SELECT snapshot FROM world WHERE id = 1'),
+    getWorldUpdated: db.prepare('SELECT updated FROM world WHERE id = 1'),
     saveWorld: db.prepare(`INSERT INTO world (id, snapshot, updated) VALUES (1, ?, ?)
         ON CONFLICT(id) DO UPDATE SET snapshot = excluded.snapshot, updated = excluded.updated`)
 };
@@ -77,6 +78,14 @@ export function getWorld() {
 
 export function saveWorld(json) {
     stmts.saveWorld.run(json, Date.now());
+}
+
+// /healthz probe: one cheap read that proves SQLite still answers, plus the
+// world blob's last-write stamp (null before the first flush). Throws when
+// the db is broken — the endpoint turns that into a 503.
+export function dbHealth() {
+    const row = stmts.getWorldUpdated.get();
+    return { worldUpdated: row ? row.updated : null };
 }
 
 export function closeDb() {
