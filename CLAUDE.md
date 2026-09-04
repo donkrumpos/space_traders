@@ -11,7 +11,8 @@ a living shared world (see the `space-traders-direction` memory).
 
 - `NEXT-SESSION.md` — the rolling session log + backlog + watchlist + tuning
   flags. **This is the source of truth for "what's next" and "what's rough."**
-  Read it first each session; update it at sync.
+  Read it first each session; update it at sync. It keeps ONLY the newest
+  session record — older records are dated files under `history/`.
 - `docs/PROTOCOL.md` — the multiplayer wire protocol + authority split + known
   gaps (milestones M1–M5). `docs/RUNBOOK.md` — themisto deploy. `docs/MULTIPLAYER.md`,
   `docs/game_design_doc.md` — design.
@@ -19,7 +20,8 @@ a living shared world (see the `space-traders-direction` memory).
   fork): `planets.js`, `pois.js`, `economy-core.js`, `combat-core.js`,
   `traffic-core.js`. No `window`/DOM refs allowed in these.
 - `js/verify.js` — solo `?verify` headless suite. `verify-net.mjs` — two-client
-  multiplayer harness. `TEST-PLAN.md` — the current hand-off for family playtest.
+  multiplayer harness. (TEST-PLAN.md is retired — family playtest ended with
+  the 2026-09-01 MMO pivot; the two gates are the only quality bar.)
 
 ## The two gates (the core discipline)
 
