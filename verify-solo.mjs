@@ -80,7 +80,10 @@ async function main() {
     let dom = '';
     const code = await new Promise((resolve) => {
         const proc = spawn(chrome, [
-            '--headless', '--dump-dom', `--virtual-time-budget=${VIRTUAL_TIME_MS}`, url
+            // --no-sandbox/--disable-gpu match verify-net's puppeteer launch:
+            // CI containers have no chrome sandbox and the page is our own code
+            '--headless', '--no-sandbox', '--disable-gpu',
+            '--dump-dom', `--virtual-time-budget=${VIRTUAL_TIME_MS}`, url
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
         proc.stdout.on('data', d => { dom += d; });
         proc.stderr.on('data', () => {}); // CHS logs GPU noise; the DOM is the verdict
