@@ -43,27 +43,48 @@ main's tip** (deployed this session, verified outside-in). One slice built:
 **Gates at tip: solo ?verify 272/272 · verify-net 231/231** (was 265/231 —
 solo +7 aria). CI green on the merge push.
 
-**OPEN DESIGN QUESTION — respawn location (developer riff, not pinned):**
-proposal on the table is respawn AT the wreck after a delay (the delay =
-others' scavenge window) instead of today's teleport-to-start + corpse
-run (pods, 90s fuse). Pros/cons riffed this session (see the session
-transcript / final summary): position-as-progress vs spawn-camping the
-fight that killed you, self-scooping your own pods (death loses its
-sting), the empty-tank-far-from-port softlock, dead-air countdown vs
-travel-as-gameplay. Middle path named: respawn at NEAREST CHARTED
-station (scales with the forever-universe, keeps a short-but-real corpse
-run). NOT pinned — waiting on the developer's call; if pinned it's a
-proper server+client gated slice (cargo.scatter is server-owned online).
+**RESPAWN QUESTION — PARKED (post-sync riff, same day):** after a long
+riff (respawn-at-wreck, nearest-visited-port, pod-state ladder), the
+developer is leaning **keep the current system as is**: die way out →
+sent back to start; in the expanded universe the punishment IS starting
+over, and it scales with every region added, free. The keeper insight:
+what survives death is KNOWLEDGE (charts, rank, perks) — what dies is
+position and cargo; that's a roguelike loop already latent. Don't nag,
+don't build a respawn slice unless the developer re-raises it. Watch
+signal instead: after real deaths, do pilots fly back out (working) or
+log off (revisit)?
+
+**Also riffed same day, awaiting pins (do NOT build unpinned):**
+- **Nomenclature taxonomy PROPOSED**: Region / World / Station / Port
+  (capability, not identity) / Site / Contact / Wreck; procgen law =
+  every generated object gets a Combine designation, NAMES are only
+  authored or earned via chronicled events (lore-bible §3 extended).
+  Seven dockables classify 3/3/1: worlds Agricon Prime, Core World
+  Central, Meridian Deep; stations Mining Station 7, Tech Hub Alpha,
+  Frontier Outpost; **ruin** Ossuary Drift (proposed third class —
+  precursor wreckage, the procgen frontier's mystery category).
+- **World/station/ruin GRAPHIC split designed, awaiting go**: today all
+  seven draw as one flat colored circle (render.js ~line 276). Slice
+  shape: `class` field on planets.js rows, three draw grammars (worlds
+  round+shaded terminator/atmosphere rim, stations angular+docking
+  arms+nav blink, ruins broken shards+bone-white pulse), same on map
+  view, `[render]` verify suite, handbook line. Client-only.
+- **Death architecture stack riffed, NOT pinned** (pilot-persists/
+  ship-mortal, pod ghost-state, region-scaled severity, opt-in ironman)
+  — superseded in spirit by the parked keep-as-is lean above; keep the
+  riff in the transcript, revisit only if the developer reopens death.
 
 **NEXT (ordered):**
 1. **External uptime pinger** (carried, developer's step — needs an
    account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
    Nudged again this session.
-2. **Respawn-location decision** (see open question above) — pin it and
-   it becomes the next feature slice.
+2. **Graphic split slice** (world/station/ruin — designed above, the
+   likeliest next build) and **nomenclature canon docs** — both awaiting
+   the developer's go/pins.
 3. **Ask Dad about the first death** (watchlist: death FX boom radius,
-   corpse-run feel, countdown length).
+   corpse-run feel, countdown length — now also the respawn watch
+   signal: did he fly back out or log off?).
 4. **Bucket C stays opportunistic** (sim unit tests WITH new sim math,
    big-file splits only during domain rewrites; the aria-live item is
    DONE).
