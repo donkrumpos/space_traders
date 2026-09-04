@@ -464,8 +464,8 @@ function showShipBanner(name, subtitle) {
     `;
     banner.innerHTML = `
         <div style="color:#66ccff; font-size:13px; letter-spacing:4px;">YOUR SHIP</div>
-        <div style="color:#ffffff; font-size:26px; margin-top:8px;">${name}</div>
-        <div style="color:#889988; font-size:12px; margin-top:6px;">${subtitle}</div>
+        <div style="color:#ffffff; font-size:26px; margin-top:8px;">${escapeHTML(name)}</div>
+        <div style="color:#889988; font-size:12px; margin-top:6px;">${escapeHTML(subtitle)}</div>
     `;
     document.body.appendChild(banner);
     setTimeout(() => banner.remove(), 4000);
@@ -550,7 +550,7 @@ function showModCard(id) {
         <div class="mc-head">◈ ${mod.name} <span class="mc-slot">— ${SLOT_LABELS[mod.slot] || 'hull plating'}</span>
             <span class="mc-close" onclick="hideModCard()">✕</span></div>
         ${rows}
-        <div class="mc-stat"><span>source</span><span class="mc-src">${modSource(id)}</span></div>`;
+        <div class="mc-stat"><span>source</span><span class="mc-src">${escapeHTML(modSource(id))}</span></div>`;
     card.style.display = 'block';
 }
 window.showModCard = showModCard;
