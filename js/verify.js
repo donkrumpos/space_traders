@@ -1654,7 +1654,17 @@ function runVerify() {
 }
 
 if (location.search.includes('verify')) {
-    // Game boots synchronously via startGame(); give one tick of the loop
-    // (and any async autosave) time to settle before asserting.
-    window.addEventListener('load', () => setTimeout(runVerify, 800));
+    // Game boots synchronously via startGame(), but some state initializes
+    // lazily on the loop's first ticks (game.traders in updateTraffic among
+    // them) — a fixed 800ms lost that race on slow CI runners. Poll for the
+    // first traffic tick, bounded so a genuinely broken boot still reports
+    // (the [boot] assert then fails honestly).
+    window.addEventListener('load', () => {
+        const t0 = Date.now();
+        const ready = () => {
+            if (Array.isArray(game.traders) || Date.now() - t0 > 6000) runVerify();
+            else setTimeout(ready, 100);
+        };
+        setTimeout(ready, 800);
+    });
 }

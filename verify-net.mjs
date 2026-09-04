@@ -32,8 +32,14 @@ function record(suite, name, pass, detail) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Poll an async condition instead of fixed sleeps. Returns last truthy value or false.
+// CI runners are 2-core and everything takes longer — VERIFY_TIMEOUT_SCALE
+// stretches every wait (until + the whole-run cap) without touching local
+// runs. Waits return as soon as their condition lands, so a bigger scale
+// only lengthens failure paths.
+const TIMEOUT_SCALE = Math.max(1, Number(process.env.VERIFY_TIMEOUT_SCALE) || 1);
+
 async function until(fn, { timeout = 10000, every = 150 } = {}) {
-    const end = Date.now() + timeout;
+    const end = Date.now() + timeout * TIMEOUT_SCALE;
     while (Date.now() < end) {
         try {
             const v = await fn();
@@ -72,9 +78,15 @@ function chromePath() {
         throw new Error(`no chrome-headless-shell cache at ${base} — run the solo ?verify one-liner once to download it`);
     }
     dirs.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    // Platform-agnostic walk (mac-arm64 / linux64 / win64 subdirs) — CI runs
+    // this on Linux; same shape as verify-solo.mjs's resolver.
     for (let i = dirs.length - 1; i >= 0; i--) {
-        const p = path.join(base, dirs[i], 'chrome-headless-shell-mac-arm64', 'chrome-headless-shell');
-        if (fs.existsSync(p)) return p;
+        const dir = path.join(base, dirs[i]);
+        for (const sub of fs.readdirSync(dir)) {
+            const p = path.join(base, dirs[i], sub,
+                process.platform === 'win32' ? 'chrome-headless-shell.exe' : 'chrome-headless-shell');
+            if (fs.existsSync(p)) return p;
+        }
     }
     throw new Error(`no chrome-headless-shell binary under ${base}`);
 }
@@ -1313,9 +1325,13 @@ async function occupationSuite(t, { browser, base, wsUrl }) {
         const boss = members.find(e => e.isBandBoss && e.factionName === f);
         if (!boss) return false;
         return { bossId: boss.id, bandId: boss.bandId, size: members.length };
-    }, POI, FACTION), { timeout: 20000 });
+    }, POI, FACTION), { timeout: 45000 });
+    // 45s, not 20: if a pilot idled near the site between steps, the band
+    // mustered early and may have wandered off chasing prey — G's arrival
+    // re-acquires it, but the flight back can outlast a 20s window (the
+    // intermittent [occupation]→[faction] cascade, seen local AND CI).
     t('approaching the site musters the occupying band', !!band,
-        'no Rustfang band appeared near the site within 20s');
+        'no Rustfang band appeared near the site within 45s');
     if (!band) return;
     t('the band came in force (boss + escort)', band.size >= 2, `size=${band.size}`);
 
@@ -1998,11 +2014,11 @@ async function main() {
     let exitCode = 1;
 
     const watchdog = setTimeout(() => {
-        console.error(`VERIFY-NET-FAIL (run exceeded ${RUN_TIMEOUT_MS / 1000}s)`);
+        console.error(`VERIFY-NET-FAIL (run exceeded ${RUN_TIMEOUT_MS * TIMEOUT_SCALE / 1000}s)`);
         try { if (srv.proc) srv.proc.kill('SIGKILL'); } catch {}
         if (browser) browser.close().catch(() => {}).finally(() => process.exit(1));
         else process.exit(1);
-    }, RUN_TIMEOUT_MS);
+    }, RUN_TIMEOUT_MS * TIMEOUT_SCALE);
 
     try {
         srv.proc = spawnServer(port, dbPath, serverLog);
