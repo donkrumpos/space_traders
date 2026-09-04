@@ -16,11 +16,9 @@ const FACTION_WANTS = [
     { kind: 'grudge', label: '☠ a debt — what the cartel took, owed back' },
 ];
 
-// Pilot names come from the handshake with no charset rule (unlike faction
-// fields, which the server restricts) — escape them at this innerHTML sink.
-function escName(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+// Pilot names at these sinks go through the shared escapeHTML (js/escape.js)
+// — it replaced the local escName helper when sink-side escaping became a
+// repo-wide rule instead of per-call-site memory.
 
 const factionState = {
     registry: {},        // server truth, keyed by lowercased name
@@ -95,10 +93,10 @@ function factionBannerHTML() {
     const me = myPilotName();
     const roster = (f.members || []).map(p => {
         const tag = p === f.founder ? ' — founder' : '';
-        return `<div style="font-size:11px;">${escName(p)}${tag}</div>`;
-    }).join('') || `<div style="font-size:11px;">${escName(me || 'you')} — founder</div>`;
+        return `<div style="font-size:11px;">${escapeHTML(p)}${tag}</div>`;
+    }).join('') || `<div style="font-size:11px;">${escapeHTML(me || 'you')} — founder</div>`;
     const invites = (f.invites || []).length
-        ? `<div style="font-size:10px; color:#888;">invited: ${f.invites.map(escName).join(', ')}</div>` : '';
+        ? `<div style="font-size:10px; color:#888;">invited: ${f.invites.map(escapeHTML).join(', ')}</div>` : '';
     // The Tally: a quiet line of progress toward the want; the chronicle
     // does the talking at milestones
     const tallyNoun = { trade: 'crates moved', grudge: 'debts called in', place: 'stands made' };

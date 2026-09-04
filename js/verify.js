@@ -1456,6 +1456,42 @@ VERIFY_SUITES.deals = (assert) => {
     }
 };
 
+VERIFY_SUITES.escape = (assert) => {
+    // Sink-side escaping (Bucket B): player-authored text (ship names,
+    // journal lines, chronicle entries) must render inert at every innerHTML
+    // sink. The shared helper lives in js/escape.js; these asserts prove the
+    // hottest sinks actually route through it.
+    assert('escapeHTML neutralizes all five specials',
+        escapeHTML(`<b>&"'</b>`) === '&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;');
+
+    // A hostile journal line renders as text, not markup
+    addShipLog('<b class="esc-probe">hostile</b> journal line');
+    const journal = document.getElementById('journalList');
+    assert('a hostile journal line renders inert',
+        !journal.querySelector('.esc-probe') &&
+        journal.textContent.includes('<b class="esc-probe">hostile</b>'));
+    game.ship.log.pop();
+    updateShipPanelUI();
+
+    // A hostile chronicle entry (pilot names predate the server's charset
+    // rule; old world blobs may carry anything) renders as text too
+    chronicle.entries.push({ at: Date.now(), kind: 'poi.charted', pilot: '<i class="esc-probe">x</i>', name: 'Nowhere' });
+    updateChroniclePanelUI();
+    const list = document.getElementById('chronicleList');
+    assert('a hostile chronicle entry renders inert',
+        !list.querySelector('.esc-probe') && list.textContent.includes('<i class="esc-probe">x</i>'));
+    chronicle.entries.pop();
+    updateChroniclePanelUI();
+
+    // The christening banner escapes the name it celebrates
+    showShipBanner('<u class="esc-probe">Sharp</u>', 'test hull');
+    const shipBanner = document.getElementById('shipBanner');
+    assert('the ship banner escapes the christened name',
+        !!shipBanner && !shipBanner.querySelector('.esc-probe') &&
+        shipBanner.textContent.includes('<u class="esc-probe">Sharp</u>'));
+    if (shipBanner) shipBanner.remove();
+};
+
 VERIFY_SUITES.guards = (assert) => {
     // Developer-look fixes (2026-09-03): typing must not fire flight hotkeys,
     // a doc saved docked must restore the docked screen, and every traded

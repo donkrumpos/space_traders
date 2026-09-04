@@ -173,7 +173,7 @@ function updateChroniclePanelUI() {
     if (journal) {
         journal.innerHTML = shipLog.length === 0 ? '' :
             `<div class="log-sect">ship's log</div>` +
-            shipLog.slice(-6).reverse().map(e => `<div class="log-journal">${e.text}</div>`).join('');
+            shipLog.slice(-6).reverse().map(e => `<div class="log-journal">${escapeHTML(e.text)}</div>`).join('');
     }
 
     // Newest first, but market events claim at most 2 of the 8 visible lines —
@@ -190,7 +190,7 @@ function updateChroniclePanelUI() {
         recent.map(e => {
             const fresh = chronicle.lastSeen > 0 && e.at > chronicle.lastSeen;
             return `<div style="font-size:10px; margin-top:3px; color:${fresh ? '#ffdd88' : '#8899aa'};">` +
-                `${formatChronicleEntry(e)} <span style="color:#556677;">· ${chronicleTimeAgo(e.at)}</span></div>`;
+                `${escapeHTML(formatChronicleEntry(e))} <span style="color:#556677;">· ${chronicleTimeAgo(e.at)}</span></div>`;
         }).join('');
     updateRecordsTabs(); // Log tab appears with the first line; badge = unseen
 }
