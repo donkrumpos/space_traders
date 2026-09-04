@@ -1,114 +1,92 @@
 # Next Session Roadmap
 
-State as of 2026-09-04 (eighteenth session — **DEPLOYED + first prod death
-witnessed + aria-live alarms**). Main `2b7d68e` (pushed); **themisto runs
-main's tip** (deployed this session, verified outside-in). One slice built:
+State as of 2026-09-04 (nineteenth session — **THE CRAWL BUILT + DEPLOYED,
+all three slices in one day**). Main `5d0cc5b` (pushed); **themisto runs
+main's tip** (deployed + restarted this session, verified outside-in).
+Death is gone from the game: no one ever dies in the Reach now.
 
-0. **Deploy to themisto (explicit go, done first).** Pulled
-   `8164693..d986329`, npm install, restart. (Note: themisto was at
-   `8164693`, not `d72022b` as the old record said — the sixteenth
-   session's own deploy note, docs-only on top of d72022b; no mystery.)
-   Verified outside-in: wrong-secret wss probe → `reject: bad secret`;
-   /healthz 200 `ok:true db:true`; statics 200 including the new
-   js/escape.js; the manual.html ⎘ link present in the live index.html
-   (drawer header + controls footer). Journal clean after restart — no
-   `bad pilot name`, no `flood kick`; Dad auto-reconnected 30s after the
-   restart (he was flying at the time). The boundary rules now protect
-   the actual server. A follow-up statics-only pull later in the session
-   brought themisto to `2b7d68e` (no restart — no server/ or js/sim/
-   files in that range).
+1. **Slice 1 — CRAWL CORE (867637b, merged 8a154bb).** Hulk state
+   replaces respawn end-to-end per docs/death-design.md (pinned): hull
+   zero = breach (boom + 50% cargo scatter as pods; Reliquary keeps all)
+   → running silent (~8s dead stop, then emergency-thrust crawl at the
+   sail floor, no fuel burn — no stuck states) → self-repair to full
+   over ~105s, progress on the vitals band + Now zone RUNNING SILENT
+   state + `#srAlarm` edges. Dark hull is untargetable, undamageable,
+   interaction-free, and UNRELAYED (peers see the breach, then nothing
+   until recovery — `netDarkPilots`, open-ended; recovery IS the relay
+   resuming, self-healing both sides). Server marks the pilot dark (off
+   the prey list); combat-core grew a disengage: mid-fight hostiles nose
+   away from the wreck (never-engaged ones still hold station — the
+   dock-camping rule survives). Killed: deathBanner, countdown, teleport
+   respawn, 25% credit tax, pod owner-lock (pods are the victor's
+   reward now — first scoop wins immediately). No new wire kinds:
+   pilot.death/pilot.died carry the Crawl; PROTOCOL.md grew "The Crawl —
+   hulk + recovery"; handbook §08 is now "When you fall silent".
+   Timings flag-adjustable: COMBAT_TUNING hulkStopSec 8 / hulkRepairSec
+   105 / hulkScatterFrac 0.5 (server-overridable via config.combatTuning).
+2. **Slice 2 — FAME v1 (57edf84, merged 502def0).** `world.fame` hangs
+   off the ONE chronicle funnel (recordChronicle applies FAME_DELTAS:
+   charter +10, founding +10, liberation +8, boss +5, settlement +3,
+   salvage +2, wrecked −5; floor 0 — "the Reach forgets debts, not
+   deeds"). Broadcast `fame.update` + snapshot field; client mirrors own
+   fame into game.pilot.fame (rides the char doc, works offline); rank
+   line shows `· ✦ fame n` once any exists; `netFame()` hook. Offline
+   play never accrues fame (the Reach's memory is the shared world).
+3. **Slice 3 — ECONOMY HATCHES (071de42, merged 5d0cc5b).** Fortified
+   Cargo Hold ($2800, 3 charges in game.ship.modCharges, persisted):
+   a charged breach scatters 25% not 50%, burns a charge, strips itself
+   when spent; Reliquary outranks it. The wreckers v1: **T while dark**
+   tows to the nearest port for $200 + 0.35/unit (quote live on the Now
+   zone); docking completes recovery. Both client-local by design (the
+   wire never sees them) — PROTOCOL.md documents why.
+4. **Deployed to themisto** (explicit go in the session prompt): pulled
+   `a19c8f7..5d0cc5b`, npm install, restart at 15:28 CDT with 0 pilots
+   online. Verified outside-in: wrong-secret wss probe → `reject: bad
+   secret` (in the journal too); /healthz 200 `ok:true db:true` via the
+   public proxy; statics 200 and carrying the new code (hulkState in
+   live combat.js, "When you fall silent" in the live manual); journal
+   clean (graceful stop, clean boot). **NOT verified: an authenticated
+   in-prod wrecking** — the permission classifier (rightly) blocked
+   every path that touches FAMILY_SECRET, so the "get wrecked on purpose
+   and watch yourself go dark" check is open. The wire behaviors are
+   gate-proven ([crawl] net suite); the first REAL Crawl wrecking
+   belongs to the family — Dad flew 06:15–09:33 on the old code and
+   will meet the Crawl next login. Ask him how the silence feels.
 
-1. **THE FIRST PROD DEATH HAPPENED.** Chronicle (read-only better-sqlite3
-   query via the deployed repo — sqlite3 CLI isn't on the box):
-   `{"kind":"pilot.died","pilot":"Dad","faction":null,"near":"Ossuary
-   Drift"}` at 2026-09-04 06:13:02 CDT — about two minutes before this
-   session's deploy restart. Chronicled correctly on the OLD code (the
-   session-14 death pipeline worked live). Chronicle at 15 entries:
-   12/12 market.event (cap holding), 2 poi.charted, 1 pilot.died.
-   Watch item CLOSED. Follow-up for the watchlist: ask Dad how the death
-   moment felt (boom radius, the corpse run, the countdown) — first real
-   data point, and it feeds the respawn-design question below.
-
-2. **aria-live alarms (ef64648, merged 2b7d68e) — the Bucket C targeted
-   win.** The Now zone repaints innerHTML every tick, which screen
-   readers treat as silence — so shields-down and fuel-out now speak
-   through `#srAlarm` (visually-hidden `role=alert`, `.sr-only` CSS),
-   one write per alarm EDGE (onset + recovery: "Alarm: shields down" /
-   "Shields restored" / emergency-power → sail-crawl escalation /
-   "Refueled"), keyed off raw ship condition rather than the rendered
-   now-state so leaving combat range with shields still down doesn't
-   falsely announce recovery. Handbook §04 grew the note (upkeep rule
-   satisfied). Solo `[aria]` +7.
-
-**Gates at tip: solo ?verify 272/272 · verify-net 231/231** (was 265/231 —
-solo +7 aria). CI green on the merge push.
-
-**THE DEATH ARC — riffed, researched, and PINNED same day.** The full
-path: respawn riff → parked → developer-requested deep research
-(`docs/death-research.md`, 22 claims verified 3-0: savepoints+
-permadeath beat checkpoints on autonomy/curiosity; EVE walked back
-progression loss; severity follows CONSENT; distance-as-punishment
-cautioned) → the developer raised the defeat-state ("no one ever
-dies") → a full design riff (UO fame/karma roots, play-dead mod,
-wreckers, hyperspace) → **"lock this in": `docs/death-design.md` — THE
-CRAWL is PINNED, all recommended forks accepted.** Death is replaced
-by running-silent recovery: breach FX (peers' view) + 50% cargo
-scatter + untargetable dark-hull crawl + timed self-repair +
-fame dent. XP/rank/perks NEVER lost. Slice ladder in the doc; **slice
-1 (crawl core) is the next feature build.** Wire-visible: PROTOCOL.md
-grows hulk/recovery shapes in the same slice; handbook §08 rewrites to
-"When you fall silent."
-
-**Riffed same day, still awaiting pins (do NOT build unpinned):**
-- **Nomenclature taxonomy PROPOSED**: Region / World / Station / Port
-  (capability, not identity) / Site / Contact / Wreck; procgen law =
-  every generated object gets a Combine designation, NAMES are only
-  authored or earned via chronicled events (lore-bible §3 extended).
-  Seven dockables classify 3/3/1: worlds Agricon Prime, Core World
-  Central, Meridian Deep; stations Mining Station 7, Tech Hub Alpha,
-  Frontier Outpost; **ruin** Ossuary Drift (proposed third class —
-  precursor wreckage, the procgen frontier's mystery category).
-- **World/station/ruin GRAPHIC split designed, awaiting go**: today all
-  seven draw as one flat colored circle (render.js ~line 276). Slice
-  shape: `class` field on planets.js rows, three draw grammars (worlds
-  round+shaded terminator/atmosphere rim, stations angular+docking
-  arms+nav blink, ruins broken shards+bone-white pulse), same on map
-  view, `[render]` verify suite, handbook line. Client-only.
-(The earlier pilot-persists/ship-mortal + respawn-location riffs are
-fully superseded by the pinned Crawl; ironman charter stays deferred
-per the pinned forks.)
+**Gates at tip: solo ?verify 311/311 · verify-net 244/244** (was 272/231 —
+solo +21 [crawl] +4 [fame] +14 [hatches], net +16 [crawl-rewrite] +7
+[fame]; the old cargoScatter/death suites were rewritten into them).
 
 **NEXT (ordered):**
-1. **BUILD THE CRAWL — slice 1, crawl core** (docs/death-design.md,
-   pinned): hulk state replaces respawn end-to-end. Server + client +
-   combat-core (disengage-on-hulk) + net (dark hull unrelayed until
-   recovery) + PROTOCOL.md + handbook §08 rewrite + verify suites both
-   gates. Then slices 2–3 (fame v1; fortified hold + wrecker tow) as
-   separate gated branches per the ladder.
-2. **External uptime pinger** (carried, developer's step — needs an
-   account): point UptimeRobot-or-similar at
+1. **Crawl ladder continues** (docs/death-design.md, pinned): slice 4
+   karma + epithets (second axis, fame×karma title matrix, wrecker
+   karma courtesy — free tows for the kind); slice 5 beacons/hyperspace
+   stays R-gated with the expansion ladder.
+2. **External uptime pinger** (carried AGAIN, developer's step — needs
+   an account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
-3. **Ask Dad about the first death** (watchlist — his 06:13 death is
-   the last one the OLD death system will ever own once the Crawl
-   ships; his read on the moment informs Crawl tuning).
+3. **Ask Dad TWO things**: (a) the carried question — how the 06:13 old
+   -system death felt (it's now the LAST death the old system will ever
+   own); (b) fresh — how the first Crawl wrecking feels when it happens
+   (stop length, repair pace, the tow price). Both feed the tuning
+   flags, which are one config.combatTuning edit away.
 4. **Graphic split slice** (world/station/ruin) and **nomenclature
    canon docs** — still awaiting the developer's go/pins.
-5. **Bucket C stays opportunistic**; expansion R-slices only when
-   pinned (note: the Crawl's beacon design feeds R-ladder planning —
-   beacons are jump anchors + safe harbor, never save points).
+5. **Bucket C stays opportunistic**; expansion R-slices only when pinned.
 
 **Watchlist (carried + updated):** dock feel under the re-tuned pressure;
-Settlement tribute pricing in play; poi-over-combat tease line; perk
-picker re-pops per dock; ×2 occupation weight cadence; invite-while-
-offline UX; 12-entry market cap feel (still holding at 12/12 in prod);
-death FX boom radius (**first real death happened — ask Dad**);
-manual.html is public (vhost-gate if the family wants it private);
-pilot-name rules NOW LIVE (only "Dad"/"Arthur" exist, both pass; any
-other reject in the journal is news); the handbook link's blur-on-click
-pattern rides along into future overlay links; NEW: the `#srAlarm`
-region announces on raw-condition edges — if a future slice adds more
-alarms, route them through `updateAlarmAnnouncements()` (one channel,
-no per-tick spam), don't sprinkle new live regions.
+Settlement tribute pricing; poi-over-combat tease line; perk picker
+re-pops per dock; ×2 occupation weight cadence; invite-while-offline UX;
+12-entry market cap (holding); manual.html public; pilot-name rules live;
+`#srAlarm` single-channel rule (the Crawl routed its breach/recovery
+edges through it — keep doing that); NEW: **crawl tuning in the wild**
+(8s stop / 105s repair / 50% scatter / $200+0.35 tow — first family
+wreckings will say if the scene drags or the tow gouges); NEW: **hulk
+state is not persisted** (reload mid-crawl comes back lit at curve hull —
+accepted family-trust edge, documented in PROTOCOL.md; revisit if
+abused); NEW: **fame deltas are v1 guesses** (10/8/5/3/2/−5) — retune
+when epithet thresholds land in slice 4; NEW: pods unlock immediately
+(owner-lock removed) — tell the family the scoop race is real now.
 
 ---
 
