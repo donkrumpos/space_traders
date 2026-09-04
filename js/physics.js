@@ -2,22 +2,26 @@ function update() {
     // Modal choices (perk training) freeze the world so nobody dies mid-menu
     if (game.paused) return;
 
-    // Dead ships don't fly: while the wreck burns, the death sequence owns
-    // the ship and the world keeps breathing around it — pirates swirl,
-    // pods drift, projectiles fly. Camera stays on the wreck (ship hasn't
-    // moved yet; respawn happens when the sequence ends).
-    if (game.deathState) {
+    // The Crawl: while running silent the hulk sequence owns the ship.
+    // During the dead stop the ship takes no orders and the world keeps
+    // breathing around it — hostiles disengage, pods drift, projectiles
+    // fly. Once emergency thrust returns (phase 'crawl') the normal flight
+    // path resumes below, with the hulk overrides: sail-floor thrust, no
+    // fuel burn, no weapons/scooping/charting (each guards on hulkState).
+    if (game.hulkState) {
         const deltaTime = 1/60;
-        updateDeathSequence(deltaTime);
-        updateProjectiles(deltaTime);
-        updateEnemies(deltaTime);
-        updateDamageEffects(deltaTime);
-        updateEffects(deltaTime);
-        updateAsteroids(deltaTime);
-        updateDrops(deltaTime);
-        updateTraffic(deltaTime);
-        updateUI();
-        return;
+        updateHulkSequence(deltaTime); // may end the silence this frame
+        if (game.hulkState && game.hulkState.phase === 'stopped') {
+            updateProjectiles(deltaTime);
+            updateEnemies(deltaTime);
+            updateDamageEffects(deltaTime);
+            updateEffects(deltaTime);
+            updateAsteroids(deltaTime);
+            updateDrops(deltaTime);
+            updateTraffic(deltaTime);
+            updateUI();
+            return;
+        }
     }
 
     // Check for nearby planets for docking effects
@@ -36,8 +40,10 @@ function update() {
         }
     });
 
-    // Discover points of interest by flying within their range (js/exploration.js)
-    if (typeof updatePOIDetection === 'function') updatePOIDetection();
+    // Discover points of interest by flying within their range
+    // (js/exploration.js). Not while running silent — the Crawl's rule is
+    // no interactions while dark: the ghost state is recovery, not passage.
+    if (!game.hulkState && typeof updatePOIDetection === 'function') updatePOIDetection();
 
     // Variable rotation system for combat precision
     updateRotationSystem();
@@ -67,9 +73,15 @@ function update() {
         // Knocked-out engines limp at 40% thrust (60% with Emergency Thrusters)
         const enginesDamaged = game.ship.systems && game.ship.systems.engines === 'damaged';
         const limpFactor = hasPerk('emergency_thrusters') ? 0.6 : 0.4;
-        const maxThrust = baseMaxThrust
-            * (isCrawlMode ? crawlThrustReduction : isEmergencyMode ? emergencyThrustReduction : 1)
-            * (enginesDamaged ? limpFactor : 1);
+        // The Crawl's guaranteed floor: a hulk always crawls at the sail
+        // rate on emergency power — dry tanks, dead engines, doesn't matter.
+        // No stuck states, ever (the same promise the solar sail makes).
+        const isHulkCrawl = !!game.hulkState;
+        const maxThrust = isHulkCrawl
+            ? baseMaxThrust * crawlThrustReduction
+            : baseMaxThrust
+                * (isCrawlMode ? crawlThrustReduction : isEmergencyMode ? emergencyThrustReduction : 1)
+                * (enginesDamaged ? limpFactor : 1);
         const actualThrust = maxThrust * game.ship.thrust.current;
 
         if (game.ship.thrust.isThrusting) {
@@ -83,28 +95,32 @@ function update() {
             game.ship.velocity.y -= Math.sin(game.ship.angle) * reverseThrust;
         }
 
-        // Fuel consumption (improved efficiency with engine upgrades)
-        const fuelEfficiency = 1 - (game.ship.upgrades.engine - 1) * 0.1; // 10% better per level
-        const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
-        const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency)
-            * (hasPerk('fuel_sipper') ? 0.8 : 1)
-            * (crewHasRole('navigator') ? 0.85 : 1)
-            * modFuelFactor();
+        // Fuel consumption (improved efficiency with engine upgrades).
+        // The hulk crawl burns nothing — it's emergency power, and charging
+        // the tanks for the guaranteed floor could strand a dry hulk.
+        if (!isHulkCrawl) {
+            const fuelEfficiency = 1 - (game.ship.upgrades.engine - 1) * 0.1; // 10% better per level
+            const baseFuelRate = game.ship.thrust.isReversing ? 0.02 : 0.05;
+            const fuelConsumption = baseFuelRate * game.ship.thrust.current * Math.max(0.3, fuelEfficiency)
+                * (hasPerk('fuel_sipper') ? 0.8 : 1)
+                * (crewHasRole('navigator') ? 0.85 : 1)
+                * modFuelFactor();
 
-        if (game.ship.fuel > 0) {
-            // Consume main fuel first
-            game.ship.fuel -= fuelConsumption;
-            // Prevent fuel from going negative
-            if (game.ship.fuel < 0) {
-                game.ship.fuel = 0;
-            }
-        } else if (game.ship.emergencyFuel > 0) {
-            // Emergency mode: consume emergency fuel at higher rate (2x consumption)
-            const emergencyConsumption = fuelConsumption * 2;
-            game.ship.emergencyFuel -= emergencyConsumption;
-            // Prevent emergency fuel from going negative
-            if (game.ship.emergencyFuel < 0) {
-                game.ship.emergencyFuel = 0;
+            if (game.ship.fuel > 0) {
+                // Consume main fuel first
+                game.ship.fuel -= fuelConsumption;
+                // Prevent fuel from going negative
+                if (game.ship.fuel < 0) {
+                    game.ship.fuel = 0;
+                }
+            } else if (game.ship.emergencyFuel > 0) {
+                // Emergency mode: consume emergency fuel at higher rate (2x consumption)
+                const emergencyConsumption = fuelConsumption * 2;
+                game.ship.emergencyFuel -= emergencyConsumption;
+                // Prevent emergency fuel from going negative
+                if (game.ship.emergencyFuel < 0) {
+                    game.ship.emergencyFuel = 0;
+                }
             }
         }
     }

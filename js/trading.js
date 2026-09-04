@@ -5,8 +5,9 @@ function tryDock() {
         return;
     }
 
-    // Priority 2: Event interaction (lower priority - temporary encounters)
-    if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked && !game.isEngaged) {
+    // Priority 2: Event interaction (lower priority - temporary encounters).
+    // Not while running silent — docking is the Crawl's only open exit.
+    if (typeof eventSystem !== 'undefined' && eventSystem.inEventRange && eventSystem.nearEvent && !game.isDocked && !game.isEngaged && !game.hulkState) {
         interactWithEvent(eventSystem.nearEvent);
         return;
     }
@@ -20,6 +21,9 @@ function trySecondaryInteraction() {
 }
 
 function dock(planet) {
+    // Silence ends on docking (the Crawl): a hulk that limps into port gets
+    // swarmed by dockhands — recovery completes on the spot, lights back on.
+    if (game.hulkState && typeof finishHulkRecovery === 'function') finishHulkRecovery('dock');
     game.isDocked = true;
     game.currentPlanet = planet;
 

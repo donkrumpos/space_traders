@@ -203,7 +203,14 @@ function init() {
         const t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
         game.keys[e.code] = true;
-        if (game.deathState) { e.preventDefault(); return; } // the wreck takes no orders
+        // Running silent (the Crawl): during the dead stop the hulk takes no
+        // orders at all; once emergency thrust returns, flight keys work but
+        // interactions stay cold — no firing, no field repair, no event
+        // interaction while dark. Docking (Space) is the one exit left open.
+        if (game.hulkState) {
+            if (game.hulkState.phase === 'stopped') { e.preventDefault(); return; }
+            if (['KeyX', 'KeyC', 'KeyR', 'KeyE'].includes(e.code)) { e.preventDefault(); return; }
+        }
         if (e.code === 'Space') {
             e.preventDefault();
             if (game.isDocked) {
