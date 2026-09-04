@@ -60,6 +60,8 @@ docs/RUNBOOK.md          (M5) themisto deploy runbook
   is **required** — the server refuses to start without it (a guessable
   default on a public box was the footgun; local/verify pass
   `FAMILY_SECRET=dev-secret` explicitly).
+- Pilot names are bounded at the server door (1–24 chars, letters/digits/
+  space/`' . _ -`) — see "Boundary rules" under the message envelope.
 - No accounts. Trust model: a father and his six-year-old.
 
 ## SQLite schema (server/db.mjs)
@@ -86,12 +88,38 @@ JSON text frames, every message `{ "t": "<type>", ... }`. Unknown `t` is
 ignored (forward compatibility between milestones). Server → single client
 unless marked *broadcast*.
 
+### Boundary rules (2026-09-04 — "before friends join" hardening)
+
+The server stamps identity from the socket and whitelists relay fields;
+these bounds close the remaining holes. Constants live at the top of
+`server/server.mjs`; net suite `[bounds]`.
+
+- **Frame size**: ws `maxPayload` 256 KiB (biggest legitimate frame is a
+  `char.push` doc).
+- **Rate limit, per socket**: counted before parsing. Over 100 msgs/sec →
+  the message is dropped; over 500 in one second → the socket is
+  terminated (logged as `flood kick`). A real client peaks ~15/sec.
+- **Pilot names** (`hello`): trimmed; 1–24 chars; letters in any script,
+  digits, space, `' . _ -` only (`/^[\p{L}\p{N} '._-]+$/u`) — no control
+  chars, no markup (names reach every peer's DOM). Violation →
+  `reject { reason: 'bad pilot name' }` + close; the client drops its
+  stored name so the next load re-prompts (same footgun shape as
+  `bad secret`).
+- **`ship.state` numerics**: `x y angle vx vy hull hullMax shield` must
+  all be numbers, finite, and in range (|coord| ≤ 1e6, |vel| ≤ 1e4,
+  |angle| ≤ 10, vitals 0–1e6 by magnitude). One bad field → the whole
+  frame is dropped — it never reaches peers OR the combat AI. JSON
+  `1e999` parses to `Infinity`; `null`/strings ride `typeof` — hence
+  type + finite + range, not just range.
+- **Relayed free text**: `shipName` cut to 40 chars, `hullId` to 32;
+  non-strings dropped from the relay.
+
 ### M1 — handshake + shared saves
 
 | t | dir | payload |
 |---|-----|---------|
 | `hello` | c→s | `{ pilot, secret, lastPlayed }` — lastPlayed of local doc, or 0 if none |
-| `reject` | s→c | `{ reason }` (bad secret) then close |
+| `reject` | s→c | `{ reason }` (`bad secret` \| `missing pilot name` \| `bad pilot name`) then close |
 | `welcome` | s→c | `{ pilot, doc, peers: [names], config }` — `doc` = stored char doc or `null` if server has none |
 | `char.push` | c→s | `{ doc }` — full character document. Sent on the existing save throttle + on dock + on beforeunload |
 | `char.saved` | s→c | `{ updated }` ack (harness uses this) |

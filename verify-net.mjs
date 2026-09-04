@@ -1523,7 +1523,12 @@ async function pressureSuite(t, { browser, base, wsUrl }) {
 
     // dock → undock transition opens the grace window server-side (the
     // client's own 10Hz ship.state stream supplies the closing docked:false)
-    await page.evaluate(() => net.send({ t: 'ship.state', x: 9000, y: 9000, vx: 0, vy: 0, docked: true }));
+    // Full frame shape — the boundary rules drop partial ship.state frames
+    // whole, and a real client always sends every numeric (netShipSnapshot)
+    await page.evaluate(() => net.send({
+        t: 'ship.state', x: 9000, y: 9000, angle: 0, vx: 0, vy: 0,
+        hull: 100, hullMax: 100, shield: 0, docked: true
+    }));
     const graced = await until(async () => {
         const st = await debugState(page);
         const p = st && st.pilots && st.pilots.VerifyP;
@@ -1852,6 +1857,74 @@ async function healthSuite(t, { base, wsUrl }) {
     await sleep(200);
 }
 
+// WS boundary rules: the front door refuses names the DOM or the log would
+// regret; a bad ship.state frame (non-finite / out-of-range / wrong-typed
+// numerics — JSON `1e999` parses to Infinity) is dropped whole, never
+// relayed and never fed to the combat AI; free-text relay fields are
+// length-bounded; a message flood gets the socket terminated. Raw sockets
+// only — no browser pages.
+async function boundsSuite(t, { wsUrl }) {
+    // Pilot-name rules (rawPilot resolves null on reject)
+    t('a 25-char pilot name is refused', await rawPilot(wsUrl, 'X'.repeat(25)) === null);
+    t('markup in a pilot name is refused', await rawPilot(wsUrl, 'Bounds<i>') === null);
+    t('control chars in a pilot name are refused', await rawPilot(wsUrl, 'Bou\u0007nds') === null);
+
+    const watcher = await rawPilot(wsUrl, 'BoundsWatcher');
+    const sender = await rawPilot(wsUrl, "O'Bounds-9");
+    t("letters, digits, ' and - still fly", !!watcher && !!sender);
+    if (!watcher || !sender) return;
+
+    const seen = [];
+    watcher.raw.on('message', d => {
+        const m = JSON.parse(String(d));
+        if (m.t === 'peer.state' && m.pilot === "O'Bounds-9") seen.push(m);
+    });
+
+    // Five poisoned frames, then one valid one. Per-socket ordering means:
+    // if any poison were relayed, it would land before the valid frame.
+    const state = (over) => JSON.stringify({
+        t: 'ship.state', x: 10, y: 20, angle: 1, vx: 0, vy: 0,
+        hull: 50, hullMax: 100, shield: 25, hullId: 'scout',
+        shipName: 'Boundary Rider', thrusting: false, docked: false, ...over
+    });
+    sender.raw.send(state({ x: 1e999 }));            // Infinity off the wire
+    sender.raw.send(state({ y: null }));             // null rides typeof object
+    sender.raw.send(state({ vx: '12' }));            // stringly-typed velocity
+    sender.raw.send(state({ x: 2e6 }));              // finite but out of range
+    sender.raw.send(state({ hull: 1e9 }));           // vitals out of range
+    sender.raw.send(state({ x: 777, shipName: 'S'.repeat(500) }));
+    const got = await until(() => seen.length > 0 || null);
+    t('the valid frame relays', !!got && seen[0].x === 777, JSON.stringify(seen[0]));
+    t('none of the five poisoned frames relayed', seen.length === 1, `saw ${seen.length}`);
+    t('an oversized ship name is cut to 40 chars',
+        !!seen[0] && seen[0].shipName === 'S'.repeat(40), seen[0] && String(seen[0].shipName.length));
+
+    // Flood: way past the per-second budget → the server terminates the
+    // socket. The watcher (quiet, well-behaved) must survive it.
+    const flooder = await rawPilot(wsUrl, 'BoundsFlood');
+    t('flooder connects clean', !!flooder);
+    if (flooder) {
+        const closed = new Promise(r => flooder.raw.on('close', () => r(true)));
+        for (let i = 0; i < 600; i++) flooder.raw.send('{"t":"noise"}');
+        t('a 600-msg flood gets the socket terminated',
+            await Promise.race([closed, sleep(4000).then(() => false)]));
+    }
+    const alive = new Promise(r => {
+        const onMsg = d => {
+            const m = JSON.parse(String(d));
+            if (m.t === 'peer.state' && m.x === 778) { watcher.raw.off('message', onMsg); r(true); }
+        };
+        watcher.raw.on('message', onMsg);
+        setTimeout(() => { watcher.raw.off('message', onMsg); r(false); }, 4000);
+    });
+    sender.raw.send(state({ x: 778 }));
+    t('bystanders still relay after the flood kick', await alive);
+
+    watcher.raw.close();
+    sender.raw.close();
+    await sleep(200); // let the closes land before the next suite counts peers
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1873,6 +1946,7 @@ const SUITES = [
     ['death', deathSuite],
     ['saveguard', saveguardSuite],
     ['health', healthSuite],
+    ['bounds', boundsSuite],
 ];
 
 // ---------------------------------------------------------------------------

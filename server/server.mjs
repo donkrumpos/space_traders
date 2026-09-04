@@ -98,6 +98,41 @@ const wss = new WebSocketServer({ server: httpServer, maxPayload: 256 * 1024 });
 // pilot name -> ws (one live socket per pilot)
 const pilots = new Map();
 
+// --- WS boundary rules (docs/PROTOCOL.md "Boundary rules") ------------------
+// Identity is already stamped server-side and relay fields whitelisted; these
+// are the missing bounds. All of it is anti-poison, not gameplay tuning: one
+// non-finite coordinate relayed (JSON `1e999` parses to Infinity, `null`
+// slips through arithmetic as 0-ish) corrupts every peer's ghost math.
+const PILOT_NAME_MAX = 24;
+// Letters in any script, digits, space, ' . _ - ; no control chars, and no
+// markup characters at all — names reach every peer's DOM.
+const PILOT_NAME_RE = /^[\p{L}\p{N} '._-]+$/u;
+const SHIP_NAME_MAX = 40;
+const HULL_ID_MAX = 32;
+const COORD_MAX = 1e6;  // charted space sits within ±5000; generous on purpose
+const VEL_MAX = 1e4;    // wire velocity is units-per-second
+const ANGLE_MAX = 10;   // client normalizes to (-2π, 2π) (js/physics.js)
+const VITAL_MAX = 1e6;  // hull / hullMax / shield
+// Per-socket, per-second message budget. A real client peaks ~15/s (10Hz
+// ship.state + trades + saves); past MAX the message drops, an order of
+// magnitude past that the socket goes away.
+const RATE_MAX_PER_SEC = 100;
+const RATE_KICK_PER_SEC = 500;
+
+const finiteIn = (v, lim) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= lim;
+
+function validPilotName(name) {
+    return name.length > 0 && name.length <= PILOT_NAME_MAX && PILOT_NAME_RE.test(name);
+}
+
+function validShipState(m) {
+    return finiteIn(m.x, COORD_MAX) && finiteIn(m.y, COORD_MAX)
+        && finiteIn(m.angle, ANGLE_MAX)
+        && finiteIn(m.vx, VEL_MAX) && finiteIn(m.vy, VEL_MAX)
+        && finiteIn(m.hull, VITAL_MAX) && finiteIn(m.hullMax, VITAL_MAX)
+        && finiteIn(m.shield, VITAL_MAX);
+}
+
 function log(msg) {
     console.log(`[${new Date().toISOString()}] ${msg}`);
 }
@@ -127,7 +162,22 @@ wss.on('connection', (ws) => {
         if (!ws.pilot) ws.terminate();
     }, 10000);
 
+    ws.rateWindow = 0;
+    ws.rateCount = 0;
+
     ws.on('message', (raw) => {
+        // Rate check BEFORE parsing — flood protection has to be cheaper
+        // than the flood. Over budget → drop; egregiously over → terminate.
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (nowSec !== ws.rateWindow) { ws.rateWindow = nowSec; ws.rateCount = 0; }
+        if (++ws.rateCount > RATE_MAX_PER_SEC) {
+            if (ws.rateCount > RATE_KICK_PER_SEC) {
+                log(`flood kick: ${ws.pilot || 'pre-hello socket'} (${ws.rateCount} msgs in 1s)`);
+                ws.terminate();
+            }
+            return;
+        }
+
         let msg;
         try { msg = JSON.parse(raw); } catch { return; }
         if (!msg || typeof msg.t !== 'string') return;
@@ -136,13 +186,19 @@ wss.on('connection', (ws) => {
             if (msg.secret !== FAMILY_SECRET) {
                 send(ws, { t: 'reject', reason: 'bad secret' });
                 ws.close();
-                log(`reject: bad secret for pilot "${msg.pilot}"`);
+                log(`reject: bad secret for pilot "${String(msg.pilot).slice(0, 32)}"`);
                 return;
             }
             const name = String(msg.pilot || '').trim();
             if (!name) {
                 send(ws, { t: 'reject', reason: 'missing pilot name' });
                 ws.close();
+                return;
+            }
+            if (!validPilotName(name)) {
+                send(ws, { t: 'reject', reason: 'bad pilot name' });
+                ws.close();
+                log(`reject: bad pilot name (${name.length} chars)`);
                 return;
             }
             // Same pilot reconnecting (or a second machine) replaces the old socket
@@ -208,18 +264,27 @@ wss.on('connection', (ws) => {
         }
 
         if (msg.t === 'ship.state') {
+            // Boundary check before anything reads the numbers: a bad frame
+            // (non-finite, out of range, wrong type) is dropped whole — it
+            // never reaches peers OR the combat AI. A healthy client can't
+            // produce one; the next valid frame restores presence.
+            if (!validShipState(msg)) return;
             // M4: latest position feeds enemy AI targeting
             combatPilotState(ws.pilot, msg);
             // M2: relay to everyone else, pilot stamped from the handshake
             // (never trust a pilot field in the payload). Fields whitelisted,
-            // no persistence, no logging (arrives at up to 10Hz).
+            // no persistence, no logging (arrives at up to 10Hz). Free-text
+            // fields are bounded: peers render them.
             broadcastToOthers(ws.pilot, {
                 t: 'peer.state',
                 pilot: ws.pilot,
                 x: msg.x, y: msg.y, angle: msg.angle,
                 vx: msg.vx, vy: msg.vy,
                 hull: msg.hull, hullMax: msg.hullMax, shield: msg.shield,
-                hullId: msg.hullId, shipName: msg.shipName,
+                // null must survive the relay: an unchristened ship's name IS
+                // null and peers mirror it. Everything else non-string → null.
+                hullId: typeof msg.hullId === 'string' ? msg.hullId.slice(0, HULL_ID_MAX) : null,
+                shipName: typeof msg.shipName === 'string' ? msg.shipName.slice(0, SHIP_NAME_MAX) : null,
                 thrusting: !!msg.thrusting, docked: !!msg.docked
             });
             return;
