@@ -1,11 +1,15 @@
 # Next Session Roadmap
 
 State as of 2026-09-03 (sixteenth session — **Bucket A hardening: ALL FIVE
-SLICES SHIPPED**). Main `c87eae2` (pushed); **themisto still runs `6fb5e8d`
-— a deploy IS pending** (server.mjs + db.mjs changed → needs pull + npm
-install + restart, explicit per RUNBOOK; the developer hadn't authorized it
-at sync time). Five slices, each its own branch → no-ff merge, gates green
-before every server-touching commit:
+SLICES SHIPPED + DEPLOYED**). Main `d72022b`; **themisto runs `d72022b`**
+(developer-authorized deploy same session: pull + npm install + restart,
+clean boot; outside-in wss probe `reject: bad secret` through the full
+TLS/Apache/node path; the `ProxyPass /healthz` lines were added to BOTH
+siegeperilousstudio vhosts — sites-available, symlink-safe sed — configtest
++ reload clean; `https://siegeperilousstudio.com/healthz` answers 200
+`{ok:true,db:true,...}` from outside, statics still 200; a real pilot was
+online mid-verify, pilotsOnline:1). Five slices, each its own branch →
+no-ff merge, gates green before every server-touching commit:
 
 1. **README refresh (496acaa).** The old README predated combat ("4 goods
    between 5 planets", factions "planned"). Now describes the real game
@@ -52,10 +56,10 @@ before every server-touching commit:
 player-facing changed, manual.html untouched by design.
 
 **NEXT (ordered):**
-1. **Deploy to themisto** (explicit, per RUNBOOK): pull + `npm install
-   --omit=dev` + restart (server.mjs/db.mjs changed). While there: add the
-   `ProxyPass /healthz` vhost line + reload Apache, then point an external
-   uptime pinger at https://siegeperilousstudio.com/healthz.
+1. ~~Deploy to themisto~~ ✅ DONE same session (see above). One human step
+   remains: **point an external uptime pinger at
+   https://siegeperilousstudio.com/healthz** (UptimeRobot or similar —
+   alert on non-200/ok:false; needs an account, so it's the developer's).
 2. **Watch the first real death in prod** (carried).
 3. **Link the handbook from the game UI** (carried; small gated slice).
 4. **Bucket B when scheduling allows** (see fifteenth-session triage
