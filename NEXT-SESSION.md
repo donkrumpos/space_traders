@@ -1,99 +1,87 @@
 # Next Session Roadmap
 
-State as of 2026-09-04 (seventeenth session — **handbook link SHIPPED +
-Bucket B COMPLETE (all four slices)**). Main `9ca574c` (pushed); **themisto
-still runs `d72022b`** — this session's five merges are NOT deployed, and
-two of them touch server/game code (deploy = explicit go, per RUNBOOK).
-Prod check + five slices, each branch → no-ff merge, gates green before
-every commit:
+State as of 2026-09-04 (eighteenth session — **DEPLOYED + first prod death
+witnessed + aria-live alarms**). Main `2b7d68e` (pushed); **themisto runs
+main's tip** (deployed this session, verified outside-in). One slice built:
 
-0. **Prod chronicle check (read-only ssh, no deploy):** NO `pilot.died`
-   yet — the first real death is still unwatched. But real play landed:
-   **Dad charted The Ossuary Dig and Halgren's Eddy** (first prod POI
-   charters), and the per-kind chronicle cap is doing its job live
-   (12/12 market.event, notable history preserved). /healthz answers
-   green from outside; a pilot was online mid-check.
-1. **Handbook link (47382ce).** manual.html stops being URL-only: ⎘
-   links in the docked drawer's header (new tab, noopener, blur-on-click
-   so the SPACE dock key can't re-fire it) and the always-visible
-   controls footer (the game's "join screen" is prompt() dialogs — no
-   anchor there). Districts suite +2.
-2. **WS boundary hardening (ead5a5b) — Bucket B-a, SERVER CODE.** Pilot
-   names: 1–24 chars, letters/digits/space/`'._-` only → reject `bad
-   pilot name` (client drops its stored name and re-prompts, the
-   bad-secret footgun shape). ship.state numerics type+finite+range
-   checked as a whole frame (JSON `1e999` → Infinity; one bad field
-   drops the frame before peers OR combat AI); null shipName still
-   relays (unchristened ships); shipName/hullId length-cut. Per-socket
-   rate limit BEFORE parsing: >100 msg/s drops, >500/s flood-kicks.
-   PROTOCOL "Boundary rules" section. Net `[bounds]` +10.
-3. **escapeHTML (2519f7c) — Bucket B-b.** js/escape.js is THE shared
-   helper (all five specials); factions.js's escName retired into it.
-   Audit: toasts + hull engraving already textContent, ghost tags
-   canvas, faction fields + pilot names server-restricted. Sinks that
-   interpolated raw player text now escape: journal lines, chronicle
-   entries, christening banner, mod-card source line. Solo `[escape]`
-   +4 (hostile name/entry/banner render inert).
-4. **Docs hygiene (05c331f) — Bucket B-c.** NEXT-SESSION.md keeps ONLY
-   the newest record (this one) — older records live in `history/`, one
-   dated file per session (**new ritual: archive the old record there
-   when writing a new one**). TEST-PLAN.md deleted (retired process),
-   index_original.html deleted (git history keeps it). CLAUDE.md
-   updated.
-5. **CI (9ca574c) — Bucket B-d.** `.github/workflows/gates.yml` runs
-   `npm test` on every push/PR (ubuntu, node 22, chrome-headless-shell
-   cached in the ~/.cache/puppeteer layout). Getting it green took four
-   real fixes, all good on their own: verify-net's chromePath was
-   mac-arm64-hardcoded (now platform-agnostic); verify-solo needed
-   `--no-sandbox` (matches verify-net); `VERIFY_TIMEOUT_SCALE` env
-   stretches every until() + the run cap for 2-core runners (workflow
-   sets 3; local default 1, waits return early on success); and TWO
-   pre-existing flakes fixed at the root — `[boot] traffic initialized`
-   (game.traders was lazily initialized on the loop's first traffic
-   tick; init() now populates the lanes at boot, online merge rule
-   unaffected) and the `[occupation]→[faction]` cascade (early-mustered
-   band wanders off chasing prey; window 20s→45s covers the flight
-   back).
+0. **Deploy to themisto (explicit go, done first).** Pulled
+   `8164693..d986329`, npm install, restart. (Note: themisto was at
+   `8164693`, not `d72022b` as the old record said — the sixteenth
+   session's own deploy note, docs-only on top of d72022b; no mystery.)
+   Verified outside-in: wrong-secret wss probe → `reject: bad secret`;
+   /healthz 200 `ok:true db:true`; statics 200 including the new
+   js/escape.js; the manual.html ⎘ link present in the live index.html
+   (drawer header + controls footer). Journal clean after restart — no
+   `bad pilot name`, no `flood kick`; Dad auto-reconnected 30s after the
+   restart (he was flying at the time). The boundary rules now protect
+   the actual server. A follow-up statics-only pull later in the session
+   brought themisto to `2b7d68e` (no restart — no server/ or js/sim/
+   files in that range).
 
-**Gates at tip: solo ?verify 265/265 · verify-net 231/231** (was 259/221 —
-solo +2 handbook +4 escape; net +10 bounds). CI run on main: green.
-Handbook upkeep rule checked: the link slice IS the handbook surfacing;
-no mechanics changed, manual.html untouched by design.
+1. **THE FIRST PROD DEATH HAPPENED.** Chronicle (read-only better-sqlite3
+   query via the deployed repo — sqlite3 CLI isn't on the box):
+   `{"kind":"pilot.died","pilot":"Dad","faction":null,"near":"Ossuary
+   Drift"}` at 2026-09-04 06:13:02 CDT — about two minutes before this
+   session's deploy restart. Chronicled correctly on the OLD code (the
+   session-14 death pipeline worked live). Chronicle at 15 entries:
+   12/12 market.event (cap holding), 2 poi.charted, 1 pilot.died.
+   Watch item CLOSED. Follow-up for the watchlist: ask Dad how the death
+   moment felt (boom radius, the corpse run, the countdown) — first real
+   data point, and it feeds the respawn-design question below.
 
-**CI notification decision (2026-09-04, morning-after):** the developer
-got "Run failed" emails for the four chore/ci bring-up iterations —
-expected, each was a diagnosed fix step, main is green. DECIDED: keep
-the workflow triggering on pushes to ALL branches (reds get caught
-before merge in this repo's branch-then-merge rhythm); a red-run email
-is the alarm working. Don't narrow the trigger to main without a new
-reason.
+2. **aria-live alarms (ef64648, merged 2b7d68e) — the Bucket C targeted
+   win.** The Now zone repaints innerHTML every tick, which screen
+   readers treat as silence — so shields-down and fuel-out now speak
+   through `#srAlarm` (visually-hidden `role=alert`, `.sr-only` CSS),
+   one write per alarm EDGE (onset + recovery: "Alarm: shields down" /
+   "Shields restored" / emergency-power → sail-crawl escalation /
+   "Refueled"), keyed off raw ship condition rather than the rendered
+   now-state so leaving combat range with shields still down doesn't
+   falsely announce recovery. Handbook §04 grew the note (upkeep rule
+   satisfied). Solo `[aria]` +7.
+
+**Gates at tip: solo ?verify 272/272 · verify-net 231/231** (was 265/231 —
+solo +7 aria). CI green on the merge push.
+
+**OPEN DESIGN QUESTION — respawn location (developer riff, not pinned):**
+proposal on the table is respawn AT the wreck after a delay (the delay =
+others' scavenge window) instead of today's teleport-to-start + corpse
+run (pods, 90s fuse). Pros/cons riffed this session (see the session
+transcript / final summary): position-as-progress vs spawn-camping the
+fight that killed you, self-scooping your own pods (death loses its
+sting), the empty-tank-far-from-port softlock, dead-air countdown vs
+travel-as-gameplay. Middle path named: respawn at NEAREST CHARTED
+station (scales with the forever-universe, keeps a short-but-real corpse
+run). NOT pinned — waiting on the developer's call; if pinned it's a
+proper server+client gated slice (cargo.scatter is server-owned online).
 
 **NEXT (ordered):**
-1. **Deploy to themisto** (explicit go required; server/server.mjs +
-   js/game.js + client files changed → pull + restart, wss probe after,
-   per RUNBOOK). Until then the boundary rules protect nobody.
-2. **External uptime pinger** (carried, developer's step — needs an
+1. **External uptime pinger** (carried, developer's step — needs an
    account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
-3. **Watch the first real death in prod** (carried; netChronicle() or
-   the read-only ssh recipe — see this session's step 0).
+   Nudged again this session.
+2. **Respawn-location decision** (see open question above) — pin it and
+   it becomes the next feature slice.
+3. **Ask Dad about the first death** (watchlist: death FX boom radius,
+   corpse-run feel, countdown length).
 4. **Bucket C stays opportunistic** (sim unit tests WITH new sim math,
-   aria-live on shields-down/fuel alarms folded into UI slices,
-   big-file splits only during domain rewrites).
+   big-file splits only during domain rewrites; the aria-live item is
+   DONE).
 5. Expansion R-slices **only when the developer pins one**
    (docs/expansion-design.md stays proposal-only).
 
 **Watchlist (carried + updated):** dock feel under the re-tuned pressure;
 Settlement tribute pricing in play; poi-over-combat tease line; perk
 picker re-pops per dock; ×2 occupation weight cadence; invite-while-
-offline UX; 12-entry market cap feel in the Log tab (prod data point
-this session: the cap looks right — 12 market lines, history intact);
-death FX boom radius; manual.html is public (vhost-gate if the family
-wants it private). New: pilot-name rules are live once deployed — an
-existing player whose stored name violates them gets one clean
-re-prompt (only "Dad"/"Arthur" exist in prod, both fine); the handbook
-link's blur-on-click pattern should ride along into any future overlay
-links (SPACE is the dock key).
+offline UX; 12-entry market cap feel (still holding at 12/12 in prod);
+death FX boom radius (**first real death happened — ask Dad**);
+manual.html is public (vhost-gate if the family wants it private);
+pilot-name rules NOW LIVE (only "Dad"/"Arthur" exist, both pass; any
+other reject in the journal is news); the handbook link's blur-on-click
+pattern rides along into future overlay links; NEW: the `#srAlarm`
+region announces on raw-condition edges — if a future slice adds more
+alarms, route them through `updateAlarmAnnouncements()` (one channel,
+no per-tick spam), don't sprinkle new live regions.
 
 ---
 
