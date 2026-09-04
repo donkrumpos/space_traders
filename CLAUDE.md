@@ -26,6 +26,9 @@ a living shared world (see the `space-traders-direction` memory).
 Never commit game/server code without both green. Elapsed-time timing must come
 from rAF timestamps, not `performance.now()` (breaks under headless virtual time).
 
+`npm test` runs both gates in sequence (verify-solo.mjs, then verify-net.mjs).
+By hand:
+
 ```bash
 # solo — serve, then headless ?verify (expect VERIFY-PASS n/n)
 python3 -m http.server 8377 &

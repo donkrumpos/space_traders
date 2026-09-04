@@ -7,6 +7,8 @@
     "dev": "python3 -m http.server 8000",
     "serve": "python3 -m http.server 8000",
     "start": "node server/server.mjs",
+    "test": "node verify-solo.mjs && node verify-net.mjs",
+    "verify-solo": "node verify-solo.mjs",
     "verify-net": "node verify-net.mjs"
   },
   "keywords": [
