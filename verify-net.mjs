@@ -1325,9 +1325,13 @@ async function occupationSuite(t, { browser, base, wsUrl }) {
         const boss = members.find(e => e.isBandBoss && e.factionName === f);
         if (!boss) return false;
         return { bossId: boss.id, bandId: boss.bandId, size: members.length };
-    }, POI, FACTION), { timeout: 20000 });
+    }, POI, FACTION), { timeout: 45000 });
+    // 45s, not 20: if a pilot idled near the site between steps, the band
+    // mustered early and may have wandered off chasing prey — G's arrival
+    // re-acquires it, but the flight back can outlast a 20s window (the
+    // intermittent [occupation]→[faction] cascade, seen local AND CI).
     t('approaching the site musters the occupying band', !!band,
-        'no Rustfang band appeared near the site within 20s');
+        'no Rustfang band appeared near the site within 45s');
     if (!band) return;
     t('the band came in force (boss + escort)', band.size >= 2, `size=${band.size}`);
 
