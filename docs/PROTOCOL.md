@@ -53,7 +53,10 @@ docs/RUNBOOK.md          (M5) themisto deploy runbook
 - `localStorage.space_trader_pilot` — pilot name. First visit: prompt
   ("Who flies this ship?"). URL param `?pilot=NAME` overrides + persists.
 - `localStorage.space_trader_secret` — family secret. First visit: prompt.
-  URL param `?secret=S` overrides + persists. Server env `FAMILY_SECRET`
+  URL param `?secret=S` overrides + persists, then is scrubbed from the
+  address bar (`history.replaceState`) — query strings leak into browser
+  history and access logs. Net suite: `[handshake]` scrub asserts.
+  Server env `FAMILY_SECRET`
   is **required** — the server refuses to start without it (a guessable
   default on a public box was the footgun; local/verify pass
   `FAMILY_SECRET=dev-secret` explicitly).

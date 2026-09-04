@@ -50,6 +50,18 @@ const netIdentity = (() => {
     return { pilot: pilot || 'Pilot', secret: secret || null, complete: !!(pilot && secret) };
 })();
 
+// The secret is consumed (and persisted to localStorage) above — it must not
+// linger in the address bar, browser history, or anything that logs full
+// URLs. Synchronous at load, so scripts that read location.search later
+// (js/verify.js's ?verify trigger among them) see the cleaned URL.
+if (NET_PARAMS.get('secret')) {
+    try {
+        const netCleanUrl = new URL(location.href);
+        netCleanUrl.searchParams.delete('secret');
+        history.replaceState(history.state, '', netCleanUrl);
+    } catch (e) { /* no History API — cosmetic only, identity already stored */ }
+}
+
 const net = {
     online: false,
     peers: [],
