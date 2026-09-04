@@ -1,73 +1,91 @@
 # Next Session Roadmap
 
-State as of 2026-09-03 (sixteenth session — **Bucket A hardening: ALL FIVE
-SLICES SHIPPED + DEPLOYED**). Main `d72022b`; **themisto runs `d72022b`**
-(developer-authorized deploy same session: pull + npm install + restart,
-clean boot; outside-in wss probe `reject: bad secret` through the full
-TLS/Apache/node path; the `ProxyPass /healthz` lines were added to BOTH
-siegeperilousstudio vhosts — sites-available, symlink-safe sed — configtest
-+ reload clean; `https://siegeperilousstudio.com/healthz` answers 200
-`{ok:true,db:true,...}` from outside, statics still 200; a real pilot was
-online mid-verify, pilotsOnline:1). Five slices, each its own branch →
-no-ff merge, gates green before every server-touching commit:
+State as of 2026-09-04 (seventeenth session — **handbook link SHIPPED +
+Bucket B COMPLETE (all four slices)**). Main `9ca574c` (pushed); **themisto
+still runs `d72022b`** — this session's five merges are NOT deployed, and
+two of them touch server/game code (deploy = explicit go, per RUNBOOK).
+Prod check + five slices, each branch → no-ff merge, gates green before
+every commit:
 
-1. **README refresh (496acaa).** The old README predated combat ("4 goods
-   between 5 planets", factions "planned"). Now describes the real game
-   (combat/cartels/grudges, 8 goods, 7 worlds with nicknames, missions,
-   ranks/perks/hulls, exploration, player factions, the shared world),
-   real controls (SPACE docks, X/C fire, Z mode, R field repair — goods
-   names verified against game.js's goods table, nicknames against the
-   upgrade copy), run recipes, repo map, gates, links to manual.html +
-   PROTOCOL + RUNBOOK.
-2. **`npm test` (0ba4b62).** verify-solo.mjs wraps the solo gate (scratch
-   static server + chrome-headless-shell under virtual time, mirrors the
-   page verdict, nonzero exit on red); `npm test` = verify-solo && verify-
-   net. README + CLAUDE.md gate sections lead with it. Note: verify-net's
-   own [solo] suite means npm test runs the solo suite twice — accepted,
-   the standalone runner gives fast fail before the long harness.
-3. **Corrupt-save guard (b2c7884) — the strongest item, worse than the
-   review knew.** The unguarded JSON.parse at connect wouldn't just fail
-   one pilot: the throw rode the ws message handler into
-   uncaughtException → **process.exit on every connect attempt by that
-   pilot** (and the family shares one server). Now: newest backups-table
-   row that parses wins, corrupt backups skipped, pilots row repaired in
-   place (corrupt doc itself backed up for forensics), welcome.lastSeen =
-   the backup's created stamp, no valid backup → fresh start. Gotcha
-   caught by the suite's first red run: better-sqlite3 forbids writes
-   while a cursor is open — restorePilotFromBackup scans, breaks, THEN
-   savePilots. Net [saveguard] (9): raw sockets + direct SQL on the temp
-   DB. PROTOCOL schema section documents the rule.
-4. **?secret= scrub (b156f5a).** history.replaceState right after the
-   identity block consumes+persists it; ?pilot/?ws survive. Synchronous
-   at load — which is what makes `?secret=verify` harness URLs safe
-   (verify.js reads location.search AFTER net.js cleans it; a scrub
-   regression fires the solo suite inside the net harness = loud red).
-   Net [handshake] +4. PROTOCOL identity section updated.
-5. **/healthz (9015869).** { ok, uptimeSec, db, pilotsOnline,
-   worldSaveAgeSec } on the node http server; broken SQLite → ok:false +
-   503; worldSaveAgeSec null until first flush (idle age can grow — alert
-   on ok, age is context). Completes the 2026-09-01 durability list. Net
-   [health] (7). RUNBOOK: curl recipe + the one-line Apache ProxyPass to
-   expose it to an external pinger — **that vhost line is a manual
-   themisto step when the deploy happens.**
+0. **Prod chronicle check (read-only ssh, no deploy):** NO `pilot.died`
+   yet — the first real death is still unwatched. But real play landed:
+   **Dad charted The Ossuary Dig and Halgren's Eddy** (first prod POI
+   charters), and the per-kind chronicle cap is doing its job live
+   (12/12 market.event, notable history preserved). /healthz answers
+   green from outside; a pilot was online mid-check.
+1. **Handbook link (47382ce).** manual.html stops being URL-only: ⎘
+   links in the docked drawer's header (new tab, noopener, blur-on-click
+   so the SPACE dock key can't re-fire it) and the always-visible
+   controls footer (the game's "join screen" is prompt() dialogs — no
+   anchor there). Districts suite +2.
+2. **WS boundary hardening (ead5a5b) — Bucket B-a, SERVER CODE.** Pilot
+   names: 1–24 chars, letters/digits/space/`'._-` only → reject `bad
+   pilot name` (client drops its stored name and re-prompts, the
+   bad-secret footgun shape). ship.state numerics type+finite+range
+   checked as a whole frame (JSON `1e999` → Infinity; one bad field
+   drops the frame before peers OR combat AI); null shipName still
+   relays (unchristened ships); shipName/hullId length-cut. Per-socket
+   rate limit BEFORE parsing: >100 msg/s drops, >500/s flood-kicks.
+   PROTOCOL "Boundary rules" section. Net `[bounds]` +10.
+3. **escapeHTML (2519f7c) — Bucket B-b.** js/escape.js is THE shared
+   helper (all five specials); factions.js's escName retired into it.
+   Audit: toasts + hull engraving already textContent, ghost tags
+   canvas, faction fields + pilot names server-restricted. Sinks that
+   interpolated raw player text now escape: journal lines, chronicle
+   entries, christening banner, mod-card source line. Solo `[escape]`
+   +4 (hostile name/entry/banner render inert).
+4. **Docs hygiene (05c331f) — Bucket B-c.** NEXT-SESSION.md keeps ONLY
+   the newest record (this one) — older records live in `history/`, one
+   dated file per session (**new ritual: archive the old record there
+   when writing a new one**). TEST-PLAN.md deleted (retired process),
+   index_original.html deleted (git history keeps it). CLAUDE.md
+   updated.
+5. **CI (9ca574c) — Bucket B-d.** `.github/workflows/gates.yml` runs
+   `npm test` on every push/PR (ubuntu, node 22, chrome-headless-shell
+   cached in the ~/.cache/puppeteer layout). Getting it green took four
+   real fixes, all good on their own: verify-net's chromePath was
+   mac-arm64-hardcoded (now platform-agnostic); verify-solo needed
+   `--no-sandbox` (matches verify-net); `VERIFY_TIMEOUT_SCALE` env
+   stretches every until() + the run cap for 2-core runners (workflow
+   sets 3; local default 1, waits return early on success); and TWO
+   pre-existing flakes fixed at the root — `[boot] traffic initialized`
+   (game.traders was lazily initialized on the loop's first traffic
+   tick; init() now populates the lanes at boot, online merge rule
+   unaffected) and the `[occupation]→[faction]` cascade (early-mustered
+   band wanders off chasing prey; window 20s→45s covers the flight
+   back).
 
-**Gates at tip: solo ?verify 259/259 · verify-net 221/221** (was 201 —
-+9 saveguard, +4 scrub, +7 health). Handbook upkeep rule checked: nothing
-player-facing changed, manual.html untouched by design.
+**Gates at tip: solo ?verify 265/265 · verify-net 231/231** (was 259/221 —
+solo +2 handbook +4 escape; net +10 bounds). CI run on main: green.
+Handbook upkeep rule checked: the link slice IS the handbook surfacing;
+no mechanics changed, manual.html untouched by design.
 
 **NEXT (ordered):**
-1. ~~Deploy to themisto~~ ✅ DONE same session (see above). One human step
-   remains: **point an external uptime pinger at
-   https://siegeperilousstudio.com/healthz** (UptimeRobot or similar —
-   alert on non-200/ok:false; needs an account, so it's the developer's).
-2. **Watch the first real death in prod** (carried).
-3. **Link the handbook from the game UI** (carried; small gated slice).
-4. **Bucket B when scheduling allows** (see fifteenth-session triage
-   below): WS boundary hardening, escapeHTML audit, docs hygiene
-   (TEST-PLAN retirement, session-record archiving, index_original.html),
-   CI running `npm test` (now trivially possible — that was the point of
-   slice 2).
-5. Expansion R-slices **only when the developer pins one**.
+1. **Deploy to themisto** (explicit go required; server/server.mjs +
+   js/game.js + client files changed → pull + restart, wss probe after,
+   per RUNBOOK). Until then the boundary rules protect nobody.
+2. **External uptime pinger** (carried, developer's step — needs an
+   account): point UptimeRobot-or-similar at
+   https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
+3. **Watch the first real death in prod** (carried; netChronicle() or
+   the read-only ssh recipe — see this session's step 0).
+4. **Bucket C stays opportunistic** (sim unit tests WITH new sim math,
+   aria-live on shields-down/fuel alarms folded into UI slices,
+   big-file splits only during domain rewrites).
+5. Expansion R-slices **only when the developer pins one**
+   (docs/expansion-design.md stays proposal-only).
+
+**Watchlist (carried + updated):** dock feel under the re-tuned pressure;
+Settlement tribute pricing in play; poi-over-combat tease line; perk
+picker re-pops per dock; ×2 occupation weight cadence; invite-while-
+offline UX; 12-entry market cap feel in the Log tab (prod data point
+this session: the cap looks right — 12 market lines, history intact);
+death FX boom radius; manual.html is public (vhost-gate if the family
+wants it private). New: pilot-name rules are live once deployed — an
+existing player whose stored name violates them gets one clean
+re-prompt (only "Dad"/"Arthur" exist in prod, both fine); the handbook
+link's blur-on-click pattern should ride along into any future overlay
+links (SPACE is the dock key).
 
 ---
 
