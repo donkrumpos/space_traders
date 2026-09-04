@@ -43,30 +43,23 @@ main's tip** (deployed this session, verified outside-in). One slice built:
 **Gates at tip: solo ?verify 272/272 · verify-net 231/231** (was 265/231 —
 solo +7 aria). CI green on the merge push.
 
-**RESPAWN QUESTION — PARKED (post-sync riff, same day):** after a long
-riff (respawn-at-wreck, nearest-visited-port, pod-state ladder), the
-developer is leaning **keep the current system as is**: die way out →
-sent back to start; in the expanded universe the punishment IS starting
-over, and it scales with every region added, free. The keeper insight:
-what survives death is KNOWLEDGE (charts, rank, perks) — what dies is
-position and cargo; that's a roguelike loop already latent. Don't nag,
-don't build a respawn slice unless the developer re-raises it. Watch
-signal instead: after real deaths, do pilots fly back out (working) or
-log off (revisit)?
+**THE DEATH ARC — riffed, researched, and PINNED same day.** The full
+path: respawn riff → parked → developer-requested deep research
+(`docs/death-research.md`, 22 claims verified 3-0: savepoints+
+permadeath beat checkpoints on autonomy/curiosity; EVE walked back
+progression loss; severity follows CONSENT; distance-as-punishment
+cautioned) → the developer raised the defeat-state ("no one ever
+dies") → a full design riff (UO fame/karma roots, play-dead mod,
+wreckers, hyperspace) → **"lock this in": `docs/death-design.md` — THE
+CRAWL is PINNED, all recommended forks accepted.** Death is replaced
+by running-silent recovery: breach FX (peers' view) + 50% cargo
+scatter + untargetable dark-hull crawl + timed self-repair +
+fame dent. XP/rank/perks NEVER lost. Slice ladder in the doc; **slice
+1 (crawl core) is the next feature build.** Wire-visible: PROTOCOL.md
+grows hulk/recovery shapes in the same slice; handbook §08 rewrites to
+"When you fall silent."
 
-**Death-mechanics RESEARCH done (same day, developer-requested):**
-`docs/death-research.md` — deep-research pass, 22 claims verified 3-0.
-Headline: the developer's wild-beacon "save point" idea is the
-strongest evidence-backed shape (the one controlled study on respawn
-location found player-ACTIVATED savepoints and permadeath both beat
-automatic checkpoints on autonomy+curiosity); current respawn-at-start
-is the well-scoring condition at today's map size; distance-as-
-punishment is cautioned against at expansion scale (Gorgon failure
-modes); severity should follow CONSENT not distance; EVE's clone-relay
-lore + our signal canon make beacons diegetic. Still NOT pinned — the
-developer is deliberately thinking; don't build.
-
-**Also riffed same day, awaiting pins (do NOT build unpinned):**
+**Riffed same day, still awaiting pins (do NOT build unpinned):**
 - **Nomenclature taxonomy PROPOSED**: Region / World / Station / Port
   (capability, not identity) / Site / Contact / Wreck; procgen law =
   every generated object gets a Combine designation, NAMES are only
@@ -81,27 +74,28 @@ developer is deliberately thinking; don't build.
   round+shaded terminator/atmosphere rim, stations angular+docking
   arms+nav blink, ruins broken shards+bone-white pulse), same on map
   view, `[render]` verify suite, handbook line. Client-only.
-- **Death architecture stack riffed, NOT pinned** (pilot-persists/
-  ship-mortal, pod ghost-state, region-scaled severity, opt-in ironman)
-  — superseded in spirit by the parked keep-as-is lean above; keep the
-  riff in the transcript, revisit only if the developer reopens death.
+(The earlier pilot-persists/ship-mortal + respawn-location riffs are
+fully superseded by the pinned Crawl; ironman charter stays deferred
+per the pinned forks.)
 
 **NEXT (ordered):**
-1. **External uptime pinger** (carried, developer's step — needs an
+1. **BUILD THE CRAWL — slice 1, crawl core** (docs/death-design.md,
+   pinned): hulk state replaces respawn end-to-end. Server + client +
+   combat-core (disengage-on-hulk) + net (dark hull unrelayed until
+   recovery) + PROTOCOL.md + handbook §08 rewrite + verify suites both
+   gates. Then slices 2–3 (fame v1; fortified hold + wrecker tow) as
+   separate gated branches per the ladder.
+2. **External uptime pinger** (carried, developer's step — needs an
    account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
-   Nudged again this session.
-2. **Graphic split slice** (world/station/ruin — designed above, the
-   likeliest next build) and **nomenclature canon docs** — both awaiting
-   the developer's go/pins.
-3. **Ask Dad about the first death** (watchlist: death FX boom radius,
-   corpse-run feel, countdown length — now also the respawn watch
-   signal: did he fly back out or log off?).
-4. **Bucket C stays opportunistic** (sim unit tests WITH new sim math,
-   big-file splits only during domain rewrites; the aria-live item is
-   DONE).
-5. Expansion R-slices **only when the developer pins one**
-   (docs/expansion-design.md stays proposal-only).
+3. **Ask Dad about the first death** (watchlist — his 06:13 death is
+   the last one the OLD death system will ever own once the Crawl
+   ships; his read on the moment informs Crawl tuning).
+4. **Graphic split slice** (world/station/ruin) and **nomenclature
+   canon docs** — still awaiting the developer's go/pins.
+5. **Bucket C stays opportunistic**; expansion R-slices only when
+   pinned (note: the Crawl's beacon design feeds R-ladder planning —
+   beacons are jump anchors + safe harbor, never save points).
 
 **Watchlist (carried + updated):** dock feel under the re-tuned pressure;
 Settlement tribute pricing in play; poi-over-combat tease line; perk

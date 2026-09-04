@@ -1,11 +1,13 @@
 # The Crawl — death without dying (design riff)
 
-Status: **PROPOSED, not pinned** (2026-09-04, developer riff + research
-synthesis). Companion: `docs/death-research.md` (the evidence base).
-The developer's direction: no one ever dies — defeat, silence, recovery.
-Roots: UO fame/karma (the developer's home MMO), Sid Meier's Pirates!
-defeat states, the IEEE CoG savepoint/autonomy findings, EVE's
-never-touch-progression walkback.
+Status: **PINNED 2026-09-04** (developer: "lock this in" — all
+recommended fork options accepted; see Pinned forks below). Companion:
+`docs/death-research.md` (the evidence base). The direction: no one
+ever dies — defeat, silence, recovery. Roots: UO fame/karma (the
+developer's home MMO), Sid Meier's Pirates! defeat states, the IEEE
+CoG savepoint/autonomy findings, EVE's never-touch-progression
+walkback. Build order = the slice ladder at the bottom; slice 1 (crawl
+core) is the next feature slice.
 
 ## The flow
 
@@ -80,21 +82,30 @@ outward, the edge stays far. Solves the crawl's worst case (deep-space
 wreck → limp to nearest lit beacon → jump home). Belongs to the
 R-slices; the beacon is designed dual-purpose from day one.
 
-## ⚖ Forks to pin before building
+## Pinned forks (2026-09-04, all recommended options accepted)
 
-- ⚖ Cargo % scattered baseline (rec: ~50%; fortified hold cuts it,
-  Reliquary zeroes it)
-- ⚖ Delay + repair curve numbers (stopped Xs → thrust → full over
-  ~1–3 min; crawl must be a scene, not a wait)
-- ⚖ XP loss (rec: NO — fame instead; the research is unambiguous)
-- ⚖ Fame v1 shape (rec: per-pilot counter fed at chronicle hook
-  points; epithet thresholds later)
-- ⚖ Wreckers v1 (rec: paid call while dark; traffic entities later)
-- ⚖ What peers see (rec: the breach FX + wreck field + pods; the dark
-  core hull does not relay until recovery — net ghost-hide extension)
-- ⚖ Hyperspace scope (rec: R-slice; beacons dual-purpose now)
-- ⚖ Ironman charter interaction (opt-in true death for signatories —
-  deferred, from death-research architecture 3)
+- **Cargo scatter: 50% baseline** (round per-good, at least 1 pod if
+  any cargo held). Fortified hold reduces the scattered share (exact
+  cut tuned at slice 3); the Precursor Reliquary Hold still zeroes it
+  (existing behavior preserved).
+- **Delay + repair curve (initial tuning, flag-adjustable):** ~8s dead
+  stop → emergency thrust (crawl) → systems restore over ~90–120s to
+  full. The crawl must read as a scene: repair progress visible on the
+  Vitals band.
+- **XP loss: NO. Ever.** Fame carries the sting (research finding 3).
+- **Fame v1:** per-pilot counter fed at the existing chronicle hook
+  points (charter/liberation/founding/etc. add; getting wrecked
+  subtracts). Epithet thresholds are a later slice.
+- **Wreckers v1:** paid "call the wreckers" while dark (tow to nearest
+  port, price scales with distance); ambient traffic entities later.
+- **What peers see:** the breach FX + wreck field + pods; the dark
+  core hull does NOT relay until recovery — extend the net ghost-hide.
+  This is a wire-visible change: PROTOCOL.md must grow the hulk/
+  recovery message shapes in the same slice.
+- **Hyperspace: R-slice only.** Beacons designed dual-purpose (jump
+  anchor + safe harbor) from their first appearance.
+- **Ironman charter: deferred** (opt-in true death, death-research
+  architecture 3) — do not build until separately pinned.
 
 ## Slice ladder (when pinned)
 
