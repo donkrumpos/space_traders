@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { getPilot, savePilot, closeDb } from './db.mjs';
+import { getPilot, savePilot, restorePilotFromBackup, closeDb } from './db.mjs';
 import config from './config.mjs';
 import { startWorld, worldSnapshotMessage, handleWorldMessage, flushWorld } from './world.mjs';
 import {
@@ -121,7 +121,25 @@ wss.on('connection', (ws) => {
             ws.pilot = name;
             pilots.set(name, ws);
             const stored = getPilot(name);
-            const storedDoc = stored ? JSON.parse(stored.doc) : null;
+            let storedDoc = null;
+            let lastSeen = stored ? stored.updated : 0;
+            if (stored) {
+                try {
+                    storedDoc = JSON.parse(stored.doc);
+                } catch (err) {
+                    // A corrupt row must not brick the connect path — unguarded,
+                    // this throw would ride the ws message handler into
+                    // uncaughtException and take the whole server down on every
+                    // connect attempt. Newest backup that parses wins (the row
+                    // is repaired in place); none → the pilot starts fresh.
+                    const restored = restorePilotFromBackup(name);
+                    storedDoc = restored ? restored.parsed : null;
+                    lastSeen = restored ? restored.updated : 0;
+                    log(restored
+                        ? `corrupt save for "${name}" — restored the ${new Date(restored.updated).toISOString()} backup`
+                        : `corrupt save for "${name}" — no valid backup, starting fresh`);
+                }
+            }
             send(ws, {
                 t: 'welcome',
                 pilot: name,
@@ -131,7 +149,7 @@ wss.on('connection', (ws) => {
                 // M6: when this pilot's doc was last saved server-side (0 for a
                 // brand-new pilot) — the client diffs the chronicle against it
                 // for the "while you were away" digest.
-                lastSeen: stored ? stored.updated : 0
+                lastSeen
             });
             // World state follows immediately as its own message (documented
             // choice in PROTOCOL.md — welcome itself stays M1-shaped).
