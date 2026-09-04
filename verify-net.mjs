@@ -268,6 +268,29 @@ async function handshakeSuite(t, { browser, base, wsUrl }) {
     const bSeesA = await until(() => S.B.page.evaluate(() => (netStatus().peers || []).includes('VerifyA')));
     t('A sees B in peers', !!aSeesB);
     t('B sees A in peers', !!bSeesA);
+
+    // URL-borne secret: consumed into localStorage, then scrubbed from the
+    // address bar via history.replaceState (query strings leak into history
+    // and logs). This page carries ?secret=verify — safe ONLY because the
+    // scrub runs in net.js before verify.js reads location.search; if the
+    // scrub regresses, the solo suite fires inside this page and the asserts
+    // below go loudly red.
+    const scrub = await newGamePage(browser, 'VerifyScrub', { seedIdentity: false });
+    await scrub.page.goto(`${base}/index.html?pilot=VerifyScrub&secret=${SECRET}&ws=${wsUrl}`,
+        { waitUntil: 'load' });
+    t('URL-identity pilot comes online (secret consumed)',
+        !!(await until(() => scrub.page.evaluate(() => netStatus().online === true))));
+    const after = await scrub.page.evaluate(() => ({
+        search: location.search,
+        stored: localStorage.getItem('space_trader_secret'),
+        pilot: localStorage.getItem('space_trader_pilot')
+    }));
+    t('?secret= scrubbed from the URL', !after.search.includes('secret'), after.search);
+    t('other params survive the scrub',
+        after.search.includes('pilot=VerifyScrub') && after.search.includes('ws='), after.search);
+    t('secret persisted to localStorage before the scrub',
+        after.stored === SECRET && after.pilot === 'VerifyScrub');
+    await scrub.context.close().catch(() => {});
 }
 
 async function savesyncSuite(t, { browser, base, wsUrl }) {
