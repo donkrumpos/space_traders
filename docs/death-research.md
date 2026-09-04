@@ -110,6 +110,32 @@ a child on one server. Severity must be scoped or opt-in, not global.
    how far past your last activated beacon you push is a gamble the
    player chooses; distance-risk becomes autonomy instead of penalty.
    (At TODAY's map size, respawn-at-start is fine — see finding 1.)
+5. **THE DEFEAT STATE (developer-raised 2026-09-04, post-research): no
+   one ever dies.** Hull zero → hulk, not explosion: systems dark,
+   hold cracked, cargo scatters, pirates scoop and DISENGAGE (their
+   goal was the cargo — true piracy economics, matches cartel lore);
+   pilot drifts in their own wreck, field-repairs to partial thrust,
+   then crawls / fires a distress beacon (family rescue = co-op
+   content, the CCP social-support finding as a mechanic) / pays a
+   Guild tow (the WoW spirit-healer pay-to-skip hatch). Precedents
+   (design canon, NOT in the verified set): Sid Meier's Pirates!
+   (cannot die, never called soft), Mount & Blade, Outward, Kenshi.
+   Reframe: this is the MOST realist option — discontinuity is the
+   arcade part; nobody in the Reach respawns, people get wrecked and
+   walk. Serves the-ship-IS-the-character best (the christened hull
+   never vanishes; scars accumulate — Star Citizen's scars applied to
+   the ship). WARNINGS that bind: the crawl is exactly Koster's
+   corpse-run shape and Gorgon's recovery spiral IF it is dead time —
+   it must be a playable state with decisions, escape hatches, and a
+   guaranteed progress floor (emergency power always regenerates
+   minimal thrust; no stuck states). Do NOT convert defeat into
+   rank/title loss (finding 3) — let the chronicle carry the
+   reputational sting narratively. Costs: the death-moment FX, the
+   others-loot-your-wreck window (you are present at your own hulk),
+   and pirates need disengage-on-hulk AI in combat-core. Composes with
+   the rest: replaces the respawn layer entirely; beacons become
+   tow/relay anchors; consent scoping tunes hulk severity by zone;
+   ironman charter can make death real for those who sign.
 
 ## Caveats
 
