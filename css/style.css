@@ -601,6 +601,22 @@ body {
     gap: 6px;
 }
 .dockhead h3 { margin: 0; }
+.dockhead-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+/* The Pilot's Handbook — the game's instruction booklet, one click away
+   wherever a pilot catches their breath (docked drawer + the footer). */
+.handbook-link {
+    color: #88cc88;
+    font-size: 11px;
+    text-decoration: none;
+    border-bottom: 1px dotted #2a6a2a;
+    white-space: nowrap;
+}
+.handbook-link:hover { color: #ccffcc; border-bottom-color: #88cc88; }
 .district-door {
     background: #001a00;
     border: 1px dashed #2a6a2a;
