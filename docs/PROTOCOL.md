@@ -577,6 +577,7 @@ live adds. Wire shape is unchanged. Kinds so far:
 | t | dir | payload |
 |---|-----|---------|
 | `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
+| `fame.update` | s→c *broadcast* | `{ fame: { pilot: n } }` — the whole fame map (tiny at family scale), sent whenever a chronicled event moved somebody's fame. See the Fame bullet below |
 | `poi.salvage` | c→s | `{ reqId, id }` — "I'm at this charted site and its cache looks ready." Request/response like `trade` |
 | `poi.salvaged` | s→c | `{ reqId, ok, id, reward?, nextSalvageAt }` — `ok:true` carries the roster's `salvage` table (`{ credits, relics, xp }`, server-owned; the client applies exactly this) and the freshly rolled next window. `ok:false` = not ready / already claimed; `nextSalvageAt` echoes the live window so the loser's map updates |
 | `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt, occupation }` — a site's state moved (charter seeded the first cycle, a salvage claim rolled the next window, raiders dug in, or a pilot drove them out). `occupation` = `{ faction, color, since }` or `null`. Drives the "✦ salvage ready" / "⚑ dug in" map markers |
@@ -599,6 +600,22 @@ live adds. Wire shape is unchanged. Kinds so far:
   ledger is empty (offline/solo).
 - **Console hook:** `window.netChronicle()` →
   `{ count, kinds, lastSeen, unseen, unseenNotable, digestShown, latest }`.
+- **Fame v1 (2026-09-04, the Crawl's ledger — docs/death-design.md):**
+  `world.fame` `{ pilotName: n }`, persisted in the world blob (additive
+  `world.snapshot.fame` field; old clients ignore it). Fame hangs off the
+  ONE chronicle funnel: `recordChronicle` applies `FAME_DELTAS`
+  (server/world.mjs — poi.charted +10, faction.founded +10 to the founder,
+  poi.liberated +8, boss.killed +5, grudge.settled +3, poi.salvaged +2,
+  `pilot.died` **−5**, the wreck dent) and broadcasts `fame.update`.
+  Floor 0 — the Reach forgets debts, not deeds. Progression is NEVER
+  touched (death-research finding 3): fame is the sting, XP/rank/perks are
+  untouchable. Client (`js/net.js netApplyFame`): mirrors own fame to
+  `game.pilot.fame` (rides the char doc, so the HUD line works offline
+  from the last-known value — grudges pattern); the rank line in the
+  sidebar shows `✦ fame n` once any exists. Offline solo play never
+  accrues fame — the Reach's memory is inherently the shared world.
+  Epithet thresholds (fame×karma titles) are a later slice.
+  Console hook: `window.netFame()` → `{ all, mine }`.
 - **Regenerating caches (`world.snapshot.poiState`)**: `{ id: { nextSalvageAt } }`,
   persisted in the world blob. Seeded at first charter, re-rolled 12–24h out
   after each claim (jitter kills clockwork farming). Readiness is **computed on

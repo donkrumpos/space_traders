@@ -175,6 +175,7 @@ class CharacterManager {
         if (!game.pilot.grudges) game.pilot.grudges = {};
         if (!game.pilot.crew) game.pilot.crew = [];
         if (!Array.isArray(game.pilot.discoveredPOIs)) game.pilot.discoveredPOIs = [];
+        if (typeof game.pilot.fame !== 'number') game.pilot.fame = 0; // fame v1 migration
         reapplyPerkEffects();
         updateFactionUI();
 

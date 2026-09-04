@@ -456,6 +456,9 @@ function netHandleMessage(msg) {
         case 'chronicle.add':
             if (typeof applyChronicleAdd === 'function') applyChronicleAdd(msg.entry);
             break;
+        case 'fame.update':
+            netApplyFame(msg.fame);
+            break;
         // --- M7: player factions ----------------------------------------
         case 'faction.update':
             if (typeof applyFactionRegistry === 'function') applyFactionRegistry(msg.factions);
@@ -663,6 +666,8 @@ function netApplySnapshot(snap) {
     if (snap.factions && typeof applyFactionRegistry === 'function') {
         applyFactionRegistry(snap.factions);
     }
+    // Fame v1: the Reach's memory of every pilot (server-fed, chronicle-hung).
+    if (snap.fame) netApplyFame(snap.fame);
     // M6: cache windows for charted sites (salvage-ready markers).
     if (snap.poiState && typeof applyPOIState === 'function') {
         applyPOIState(snap.poiState);
@@ -1177,6 +1182,19 @@ function netApplyGrudges(grudges, seedByMax, amnesty) {
     if (typeof updateFactionUI === 'function') updateFactionUI();
 }
 
+// Fame v1: mirror the shared fame map (server authority — it hangs off the
+// chronicle funnel, so the wire only ever carries the whole tiny map). Own
+// fame lands on game.pilot.fame so the HUD line works offline from the
+// mirrored copy, same pattern as grudges.
+let netFameAll = {};
+function netApplyFame(fame) {
+    if (!fame) return;
+    netFameAll = fame;
+    if (typeof game === 'undefined' || !game.pilot) return;
+    game.pilot.fame = fame[netIdentity.pilot] || 0;
+    if (typeof updateUI === 'function') updateUI();
+}
+
 // Reconnect: the local sim stops cleanly — quiet despawn (no explosions) of
 // local sim entities. Survivors: named-warlord bounty targets (client-local
 // hunts, isBoss), escort-ambush raiders (escortAmbush, tagged in traffic.js),
@@ -1261,6 +1279,13 @@ window.netCombat = function() {
             goodType: d.goodType, qty: d.amount
         })),
         lastTickN: netLastTickN
+    };
+};
+
+window.netFame = function() {
+    return {
+        all: { ...netFameAll },
+        mine: (typeof game !== 'undefined' && game.pilot && game.pilot.fame) || 0
     };
 };
 

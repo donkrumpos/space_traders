@@ -271,7 +271,11 @@ function updateUI() {
     if (pilot && els.pilotRank) {
         const rank = PILOT_RANKS[pilot.rank];
         const next = PILOT_RANKS[pilot.rank + 1];
-        vText('rank', els.pilotRank, `${rank.icon} ${rank.title}`);
+        // Fame v1: how much of the Reach's memory is about you (server-fed
+        // off the chronicle; dented by wreckings). Shown once you have any.
+        const fame = typeof pilot.fame === 'number' && pilot.fame > 0
+            ? ` · ✦ fame ${pilot.fame}` : '';
+        vText('rank', els.pilotRank, `${rank.icon} ${rank.title}${fame}`);
         vText('xp', els.xpLine, next
             ? `XP ${pilot.xp} / ${next.xp}`
             : `XP ${pilot.xp} — highest rank`);

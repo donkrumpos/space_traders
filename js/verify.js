@@ -692,6 +692,24 @@ VERIFY_SUITES.crawl = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.fame = (assert) => {
+    // Fame v1 (docs/death-design.md): accrual is server-fed off the
+    // chronicle funnel (net gate covers it); solo owns the pilot-doc
+    // mirror and the HUD surface.
+    const saved = game.pilot.fame;
+    assert('a pilot carries a fame counter', typeof game.pilot.fame === 'number');
+    assert('a fresh pilot starts unremembered', createDefaultPilot().fame === 0);
+    game.pilot.fame = 23;
+    updateUI();
+    const rankEl = document.getElementById('pilotRank');
+    assert('the rank line carries the fame chip', !!rankEl && /✦ fame 23/.test(rankEl.textContent));
+    game.pilot.fame = 0;
+    updateUI();
+    assert('zero fame stays off the rank line', !!rankEl && !/fame/.test(rankEl.textContent));
+    game.pilot.fame = saved;
+    updateUI();
+};
+
 VERIFY_SUITES.exploration = (assert) => {
     assert('POIs loaded from the shared roster', Array.isArray(game.pois) && game.pois.length >= 1);
     const poi = game.pois.find(p => p.id === 'wraith_cache') || game.pois[0];

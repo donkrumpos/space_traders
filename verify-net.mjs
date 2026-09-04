@@ -1796,6 +1796,47 @@ async function crawlSuite(t, { browser, base, wsUrl }) {
     S.G = S.H = null;
 }
 
+// Fame v1: the chronicle funnel feeds the shared fame map — a first charter
+// pays, a wrecking dents, everyone sees the same numbers. Delta-based so the
+// suite is robust to whatever earlier suites already chronicled.
+async function fameSuite(t, { browser, base, wsUrl }) {
+    S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
+    S.H = await newGamePage(browser, 'VerifyH', { tap: true, stubPerks: true });
+    await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.H.page.goto(`${base}/index.html?pilot=VerifyH&ws=${wsUrl}`, { waitUntil: 'load' });
+    const both = await until(() => S.G.page.evaluate(() => netStatus().online === true))
+        && await until(() => S.H.page.evaluate(() => netStatus().online === true));
+    t('G+H online', !!both);
+
+    const start = await S.G.page.evaluate(() => netFame().mine);
+
+    // First charter of an uncharted site → chronicle poi.charted → +10
+    const poiId = await S.G.page.evaluate(() => {
+        const p = game.pois.find(q => !q.charted);
+        if (p) net.send({ t: 'poi.discover', id: p.id });
+        return p ? p.id : null;
+    });
+    t('an uncharted site existed to charter', !!poiId, poiId);
+    const charted = await until(() => S.G.page.evaluate(s => netFame().mine === s + 10, start));
+    t('the first charter pays 10 fame', !!charted);
+    t("H reads G's fame from the shared map", !!(await until(() =>
+        S.H.page.evaluate(s => netFame().all.VerifyG === s + 10, start))));
+    t('own fame mirrors into the pilot doc',
+        !!(await S.G.page.evaluate(s => game.pilot.fame === s + 10, start)));
+
+    // A wrecking dents the memory: breach report → pilot.died → −5
+    await S.G.page.evaluate(() => net.send({ t: 'pilot.death', x: 100, y: 100 }));
+    const dented = await until(() => S.G.page.evaluate(s => netFame().mine === s + 5, start));
+    t('a wrecking dents fame by 5', !!dented);
+    t('the fame floor holds at zero or above',
+        !!(await S.G.page.evaluate(() => netFame().mine >= 0 &&
+            Object.values(netFame().all).every(v => v >= 0))));
+
+    await S.G.context.close().catch(() => {});
+    await S.H.context.close().catch(() => {});
+    S.G = S.H = null;
+}
+
 // Corrupt-save guard: one bad row in `pilots` must not brick the connect
 // path (unguarded, the JSON.parse throw rode the ws message handler into
 // uncaughtException — one corrupt row = the whole server down on every
@@ -2002,6 +2043,7 @@ const SUITES = [
     ['tally', tallySuite],
     ['amnesty', amnestySuite],
     ['crawl', crawlSuite],
+    ['fame', fameSuite],
     ['saveguard', saveguardSuite],
     ['health', healthSuite],
     ['bounds', boundsSuite],
