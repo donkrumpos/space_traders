@@ -723,10 +723,16 @@ function handlePlayerDestruction() {
     // The breach takes its share of the hold: ~half scatters at the wreck
     // as pods anyone can scoop — the victor's reward, and the reason
     // hostiles disengage. The rest rides out the breach in the core hull.
-    // Online the server owns the pods (shared, first-wins like kill loot);
-    // offline they're ordinary local drops with a long fuse.
+    // A charged Fortified Cargo Hold (slice 3) cuts the scattered share to
+    // a quarter and burns one charge doing it; the Reliquary Hold remains
+    // the legendary tier that keeps everything, forever. Online the server
+    // owns the pods (shared, first-wins like kill loot); offline they're
+    // ordinary local drops with a long fuse.
     const wreckX = game.ship.x, wreckY = game.ship.y;
-    const { scattered, kept } = CombatCore.scatterShare(game.ship.cargo);
+    const fortCharges = (game.ship.modCharges && game.ship.modCharges.fortified_hold) || 0;
+    const fortified = !hasMod('reliquary_hold') && hasMod('fortified_hold') && fortCharges > 0;
+    const { scattered, kept } = CombatCore.scatterShare(game.ship.cargo,
+        fortified ? CombatCore.COMBAT_TUNING.hulkFortifiedFrac : undefined);
     const unitsLost = Object.values(scattered).reduce((a, b) => a + b, 0);
     if (unitsLost > 0 && hasMod('reliquary_hold')) {
         // Precursor vault-alloy: the one hold that survives its ship
@@ -753,6 +759,17 @@ function handlePlayerDestruction() {
         }
         game.ship.cargo = kept;
         showHudFeedback(`${unitsLost} cargo units blown out of the hold — the rest rode out the breach`, 'warning', 8000);
+        if (fortified) { // the baffles ate the blast — burn a charge
+            game.ship.modCharges.fortified_hold = fortCharges - 1;
+            if (fortCharges - 1 <= 0) {
+                game.ship.mods = game.ship.mods.filter(m => m !== 'fortified_hold');
+                delete game.ship.modCharges.fortified_hold;
+                showHudFeedback('The fortified baffles are spent — the hold is bare plating again', 'warning', 7000);
+            } else {
+                showHudFeedback(`The fortified hold held most of it — ${fortCharges - 1} charge${fortCharges - 1 === 1 ? '' : 's'} left`, 'info', 6000);
+            }
+            if (typeof updateShipPanelUI === 'function') updateShipPanelUI();
+        }
     }
 
     // Peers see the breach (the M4 wire kinds carry the Crawl unchanged):
@@ -830,6 +847,41 @@ function finishHulkRecovery(cause) {
     autoSave('recovered');
     updateUI();
 }
+
+// The wreckers, v1 (docs/death-design.md): a paid tow while dark. Price
+// scales with distance to the nearest port — the Reach's most Mad Max
+// profession takes its cut. Client-local by design: credits and the dark
+// unrelayed hull are both client-authoritative, so the wire never sees the
+// tow; peers meet you again at the port when the relay resumes. Ambient
+// wrecker traffic (crews that physically fly out) is a later slice.
+function wreckerQuote() {
+    if (!game.hulkState || !game.planets || game.planets.length === 0) return null;
+    let planet = null, best = Infinity;
+    game.planets.forEach(p => {
+        const d = Math.hypot(p.x - game.ship.x, p.y - game.ship.y);
+        if (d < best) { best = d; planet = p; }
+    });
+    const T = CombatCore.COMBAT_TUNING;
+    return { planet, dist: best, price: Math.round(T.hulkTowBase + best * T.hulkTowPerUnit) };
+}
+
+function callWreckers() {
+    const quote = wreckerQuote();
+    if (!quote) return;
+    if (game.ship.credits < quote.price) {
+        showHudFeedback(`The wreckers quote $${quote.price} to ${quote.planet.name} — you can't cover it. Keep crawling.`, 'error', 5000);
+        return;
+    }
+    game.ship.credits -= quote.price;
+    game.ship.x = quote.planet.x + 45;
+    game.ship.y = quote.planet.y;
+    game.ship.velocity.x = 0;
+    game.ship.velocity.y = 0;
+    addShipLog(`Towed in dark to ${quote.planet.name} by the wreckers ($${quote.price}).`);
+    showHudFeedback(`The wreckers hook the hulk — towed to ${quote.planet.name} for $${quote.price}`, 'success', 6000);
+    dock(quote.planet); // silence ends on docking; the dockhands finish the job
+}
+window.callWreckers = callWreckers;
 
 function updateDamageEffects(deltaTime) {
     // Update damage flash effect

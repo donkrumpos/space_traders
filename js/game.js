@@ -206,8 +206,10 @@ function init() {
         // Running silent (the Crawl): during the dead stop the hulk takes no
         // orders at all; once emergency thrust returns, flight keys work but
         // interactions stay cold — no firing, no field repair, no event
-        // interaction while dark. Docking (Space) is the one exit left open.
+        // interaction while dark. The two exits stay open the whole time:
+        // docking (Space, crawl phase) and the wreckers' tow (T, any phase).
         if (game.hulkState) {
+            if (e.code === 'KeyT') { e.preventDefault(); callWreckers(); return; }
             if (game.hulkState.phase === 'stopped') { e.preventDefault(); return; }
             if (['KeyX', 'KeyC', 'KeyR', 'KeyE'].includes(e.code)) { e.preventDefault(); return; }
         }

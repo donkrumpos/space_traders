@@ -518,7 +518,10 @@ function updateNowZone(els, ship) {
             ? `<div class="now-dim">Dead in space — emergency thrust in ${Math.max(0, Math.ceil(T.hulkStopSec - hs.t))}s</div>`
             : `<div class="now-dim">Crawl on emergency thrust — off every sensor</div>`;
         html += `<div class="now-big" style="color:#88ddff">self-repair ${pct}%</div>`;
-        html += `<div class="now-keys">Dock anywhere to end the silence early</div>`;
+        const tow = typeof wreckerQuote === 'function' ? wreckerQuote() : null;
+        html += tow
+            ? `<div class="now-keys"><b>T</b> wreckers tow to ${tow.planet.name} ($${tow.price}) · or dock to end it early</div>`
+            : `<div class="now-keys">Dock anywhere to end the silence early</div>`;
 
     } else if (state === 'engaged') {
         html += `<div class="now-big" style="color:#ffaa00">${game.currentEvent.name}</div>`;

@@ -101,10 +101,15 @@ const MODS = {
         blurb: 'Contracts pay 10% more — dispatchers like a clear channel.',
         stats: [['contract pay', '+10%', 'good']]
     },
+    fortified_hold: {
+        name: 'Fortified Cargo Hold', cost: 2800, slot: 'cargo', charges: 3,
+        blurb: 'Blast-baffled bulkheads: a breach spills a quarter of the hold instead of half. The baffles survive three breaches, then they are spent.',
+        stats: [['cargo on breach', '25% scatters, not 50%', 'good'], ['durability', '3 breaches, then spent', 'bad']]
+    },
     reliquary_hold: {
         name: 'Reliquary Hold', cost: 7500, slot: 'cargo',
         blurb: 'A precursor vault-alloy hold. Whatever else burns, the cargo rides out the wreck.',
-        stats: [['cargo on death', 'rides out the wreck', 'good']]
+        stats: [['cargo on breach', 'rides out the wreck, all of it', 'good']]
     }
 };
 
@@ -194,6 +199,10 @@ function installMod(id) {
     game.ship.credits -= mod.cost;
     if (!game.ship.mods) game.ship.mods = [];
     game.ship.mods.push(id);
+    if (mod.charges) { // charge-limited parts track their remaining uses
+        if (!game.ship.modCharges) game.ship.modCharges = {};
+        game.ship.modCharges[id] = mod.charges;
+    }
     recomputeShipStats();
     applyMapRange(); // the whisperdrive coil scrambles the minimap
 

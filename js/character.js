@@ -31,6 +31,7 @@ function createDefaultCharacter() {
             hullId: 'skiff',
             name: null,
             mods: [],
+            modCharges: {},
             log: [],
             upgrades: {
                 cargo: 1,
@@ -189,6 +190,7 @@ class CharacterManager {
             recomputeShipStats();
         }
         if (!game.ship.mods) game.ship.mods = [];
+        if (!game.ship.modCharges) game.ship.modCharges = {}; // charge-limited parts (fortified hold)
         if (!game.ship.log) game.ship.log = [];
         // An unnamed ship (legacy or brand-new) gets her christening on load
         if (!game.ship.name) {
@@ -353,6 +355,7 @@ class CharacterManager {
             hullId: game.ship.hullId,
             name: game.ship.name,
             mods: [...(game.ship.mods || [])],
+            modCharges: { ...(game.ship.modCharges || {}) },
             log: [...(game.ship.log || [])],
             upgrades: { ...game.ship.upgrades },
             weapons: {

@@ -485,7 +485,7 @@ VERIFY_SUITES.ships = (assert) => {
 };
 
 VERIFY_SUITES.mods = (assert) => {
-    assert('catalog holds 9 one-off parts', Object.keys(MODS).length === 9);
+    assert('catalog holds 10 one-off parts', Object.keys(MODS).length === 10);
     game.ship.mods = [];
     game.ship.hullId = 'skiff';
     recomputeShipStats();
@@ -689,6 +689,106 @@ VERIFY_SUITES.crawl = (assert) => {
     game.ship.hull = saved.hull; game.ship.shield = saved.shield;
     game.combatStreak = saved.streak;
     if (game.ship.systems) Object.assign(game.ship.systems, saved.systems);
+    updateUI();
+};
+
+VERIFY_SUITES.hatches = (assert) => {
+    // Economy hatches (docs/death-design.md slice 3): the fortified hold's
+    // charge-limited baffles, and the wreckers' paid tow while dark.
+    const T = CombatCore.COMBAT_TUNING;
+    const saved = {
+        cargo: { ...game.ship.cargo }, credits: game.ship.credits,
+        x: game.ship.x, y: game.ship.y,
+        hull: game.ship.hull, shield: game.ship.shield,
+        mods: (game.ship.mods || []).slice(),
+        modCharges: { ...(game.ship.modCharges || {}) },
+        streak: game.combatStreak, grace: game.undockGraceTimer
+    };
+    const guards = { invuln: game.testInvulnerable, docked: game.isDocked };
+    game.testInvulnerable = false; game.isDocked = false;
+
+    assert('no wrecker quote while the ship is lit', wreckerQuote() === null);
+
+    // Purchase wires up the charges
+    game.ship.mods = []; game.ship.modCharges = {};
+    game.ship.credits = 5000;
+    installMod('fortified_hold');
+    assert('the fortified hold installs with its charges',
+        hasMod('fortified_hold') && game.ship.modCharges.fortified_hold === 3);
+    assert('the purchase charges the going rate',
+        game.ship.credits === 5000 - MODS.fortified_hold.cost);
+
+    // A breach behind the baffles: a quarter scatters, one charge burns
+    const dropsBefore = game.drops.length;
+    game.ship.cargo = { food: 8, materials: 4 };
+    handlePlayerDestruction();
+    const pods = game.drops.slice(dropsBefore);
+    assert('the baffles cut the scatter to a quarter',
+        pods.reduce((a, d) => a + d.amount, 0) === 3); // round(8·¼)+round(4·¼)
+    assert('the protected share stays aboard',
+        game.ship.cargo.food === 6 && game.ship.cargo.materials === 3);
+    assert('one charge burns per breach', game.ship.modCharges.fortified_hold === 2);
+    finishHulkRecovery('repair');
+
+    // Burn the rest: the spent hold strips itself off the ship
+    game.ship.cargo = { food: 8 };
+    handlePlayerDestruction();
+    finishHulkRecovery('repair');
+    assert('two breaches leave one charge', game.ship.modCharges.fortified_hold === 1);
+    game.ship.cargo = { food: 8 };
+    handlePlayerDestruction();
+    finishHulkRecovery('repair');
+    assert('the spent baffles strip off the ship',
+        !hasMod('fortified_hold') && game.ship.modCharges.fortified_hold === undefined);
+
+    // The reliquary outranks the baffles: nothing spills, no charge burns —
+    // and the breach it rides out is the hulk we hand to the wreckers below
+    game.ship.mods = ['reliquary_hold', 'fortified_hold'];
+    game.ship.modCharges = { fortified_hold: 3 };
+    game.ship.cargo = { food: 8 };
+    const dropsBeforeVault = game.drops.length;
+    handlePlayerDestruction();
+    assert('the reliquary outranks the baffles',
+        game.drops.length === dropsBeforeVault && game.ship.cargo.food === 8
+        && game.ship.modCharges.fortified_hold === 3);
+
+    // The wreckers: quoted by distance, refused when broke, paid tow docks
+    const q = wreckerQuote();
+    const nearest = game.planets.reduce((a, p) =>
+        Math.hypot(p.x - game.ship.x, p.y - game.ship.y)
+            < Math.hypot(a.x - game.ship.x, a.y - game.ship.y) ? p : a);
+    assert('the wreckers quote the nearest port by distance', !!q && q.planet === nearest
+        && q.price === Math.round(T.hulkTowBase + q.dist * T.hulkTowPerUnit));
+
+    game.ship.credits = q.price - 1;
+    callWreckers();
+    assert('an unpayable quote leaves you dark',
+        !!game.hulkState && game.ship.credits === q.price - 1);
+
+    // Pre-mark the port visited so the tow's dock is no pilot's first landfall
+    const visited = characterManager.character && characterManager.character.progress.planetsVisited;
+    if (visited && !visited.includes(q.planet.name)) visited.push(q.planet.name);
+    game.ship.credits = q.price + 500;
+    callWreckers();
+    assert('the paid tow docks the hulk at the port, silence over',
+        game.isDocked && game.currentPlanet === q.planet && !game.hulkState);
+    assert('the tow costs exactly the quote', game.ship.credits === 500);
+    assert('the tow physically moved the hulk',
+        Math.hypot(game.ship.x - q.planet.x, game.ship.y - q.planet.y) < 80);
+    undock();
+
+    // Restore — the hatches spent charges, credits, and a change of address
+    game.testInvulnerable = guards.invuln; game.isDocked = guards.docked;
+    game.drops.length = dropsBefore;
+    game.ship.cargo = saved.cargo;
+    game.ship.credits = saved.credits;
+    game.ship.x = saved.x; game.ship.y = saved.y;
+    game.ship.hull = saved.hull; game.ship.shield = saved.shield;
+    game.ship.mods = saved.mods;
+    game.ship.modCharges = saved.modCharges;
+    game.combatStreak = saved.streak;
+    game.undockGraceTimer = saved.grace;
+    game.currentPlanet = null;
     updateUI();
 };
 
