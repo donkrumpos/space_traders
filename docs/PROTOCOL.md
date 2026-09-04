@@ -71,6 +71,12 @@ Server writes a `backups` row before overwriting any pilot doc it already has.
 Client writes `localStorage.space_trader_character_backup` before adopting a
 server doc over its local one.
 
+Corrupt-save guard (connect path): if a `pilots` row no longer parses, the
+server restores the newest backup that does (repairing the row in place;
+`welcome.lastSeen` becomes that backup's `created` stamp) — no valid backup
+means the pilot starts fresh with `doc: null`. A corrupt row never rejects
+the connect or crashes the process. Net suite: `[saveguard]`.
+
 ## Message envelope
 
 JSON text frames, every message `{ "t": "<type>", ... }`. Unknown `t` is

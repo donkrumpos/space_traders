@@ -1710,6 +1710,97 @@ async function deathSuite(t, { browser, base, wsUrl }) {
     S.G = S.H = null;
 }
 
+// Corrupt-save guard: one bad row in `pilots` must not brick the connect
+// path (unguarded, the JSON.parse throw rode the ws message handler into
+// uncaughtException — one corrupt row = the whole server down on every
+// connect). The server falls back to the newest backup that still parses,
+// skipping corrupt backups, repairs the row on disk, and a pilot with no
+// valid backup at all starts fresh. Raw sockets + direct SQL on the temp
+// DB — no browser pages needed.
+
+// Open a raw socket, complete the hello, resolve { raw, welcome } (null on
+// timeout/error). Caller closes.
+function rawPilot(wsUrl, pilot) {
+    return new Promise(resolve => {
+        const raw = new WebSocket(wsUrl);
+        const bail = setTimeout(() => { try { raw.close(); } catch {} resolve(null); }, 8000);
+        raw.on('open', () => raw.send(JSON.stringify({ t: 'hello', pilot, secret: SECRET, lastPlayed: 0 })));
+        raw.on('message', d => {
+            const m = JSON.parse(String(d));
+            if (m.t === 'welcome') { clearTimeout(bail); resolve({ raw, welcome: m }); }
+            if (m.t === 'reject') { clearTimeout(bail); try { raw.close(); } catch {} resolve(null); }
+        });
+        raw.on('error', () => { clearTimeout(bail); resolve(null); });
+    });
+}
+
+// char.push a doc and await the char.saved ack (null on timeout).
+function rawPush(conn, doc) {
+    return new Promise(resolve => {
+        const bail = setTimeout(() => { conn.raw.off('message', onMsg); resolve(null); }, 5000);
+        const onMsg = d => {
+            const m = JSON.parse(String(d));
+            if (m.t === 'char.saved') { clearTimeout(bail); conn.raw.off('message', onMsg); resolve(m); }
+        };
+        conn.raw.on('message', onMsg);
+        conn.raw.send(JSON.stringify({ t: 'char.push', doc }));
+    });
+}
+
+async function saveguardSuite(t, { wsUrl, dbPath }) {
+    const { createRequire } = await import('node:module');
+    const Database = createRequire(import.meta.url)('better-sqlite3');
+
+    // Three acked saves: pilots row = v3, backups = [v1, v2]
+    const conn = await rawPilot(wsUrl, 'VerifyKeeper');
+    t('keeper connects clean', !!conn);
+    if (!conn) return;
+    for (const marker of ['v1', 'v2', 'v3']) {
+        const saved = await rawPush(conn, { lastPlayed: Date.now(), marker });
+        t(`save ${marker} acked`, !!saved);
+    }
+    conn.raw.close();
+    await sleep(300);
+
+    // Corrupt the live row, plant a corrupt backup NEWER than v2 (the guard
+    // must pick the newest VALID, not the newest), and seed a second pilot
+    // whose row is corrupt with no backups at all.
+    const db = new Database(dbPath);
+    db.prepare('UPDATE pilots SET doc = ? WHERE name = ?').run('{"broken', 'VerifyKeeper');
+    db.prepare('INSERT INTO backups (pilot, doc, created) VALUES (?, ?, ?)')
+        .run('VerifyKeeper', 'not json either', Date.now());
+    db.prepare('INSERT INTO pilots (name, doc, updated) VALUES (?, ?, ?)')
+        .run('VerifyHollow', '<html>not a doc</html>', Date.now());
+    db.close();
+
+    const back = await rawPilot(wsUrl, 'VerifyKeeper');
+    t('keeper reconnects over the corrupt row (server alive)', !!back);
+    t('welcome carries the newest VALID backup (corrupt backup skipped)',
+        !!back && !!back.welcome.doc && back.welcome.doc.marker === 'v2',
+        back && JSON.stringify(back.welcome.doc));
+    t('lastSeen falls back to the backup stamp', !!back && back.welcome.lastSeen > 0,
+        back && String(back.welcome.lastSeen));
+    if (back) back.raw.close();
+
+    // The repair persisted — the row parses again on disk
+    const db2 = new Database(dbPath, { readonly: true });
+    const row = db2.prepare('SELECT doc FROM pilots WHERE name = ?').get('VerifyKeeper');
+    db2.close();
+    let repaired = null;
+    try { repaired = JSON.parse(row.doc); } catch { /* stays null */ }
+    t('the pilots row is repaired on disk', !!repaired && repaired.marker === 'v2',
+        row && row.doc.slice(0, 40));
+
+    // No valid backup → a fresh start, not a dead server
+    const hollow = await rawPilot(wsUrl, 'VerifyHollow');
+    t('no valid backup → fresh pilot (doc null, lastSeen 0)',
+        !!hollow && hollow.welcome.doc === null && hollow.welcome.lastSeen === 0,
+        hollow && JSON.stringify({ doc: hollow.welcome.doc, lastSeen: hollow.welcome.lastSeen }));
+    if (hollow) hollow.raw.close();
+
+    await sleep(200); // let the closes land before the next suite counts peers
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1729,6 +1820,7 @@ const SUITES = [
     ['tally', tallySuite],
     ['amnesty', amnestySuite],
     ['death', deathSuite],
+    ['saveguard', saveguardSuite],
 ];
 
 // ---------------------------------------------------------------------------
@@ -1805,6 +1897,7 @@ async function main() {
         const ctx = {
             browser,
             port,
+            dbPath,
             base: `http://127.0.0.1:${port}`,
             wsUrl: `ws://127.0.0.1:${port}`,
             // Kill + respawn the server child on the SAME port/DB ([world]
