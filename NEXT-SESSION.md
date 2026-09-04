@@ -60,6 +60,14 @@ solo +2 handbook +4 escape; net +10 bounds). CI run on main: green.
 Handbook upkeep rule checked: the link slice IS the handbook surfacing;
 no mechanics changed, manual.html untouched by design.
 
+**CI notification decision (2026-09-04, morning-after):** the developer
+got "Run failed" emails for the four chore/ci bring-up iterations —
+expected, each was a diagnosed fix step, main is green. DECIDED: keep
+the workflow triggering on pushes to ALL branches (reds get caught
+before merge in this repo's branch-then-merge rhythm); a red-run email
+is the alarm working. Don't narrow the trigger to main without a new
+reason.
+
 **NEXT (ordered):**
 1. **Deploy to themisto** (explicit go required; server/server.mjs +
    js/game.js + client files changed → pull + restart, wss probe after,
