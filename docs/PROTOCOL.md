@@ -267,11 +267,46 @@ belong to the caller, not the core.
 | `enemy.hit` | s→c *broadcast* | `{ enemyId, hull }` (piggybacks on world.tick; explicit msg optional) |
 | `enemy.killed` | s→c *broadcast* | `{ enemyId, by, reward, drops }` — killer gets credits/XP client-side; drops appear for both |
 | `drop.claim` | c→s | `{ dropId }` → `drop.taken { dropId, by }` *broadcast* (first claim wins; claimer applies pickup locally) |
-| `cargo.scatter` | c→s | `{ x, y, cargo: {goodType: qty} }` — sent on own-ship destruction; server scatters the hold as shared cargo pods (≤5 units each, ±120u around the wreck, 90s expiry, 150-unit sanity cap, owner-locked for the first 8s — other pilots' claims are swallowed while the dead pilot spawns back in; their clients retry and succeed once the lock lifts) that ride `world.tick` drops and settle via the normal `drop.claim` race. Fire-and-forget. Offline path spawns equivalent local drops. Not sent when the `reliquary_hold` mod is installed (client-side: the vault hold keeps its cargo through the wreck). |
+| `cargo.scatter` | c→s | `{ x, y, cargo: {goodType: qty} }` — sent at own-ship hull breach (the Crawl). The client sends only the SCATTERED SHARE of the hold — `CombatCore.scatterShare` at `hulkScatterFrac` (0.5): ~half of each stack rounded per good, at least 1 unit if anything is held; the kept share stays aboard the hulk. Server scatters it as shared cargo pods (≤5 units each, ±120u around the wreck, 90s expiry, 150-unit sanity cap) that ride `world.tick` drops and settle via the normal `drop.claim` race — plain first-scoop-wins, the victor's reward (the old 8s owner-lock died with the respawn: a dark hulk can't claim anything, so the lock only delayed the victor). Fire-and-forget. Offline path spawns equivalent local drops. Not sent when the `reliquary_hold` mod is installed (client-side: the vault hold keeps its whole cargo through the breach). |
 | `grudge.update` | s→c *broadcast* | `{ grudges, amnesty }` — family vendetta is shared world state. `amnesty` (added with M7's Settlement) = per-faction wall-clock stamps of the last time each grudge was paid DOWN; clients mirror it into `game.pilot.grudgeAmnesty` so their docs can prove which settlements they have seen (see the merge rule below) |
-| `pilot.death` | c→s | `{ x, y, faction? }` — sent once by `handlePlayerDestruction` when the own ship breaks up (own-ship damage is client-authoritative, so the client is the one who knows). Fire-and-forget like `cargo.scatter`. `faction` = the cartel of the killing blow's shooter (`game.damage.lastHitFaction`, stamped by every landed hit), omitted for rocks/factionless pirates. Server-side: identity comes from `ws.pilot` (never the payload), the faction is validated against `CombatCore.PIRATE_FACTIONS` (unknown → `null`), the nearest world is computed from the wreck for the ledger, and repeat reports within 10s are swallowed (one wreck per death — no ledger spam) |
-| `pilot.died` | s→c *broadcast* | `{ pilot, x, y, faction }` — a peer's ship broke up. Clients (skip self): play the wreck explosion at `(x, y)` (boom audible only within 1200u of the own ship) and hide that pilot's ghost for 4.5s (`NET_GHOST_DEAD_MS` = respawn 4s + margin, tracked in `netDeadPilots` beside the ghost map) so the old "corpse sits 4s then teleports home" is now a blast, a gap, and a reappearance wherever the respawned peer.state says. Also chronicled as `pilot.died` (see M6) |
+| `pilot.death` | c→s | `{ x, y, faction? }` — sent once by `handlePlayerDestruction` at the own ship's hull BREACH (own-ship damage is client-authoritative, so the client is the one who knows; since the Crawl this is a breach report, not a death — the pilot runs silent and recovers in place, see "The Crawl" below). Fire-and-forget like `cargo.scatter`. `faction` = the cartel of the killing blow's shooter (`game.damage.lastHitFaction`, stamped by every landed hit), omitted for rocks/factionless pirates. Server-side: identity comes from `ws.pilot` (never the payload), the faction is validated against `CombatCore.PIRATE_FACTIONS` (unknown → `null`), the nearest world is computed from the wreck for the ledger, the pilot is marked DARK (`p.dark` — excluded from combat prey selection until their `ship.state` relay resumes or they disconnect; the mark lands before the spam guard so a swallowed repeat still darkens), and repeat reports within 10s are swallowed (one wreck per breach — no ledger spam) |
+| `pilot.died` | s→c *broadcast* | `{ pilot, x, y, faction }` — a peer's hull breached. Clients (skip self): play the breach explosion at `(x, y)` (boom audible only within 1200u of the own ship) and add the pilot to `netDarkPilots` — the ghost is hidden OPEN-ENDED while they run silent, and returns with their next relayed `peer.state` (recovery re-relays), wherever the crawl took them. No timer, no respawn point. Also chronicled as `pilot.died` (see M6) |
 | `debug.*` (M4) | c→s | verify-only hooks, accepted ONLY when `VERIFY_DEBUG=1`: `debug.spawnEnemy {x,y,tier}` spawns one enemy (bad/missing tier → scout), acked `debug.spawned {enemyId}`, in the world by the next tick; `debug.spawnBand {factionName?}` musters a raid band near a random connected pilot (faction forced by retry-roll when named), acked `debug.spawned {bandId, faction, bossId, enemyIds}`; `debug.state` → server replies `{ t:'debug.state', state: {enemies, traders, drops, pilots, grudges, simNow, tickN} }` (full raw combat state). Never set in prod. |
+
+**The Crawl — hulk + recovery (2026-09-04, docs/death-design.md pinned):**
+hull zero no longer respawns anybody. The wire deliberately grows NO new
+message kinds — the existing M4 death kinds carry the new semantics, and
+recovery is signaled by silence ending, not by a message:
+
+- **Client hulk state** (`game.hulkState`, js/combat.js): breach FX + the
+  scattered cargo share + `pilot.death`, then ~`hulkStopSec` dead-stopped →
+  emergency-thrust crawl (sail-rate floor, no fuel burn, no stuck states) →
+  self-repair to full over `hulkRepairSec`, all owned by
+  `updateHulkSequence`. While hulked the ship is untargetable, undamageable,
+  and interaction-free (no firing, scooping, charting, events); docking is
+  the one open exit and completes recovery on the spot.
+- **Dark hull unrelayed:** while `game.hulkState` is set the 10Hz sender
+  sends NO `ship.state` (heartbeat included). Peers put the pilot in
+  `netDarkPilots` on `pilot.died` and hide the ghost open-ended; the ghost
+  entry itself expires on the normal 5s rule.
+- **Recovery = the relay resuming.** There is no recovery message: the
+  first `ship.state` after the silence clears the server's `p.dark` mark
+  (combatPilotState) and the first relayed `peer.state` lifts each peer's
+  `netDarkPilots` entry. Self-healing by construction — a missed
+  `pilot.died` or a dark flag stuck on either side corrects on the next
+  frame either way. A dark pilot who disconnects is cleaned up by the
+  normal leave path.
+- **Server dark mark** (`p.dark`, server/combat.mjs): set by `pilot.death`,
+  cleared by `ship.state`/disconnect. Dark pilots stay in the combat
+  targets array but `untargetable` (like docked) — invisible to prey
+  selection, still anchoring the despawn pass. CombatCore's no-prey branch
+  makes engaged hostiles break off and amble away (the disengage rule).
+- **Tuning flags** (`CombatCore.COMBAT_TUNING`, server override via
+  config.mjs `combatTuning` as usual): `hulkStopSec` 8, `hulkRepairSec`
+  105, `hulkScatterFrac` 0.5.
+- **Known edge (accepted):** the hulk state is not persisted — reloading
+  mid-crawl comes back lit with whatever hull the curve had reached.
+  Family trust model; revisit if it ever gets abused.
 
 **M4 authority split (locked at M4 kickoff):**
 

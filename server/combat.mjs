@@ -83,13 +83,15 @@ function positionedTargets() {
     for (const [name, p] of pilots) {
         if (typeof p.x === 'number' && typeof p.y === 'number') {
             // vx/vy ride ship.state in units/second — CombatCore gunnery lead.
-            // Docked pilots and fresh undocks (grace window) are invisible to
-            // prey selection but still anchor the despawn pass — the fix for
-            // pirates camping the dock door.
+            // Docked pilots, fresh undocks (grace window), and dark hulks
+            // (the Crawl: marked by pilot.death, cleared when their relay
+            // resumes) are invisible to prey selection but still anchor the
+            // despawn pass — pirates neither camp the dock door nor loiter
+            // over a wreck.
             targets.push({
                 name, x: p.x, y: p.y, vx: p.vx || 0, vy: p.vy || 0,
                 cargoUnits: p.cargoUnits || 0,
-                untargetable: !!p.docked || (p.graceUntil || 0) > simNow
+                untargetable: !!p.docked || (p.graceUntil || 0) > simNow || !!p.dark
             });
         }
     }
@@ -123,6 +125,9 @@ export function combatPilotDoc(name, doc) {
 // ship.state (10Hz): latest position is what enemy AI hunts
 export function combatPilotState(name, msg) {
     const p = ensurePilot(name);
+    // A relayed frame from a dark pilot means the silence ended — recovery
+    // is signaled by the relay resuming (the Crawl, PROTOCOL.md).
+    p.dark = false;
     if (typeof msg.x === 'number') p.x = msg.x;
     if (typeof msg.y === 'number') p.y = msg.y;
     if (typeof msg.vx === 'number') p.vx = msg.vx;
@@ -409,23 +414,23 @@ export function handleCombatMessage(ws, msg, send) {
         }
 
         case 'drop.claim': {
-            // First claim wins; the loser hears the winner's drop.taken
+            // First claim wins; the loser hears the winner's drop.taken.
+            // (The old wreck-pod owner-lock died with the respawn: under the
+            // Crawl the wrecked pilot can't claim while dark, and the pods
+            // are the victor's reward — first scoop wins, no exceptions.)
             const idx = state.drops.findIndex(d => d.id === msg.dropId);
             if (idx === -1) return true;
-            const d = state.drops[idx];
-            // Wreck pods are claim-locked to their owner while the dead pilot
-            // spawns back in — nobody vacuums a wreck mid-death-sequence.
-            // Swallowed claims retry client-side and succeed once the lock lifts.
-            if (d.lockUntil && simNow < d.lockUntil && d.ownerLock !== ws.pilot) return true;
             state.drops.splice(idx, 1);
             broadcast({ t: 'drop.taken', dropId: msg.dropId, by: ws.pilot });
             return true;
         }
 
         case 'cargo.scatter': {
-            // A destroyed pilot's hold scatters at the wreck as shared pods —
-            // same wire shape and claim flow as kill loot, first scoop wins
-            // (family trust model: quantities sanity-capped, not audited).
+            // A breached pilot's scattered share (the Crawl: the client
+            // sends only what blew out of the hold, ~half) lands at the
+            // wreck as shared pods — same wire shape and claim flow as kill
+            // loot, first scoop wins (family trust model: quantities
+            // sanity-capped, not audited).
             const x = Number(msg.x), y = Number(msg.y);
             if (!Number.isFinite(x) || !Number.isFinite(y) || !msg.cargo) return true;
             let budget = 150; // cap total units against a malformed client
@@ -440,10 +445,7 @@ export function handleCombatMessage(ws, msg, send) {
                         x: x + (Math.random() - 0.5) * 240,
                         y: y + (Math.random() - 0.5) * 240,
                         kind: 'cargo', goodType: g, qty: podQty,
-                        expiresAt: simNow + 90, // longer than kill loot — the corpse run needs time
-                        // Owner-locked while the dead pilot spawns back in
-                        // (respawn delay + margin); server-private fields
-                        ownerLock: ws.pilot, lockUntil: simNow + 8
+                        expiresAt: simNow + 90 // outlives the crawl's darkest stretch
                     });
                 }
             }
@@ -458,6 +460,11 @@ export function handleCombatMessage(ws, msg, send) {
             // named for the ledger's sense of place.
             const x = Number(msg.x), y = Number(msg.y);
             if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+            // The Crawl: the breached pilot runs silent from here — absent
+            // from prey selection until their ship.state relay resumes.
+            // Marked before the spam guard (idempotent; a swallowed repeat
+            // must still leave the pilot dark).
+            ensurePilot(ws.pilot).dark = true;
             const now = Date.now();
             if (ws.lastDeathAt && now - ws.lastDeathAt < 10000) return true; // one wreck per death — no ledger spam
             ws.lastDeathAt = now;

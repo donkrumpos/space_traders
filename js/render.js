@@ -339,11 +339,7 @@ function render() {
     // Draw lead-target reticle (where to aim at the nearest enemy)
     renderLeadReticle(ctx, game.camera);
 
-    // Draw ship (always in center) — unless it's currently a debris field
-    if (game.deathState) {
-        ctx.restore(); // end screen-shake translate
-        return;
-    }
+    // Draw ship (always in center)
     const shipX = game.canvas.width / 2;
     const shipY = game.canvas.height / 2;
 
@@ -351,9 +347,13 @@ function render() {
     ctx.translate(shipX, shipY);
     ctx.rotate(game.ship.angle);
 
-    // Invulnerability flashing effect
+    // Running silent: the core hull draws dark and barely-there — a cold
+    // hulk indistinguishable from the debris around it (the breach FX cover
+    // the first stretch). Otherwise the invulnerability flash applies.
     let shipAlpha = 1;
-    if (game.damage && game.damage.invulnerabilityTime > 0) {
+    if (game.hulkState) {
+        shipAlpha = 0.35;
+    } else if (game.damage && game.damage.invulnerabilityTime > 0) {
         // Flash the ship during invulnerability
         shipAlpha = 0.3 + 0.7 * Math.sin(Date.now() * 0.02); // Fast flashing
     }
@@ -390,8 +390,9 @@ function render() {
     }
 
     // Forward thrust indicator - intensity based on current thrust
-    // (thrust never fully dies: dry tanks fall through to the solar-sail crawl)
-    const isCrawlMode = game.ship.fuel <= 0 && game.ship.emergencyFuel <= 0;
+    // (thrust never fully dies: dry tanks fall through to the solar-sail
+    // crawl, and a running-silent hulk crawls the same way — pale flames)
+    const isCrawlMode = (game.ship.fuel <= 0 && game.ship.emergencyFuel <= 0) || !!game.hulkState;
 
     if (game.ship.thrust.isThrusting) {
         const intensity = game.ship.thrust.current;

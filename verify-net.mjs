@@ -1690,7 +1690,7 @@ async function amnestySuite(t, { browser, base, wsUrl }) {
 // killing cartel, names the nearest world, broadcasts pilot.died, and
 // chronicles it errand-voiced. Peer ghosts vanish in the blast and return
 // only after the respawn — no more 4s corpse + silent teleport home.
-async function deathSuite(t, { browser, base, wsUrl }) {
+async function crawlSuite(t, { browser, base, wsUrl }) {
     S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
     S.H = await newGamePage(browser, 'VerifyH', { tap: true, stubPerks: true });
     await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
@@ -1701,17 +1701,22 @@ async function deathSuite(t, { browser, base, wsUrl }) {
 
     const ghostUp = await until(() => S.H.page.evaluate(() =>
         netGhosts().some(g => g.pilot === 'VerifyG')));
-    t("H sees G's ghost pre-death", !!ghostUp);
+    t("H sees G's ghost pre-breach", !!ghostUp);
 
-    // The real client path: park G off a known world, stamp the killing
-    // cartel the way the fatal bolt would, and run the destruction.
+    // The real client path: park G off a known world with a hold worth
+    // scattering, stamp the killing cartel the way the fatal bolt would,
+    // and run the breach. The repair clock is stretched so G stays dark
+    // through every dark-phase assertion (flag-adjustable by design).
     const wreck = await S.G.page.evaluate(() => {
+        CombatCore.COMBAT_TUNING.hulkStopSec = 1;
+        CombatCore.COMBAT_TUNING.hulkRepairSec = 60;
         game.ship.x = 2300; game.ship.y = 1200; // nearest world: Mining Station 7
+        game.ship.cargo = { food: 7, materials: 3 };
         game.damage.lastHitFaction = 'Rustfang Cartel';
         handlePlayerDestruction();
-        return game.deathState ? { x: game.deathState.x, y: game.deathState.y } : null;
+        return game.hulkState ? { x: game.hulkState.x, y: game.hulkState.y, phase: game.hulkState.phase } : null;
     });
-    t('G entered the death sequence', !!wreck && wreck.x === 2300);
+    t('G breached into running silent (stopped)', !!wreck && wreck.x === 2300 && wreck.phase === 'stopped');
 
     const died = await until(() => S.H.page.evaluate(() =>
         (window.__wsTap || []).find(m => m && m.t === 'pilot.died' && m.pilot === 'VerifyG') || false));
@@ -1719,19 +1724,45 @@ async function deathSuite(t, { browser, base, wsUrl }) {
         !!died && died.x === 2300 && died.y === 1200 && died.faction === 'Rustfang Cartel',
         JSON.stringify(died));
 
-    t('the wreck blooms on H', !!(await until(() => S.H.page.evaluate(() =>
+    t('the breach blooms on H', !!(await until(() => S.H.page.evaluate(() =>
         effects.particles.length > 0 || effects.rings.length > 0), { timeout: 3000 })));
     const gone = await until(() => S.H.page.evaluate(() =>
         !netGhosts().some(g => g.pilot === 'VerifyG')));
-    t("G's ghost vanishes in the blast", !!gone);
+    t("G's ghost goes dark in the blast", !!gone);
+
+    // The scattered share (and ONLY that share) becomes shared pods: 50% of
+    // {food:7, materials:3} = 6 units, and the core hull keeps the rest.
+    const pods = await until(() => S.H.page.evaluate(() => {
+        const drops = netCombat().drops.filter(d => d.kind === 'cargo'
+            && Math.abs(d.x - 2300) < 400 && Math.abs(d.y - 1200) < 400);
+        const qty = drops.reduce((a, d) => a + d.qty, 0);
+        return qty > 0 ? qty : false;
+    }, { timeout: 5000 }));
+    t('the scattered share pods out for the bystander (6 of 10 units)', pods === 6, `saw ${pods}`);
+    const kept = await S.G.page.evaluate(() => game.ship.cargo);
+    t('the kept share rides out the breach on G',
+        !!kept && kept.food === 3 && kept.materials === 1, JSON.stringify(kept));
+
+    // Dark hull unrelayed: G's 10Hz sender goes quiet (the 1Hz heartbeat
+    // would land ~1+ frames in any watched second if it were still alive).
+    const countG = () => S.H.page.evaluate(() =>
+        (window.__wsTap || []).filter(m => m && m.t === 'peer.state' && m.pilot === 'VerifyG').length);
+    const before = await countG();
+    await sleep(1300);
+    const after = await countG();
+    t('the dark hull does not relay (no peer.state while silent)', after === before,
+        `${after - before} frames leaked`);
+    const darkState = await debugState(S.G.page);
+    t('the server marks G dark (off the prey list)',
+        !!darkState && !!darkState.pilots.VerifyG && darkState.pilots.VerifyG.dark === true);
 
     const entry = await until(() => S.H.page.evaluate(() =>
         netChronicle().latest.find(e => e.kind === 'pilot.died') || false));
-    t('the ledger records the death, errand-voiced and placed',
+    t('the ledger records the wrecking, errand-voiced and placed',
         !!entry && entry.text === 'the Rustfang Cartel collected their toll from VerifyG off Mining Station 7',
         entry && entry.text);
 
-    // A rapid re-report is one death, not two (the 10s ledger-spam guard) —
+    // A rapid re-report is one wreck, not two (the 10s ledger-spam guard) —
     // and an unknown cartel from another pilot sanitizes to null.
     await S.G.page.evaluate(() => net.send({ t: 'pilot.death', x: 1, y: 2, faction: 'Total Fabrication' }));
     await S.H.page.evaluate(() => net.send({ t: 'pilot.death', x: 300, y: 400, faction: 'Total Fabrication' }));
@@ -1741,13 +1772,24 @@ async function deathSuite(t, { browser, base, wsUrl }) {
     await sleep(400); // G's swallowed re-report rides its own socket — let it land
     const gDeaths = await S.H.page.evaluate(() =>
         (window.__wsTap || []).filter(m => m && m.t === 'pilot.died' && m.pilot === 'VerifyG').length);
-    t('a rapid re-report is swallowed (one wreck per death)', gDeaths === 1, `saw ${gDeaths}`);
+    t('a rapid re-report is swallowed (one wreck per breach)', gDeaths === 1, `saw ${gDeaths}`);
+    // (H's fake breach report cleared itself: H kept relaying, and the next
+    // ship.state un-darks a pilot server-side — recovery IS the relay.)
 
-    // G's 4s sequence runs live: the ghost returns only at the respawn point
+    // Recovery: fast-forward G's repair clock; the real frame loop finishes
+    // it. The relay resumes, the server un-darks G, and H's ghost returns
+    // AT THE WRECK — the old teleport-home respawn is gone.
+    await S.G.page.evaluate(() => { game.hulkState.t = 9999; });
+    const recovered = await until(() => S.G.page.evaluate(() =>
+        !game.hulkState && game.ship.hull === game.ship.hullMax), { timeout: 5000 });
+    t('repair completing ends the silence at full hull', !!recovered);
     const back = await until(() => S.H.page.evaluate(() =>
-        netGhosts().find(g => g.pilot === 'VerifyG' && Math.abs(g.x - 1050) < 400) || false),
-        { timeout: 12000 });
-    t("G's ghost returns at the respawn point, not the wreck", !!back);
+        netGhosts().find(g => g.pilot === 'VerifyG' && Math.abs(g.x - 2300) < 400) || false),
+        { timeout: 8000 });
+    t("G's ghost returns where the hulk drifted, not at a respawn point", !!back);
+    const litState = await debugState(S.G.page);
+    t('the resumed relay un-darks G on the server',
+        !!litState && !!litState.pilots.VerifyG && litState.pilots.VerifyG.dark === false);
 
     await S.G.context.close().catch(() => {});
     await S.H.context.close().catch(() => {});
@@ -1959,7 +2001,7 @@ const SUITES = [
     ['pressure', pressureSuite],
     ['tally', tallySuite],
     ['amnesty', amnestySuite],
-    ['death', deathSuite],
+    ['crawl', crawlSuite],
     ['saveguard', saveguardSuite],
     ['health', healthSuite],
     ['bounds', boundsSuite],

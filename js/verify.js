@@ -561,15 +561,35 @@ VERIFY_SUITES.mods = (assert) => {
     updateMissionsUI();
 };
 
-VERIFY_SUITES.cargoScatter = (assert) => {
-    // Destruction scatters the hold at the wreck (offline path: local drops)
+VERIFY_SUITES.crawl = (assert) => {
+    // THE CRAWL (docs/death-design.md, pinned): hull zero is a breach, not a
+    // death — half the hold scatters, the core hull runs silent and
+    // self-repairs where it drifted. No teleport, no credit tax, ever.
+    const T = CombatCore.COMBAT_TUNING;
     const saved = {
         cargo: { ...game.ship.cargo }, credits: game.ship.credits,
         x: game.ship.x, y: game.ship.y,
-        hull: game.ship.hull, shield: game.ship.shield, streak: game.combatStreak
+        hull: game.ship.hull, shield: game.ship.shield, streak: game.combatStreak,
+        systems: { ...(game.ship.systems || {}) }
     };
+
+    // The pure scatter math (shared with the server's expectations)
+    assert('the crawl clock is sane', T.hulkStopSec < T.hulkRepairSec);
+    assert('the stop line hands off to the crawl', CombatCore.hulkPhase(T.hulkStopSec) === 'crawl');
+    assert('the repair line hands off to recovery', CombatCore.hulkPhase(T.hulkRepairSec) === 'recovered');
+    const share = CombatCore.scatterShare({ food: 7, materials: 3 });
+    assert('scatter takes half of each stack, rounded',
+        share.scattered.food === 4 && share.scattered.materials === 2);
+    assert('the kept share is the remainder',
+        share.kept.food === 3 && share.kept.materials === 1);
+    const tiny = CombatCore.scatterShare({ food: 1 }, 0.25);
+    assert('at least one pod scatters if anything is held',
+        tiny.scattered.food === 1 && !tiny.kept.food);
+    assert('an empty hold scatters nothing',
+        Object.keys(CombatCore.scatterShare({}).scattered).length === 0);
+
     // Every landed hit stamps the shooter's cartel — the killing blow's
-    // faction rides the death report (M4 death broadcast)
+    // faction rides the breach report (M4 wire kinds, unchanged)
     const guards = { invuln: game.testInvulnerable, docked: game.isDocked };
     game.testInvulnerable = false; game.isDocked = false;
     game.damage.invulnerabilityTime = 0;
@@ -578,47 +598,97 @@ VERIFY_SUITES.cargoScatter = (assert) => {
     game.damage.invulnerabilityTime = 0;
     damagePlayer(1);
     assert('a factionless hit clears the stamp', game.damage.lastHitFaction === null);
-    game.testInvulnerable = guards.invuln; game.isDocked = guards.docked;
 
+    // The breach: the scattered share pods out, the rest rides the core hull
     const dropsBefore = game.drops.length;
     game.ship.cargo = { food: 7, materials: 3 };
     handlePlayerDestruction();
     const pods = game.drops.slice(dropsBefore);
-    assert('death scatters the hold into pods', pods.length === 3); // 5+2 food, 3 materials
-    assert('pods carry every lost unit', pods.reduce((a, d) => a + d.amount, 0) === 10);
-    assert('pods scatter around the wreck, not the respawn point',
+    assert('the breach enters running silent, stopped, at the wreck',
+        !!game.hulkState && game.hulkState.phase === 'stopped' && game.ship.x === saved.x);
+    assert('pods carry the scattered share only', pods.reduce((a, d) => a + d.amount, 0) === 6);
+    assert('pods drift at the wreck',
         pods.every(d => Math.abs(d.x - saved.x) < 400 && Math.abs(d.y - saved.y) < 400));
-    assert('the hold is empty after the wreck', Object.keys(game.ship.cargo).length === 0);
-    assert('death still costs 25% credits', game.ship.credits === saved.credits - Math.floor(saved.credits * 0.25));
-
-    // Death is a sequence, not a teleport: the ship holds at the wreck,
-    // takes no further damage, and only moves home when the timer ends
-    assert('death enters the wreck pause', !!game.deathState && game.ship.x === saved.x);
+    assert('the kept share rides out the breach',
+        game.ship.cargo.food === 3 && game.ship.cargo.materials === 1);
+    assert('a wrecking costs no credits', game.ship.credits === saved.credits);
+    assert('the hulk is dead-stopped with a cold reactor',
+        game.ship.velocity.x === 0 && game.ship.velocity.y === 0 && game.ship.shield === 0);
     const hullDuring = game.ship.hull;
     damagePlayer(50);
-    assert('the wreck cannot be killed twice', game.ship.hull === hullDuring);
-    finishPlayerRespawn();
-    assert('respawn lands near the start planet with the pause cleared',
-        !game.deathState && game.ship.x === 1050 && game.ship.shield === game.ship.shieldMax);
+    assert('a dark hulk cannot be hurt', game.ship.hull === hullDuring);
+    updateUI();
+    const nowLabel = document.getElementById('nowLabel');
+    assert('the Now zone reads RUNNING SILENT', !!nowLabel && nowLabel.textContent === 'RUNNING SILENT');
+    const sysLine = document.getElementById('systemsLine');
+    assert('the vitals band shows the self-repair', !!sysLine && /SELF-REPAIR/.test(sysLine.textContent));
+    const srAlarm = document.getElementById('srAlarm');
+    assert('the breach speaks through the alarm channel',
+        !!srAlarm && /hull breach/i.test(srAlarm.textContent));
 
-    // The Reliquary Hold keeps the cargo through a second wreck
+    // State machine + repair curve, driven by hand (flag-adjustable timings)
+    updateHulkSequence(T.hulkStopSec - game.hulkState.t + 0.05);
+    assert('emergency thrust returns after the dead stop', game.hulkState.phase === 'crawl');
+    game.hulkState.t = T.hulkRepairSec / 2;
+    updateHulkSequence(0);
+    assert('self-repair reaches half strength at half time',
+        Math.abs(game.ship.hull - game.ship.hullMax / 2) <= game.ship.hullMax * 0.02);
+    assert('shields stay down while dark', game.ship.shield === 0);
+
+    // Hostiles disengage: with every pilot dark, an engaged enemy breaks
+    // off and ambles away instead of freezing in orbit over the hulk
+    const foe = CombatCore.makeEnemy('scout', game.ship.x + 200, game.ship.y);
+    foe.ai.state = 'engage';
+    const foeX = foe.x, foeY = foe.y;
+    let shotCount = 0;
+    for (let i = 0; i < 120; i++) {
+        const { shots } = CombatCore.updateEnemies(
+            { enemies: [foe], targets: [{ x: game.ship.x, y: game.ship.y, untargetable: true }] },
+            1 / 60);
+        shotCount += shots.length;
+    }
+    assert('an engaged hostile disengages from a dark hulk', foe.ai.state === 'patrol');
+    assert('the disengaged hostile drifts off', Math.hypot(foe.x - foeX, foe.y - foeY) > 20);
+    assert('nothing fires on a dark hulk', shotCount === 0);
+
+    // Recovery: full systems, silence ends, and NO teleport — the ship is
+    // exactly where the crawl left it
+    if (game.ship.systems) game.ship.systems.engines = 'damaged'; // the breach left a mark
+    game.hulkState.t = T.hulkRepairSec + 1;
+    updateHulkSequence(0);
+    assert('repair completing ends the silence',
+        !game.hulkState && game.ship.hull === game.ship.hullMax && game.ship.shield === game.ship.shieldMax);
+    assert('recovery restores knocked-out subsystems',
+        !game.ship.systems || game.ship.systems.engines === 'ok');
+    assert('no teleport — recovery happens where the hulk drifted',
+        game.ship.x === saved.x && game.ship.y === saved.y);
+    updateUI();
+    assert('recovery speaks through the alarm channel',
+        !!srAlarm && /visible again/i.test(srAlarm.textContent));
+
+    // The Reliquary Hold still keeps everything through the breach
     const savedMods = (game.ship.mods || []).slice();
     game.ship.mods = ['reliquary_hold'];
     game.ship.cargo = { food: 7, materials: 3 };
     const dropsBeforeVault = game.drops.length;
     handlePlayerDestruction();
     assert('reliquary hold spills nothing', game.drops.length === dropsBeforeVault);
-    assert('reliquary hold keeps the cargo', game.ship.cargo.food === 7 && game.ship.cargo.materials === 3);
-    finishPlayerRespawn();
+    assert('reliquary hold keeps the whole manifest',
+        game.ship.cargo.food === 7 && game.ship.cargo.materials === 3);
+    assert('the reliquary saves the cargo, not the silence', !!game.hulkState);
+    finishHulkRecovery('repair');
+    assert('finishHulkRecovery clears the hulk directly', !game.hulkState);
     game.ship.mods = savedMods;
 
-    // Restore — destruction moved and taxed the verify pilot
+    // Restore — the breach moved cargo and burned state
+    game.testInvulnerable = guards.invuln; game.isDocked = guards.docked;
     game.drops.length = dropsBefore;
     game.ship.cargo = saved.cargo;
     game.ship.credits = saved.credits;
     game.ship.x = saved.x; game.ship.y = saved.y;
     game.ship.hull = saved.hull; game.ship.shield = saved.shield;
     game.combatStreak = saved.streak;
+    if (game.ship.systems) Object.assign(game.ship.systems, saved.systems);
     updateUI();
 };
 

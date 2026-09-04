@@ -336,10 +336,16 @@ function updateUI() {
     }
 
     // Knocked-out subsystem hint — the schematic flashes WHERE, this line
-    // says what to do about it
+    // says what to do about it. While running silent the line belongs to
+    // the self-repair instead: the crawl is a scene, and this (plus the
+    // hull fraction climbing on the schematic) is its progress bar.
     const systems = ship.systems || {};
     const down = Object.keys(systems).filter(s => systems[s] === 'damaged');
-    if (down.length > 0) {
+    if (game.hulkState) {
+        const pct = Math.floor(CombatCore.hulkRepairFrac(game.hulkState.t) * 100);
+        vStyle('sysD', els.systemsLine, 'display', 'block');
+        vText('sys', els.systemsLine, `◐ SELF-REPAIR ${pct}% — running silent`);
+    } else if (down.length > 0) {
         const labels = { lifeSupport: 'LIFE SUPPORT', engines: 'ENGINES', lasers: 'LASERS' };
         const kits = ship.cargo.parts || 0;
         vStyle('sysD', els.systemsLine, 'display', 'block');
@@ -385,6 +391,7 @@ function updateUI() {
 const NOW_COMBAT_RANGE2 = 900 * 900; // hostiles inside this = you're in combat
 const NOW_POI_RANGE = 600;           // a site inside this owns the zone
 const NOW_LABELS = {
+    silent:    'RUNNING SILENT',
     engaged:   'ENGAGED',
     docked:    'DOCKED',
     combat:    'IN COMBAT',
@@ -409,6 +416,7 @@ function nowCompass(dx, dy) {
 }
 
 function nowDetectState(ship) {
+    if (game.hulkState) return 'silent'; // the Crawl owns the zone outright
     if (game.isEngaged) return 'engaged';
     if (game.isDocked) return 'docked';
 
@@ -454,7 +462,7 @@ function nowDetectState(ship) {
 // alarm EDGE — onset and recovery — keyed off the raw ship condition, not the
 // rendered now-state, so leaving combat range with shields still down doesn't
 // falsely announce recovery.
-const srAlarms = { shields: false, fuel: '' };
+const srAlarms = { shields: false, fuel: '', hulk: false };
 
 function srAnnounce(text) {
     const el = document.getElementById('srAlarm');
@@ -477,6 +485,17 @@ function updateAlarmAnnouncements(ship) {
         if (fuelMsg) srAnnounce('Alarm: ' + fuelMsg);
         else if (wasOut) srAnnounce('Refueled');
     }
+
+    // The Crawl: last on purpose — on the breach frame (shields also drop)
+    // and the recovery frame (shields also restore) this write wins the
+    // single #srAlarm channel, which is the right headline both times.
+    const hulked = !!game.hulkState;
+    if (hulked !== srAlarms.hulk) {
+        srAlarms.hulk = hulked;
+        srAnnounce(hulked
+            ? 'Alarm: hull breach. Running silent, self-repair underway.'
+            : 'Systems restored. You are visible again.');
+    }
 }
 
 function updateNowZone(els, ship) {
@@ -486,7 +505,18 @@ function updateNowZone(els, ship) {
     vText('nowLabel', els.nowLabel, NOW_LABELS[state]);
 
     let html = '';
-    if (state === 'engaged') {
+    if (state === 'silent') {
+        const hs = game.hulkState;
+        const T = CombatCore.COMBAT_TUNING;
+        const pct = Math.floor(CombatCore.hulkRepairFrac(hs.t) * 100);
+        html += `<div class="now-alarm">HULL BREACH — running dark</div>`;
+        html += hs.phase === 'stopped'
+            ? `<div class="now-dim">Dead in space — emergency thrust in ${Math.max(0, Math.ceil(T.hulkStopSec - hs.t))}s</div>`
+            : `<div class="now-dim">Crawl on emergency thrust — off every sensor</div>`;
+        html += `<div class="now-big" style="color:#88ddff">self-repair ${pct}%</div>`;
+        html += `<div class="now-keys">Dock anywhere to end the silence early</div>`;
+
+    } else if (state === 'engaged') {
         html += `<div class="now-big" style="color:#ffaa00">${game.currentEvent.name}</div>`;
         html += `<div class="now-dim">Use the side panel to choose</div>`;
         html += `<div class="now-keys"><b>ESC</b> or move to disengage</div>`;

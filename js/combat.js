@@ -320,10 +320,12 @@ function updateEnemies(deltaTime) {
     }
 
     // Undock grace ticks down on frame time (rAF-driven deltaTime, per the
-    // repo timing rule). While docked or graced the ship is untargetable —
-    // the server runs the same rule online from the relayed docked flag.
+    // repo timing rule). While docked, graced, or running silent (the Crawl:
+    // a dark hulk is absent from hostile sensors) the ship is untargetable —
+    // the server runs the same rules online from the relayed docked flag and
+    // the pilot.death dark mark.
     if (game.undockGraceTimer > 0) game.undockGraceTimer -= deltaTime;
-    const shipUntargetable = !!game.isDocked || game.undockGraceTimer > 0;
+    const shipUntargetable = !!game.isDocked || game.undockGraceTimer > 0 || !!game.hulkState;
 
     // M4 online: the server owns enemy spawn/AI/band scheduling — the whole
     // local cadence below is bypassed. game.enemies becomes the extrapolated
@@ -592,9 +594,9 @@ function checkProjectileCollisions() {
             }
         }
 
-        // Check enemy projectiles vs player (a burning wreck isn't a target,
+        // Check enemy projectiles vs player (a dark hulk isn't a target,
         // and neither is a ship parked inside the station's shield)
-        if (!hitSomething && projectile.source === 'enemy' && !game.deathState && !game.isDocked) {
+        if (!hitSomething && projectile.source === 'enemy' && !game.hulkState && !game.isDocked) {
             const playerSize = 10; // Player ship collision size
             const distance = pointToSegmentDistance(
                 game.ship.x, game.ship.y, prevX, prevY, projectile.x, projectile.y
@@ -659,8 +661,8 @@ function maybeDamageSubsystem() {
 }
 
 function damagePlayer(damage, faction) {
-    if (game.deathState) return; // the wreck can't be killed twice
-    if (game.isDocked) return; // station shielding — dying while docked would strand the respawn in a corrupt docked state
+    if (game.hulkState) return; // running silent: a dark hulk reads as debris — nothing hurts it
+    if (game.isDocked) return; // station shielding — a breach while docked would strand a corrupt docked state
     if (game.testInvulnerable) return; // verify-net plot armor (harness ships park in hostile space)
 
     // Check if player is invulnerable (brief period after last hit)
@@ -705,35 +707,36 @@ function damagePlayer(damage, faction) {
     console.log(`Player hit for ${damage}! Shield: ${Math.round(game.ship.shield)}/${game.ship.shieldMax}, Hull: ${Math.round(game.ship.hull)}/${game.ship.hullMax}`);
 }
 
-const RESPAWN_DELAY = 4; // seconds at the wreck before the ship comes back
-
+// THE CRAWL (docs/death-design.md, pinned 2026-09-04): hull zero is a
+// breach, not a death. The outer hull blows (that's the boom peers see),
+// part of the hold scatters as pods, and the core hull goes dark — stopped,
+// untargetable, unrelayed — then crawls on emergency thrust while systems
+// self-repair to full. No teleport, no credit tax, no XP loss. Ever.
 function handlePlayerDestruction() {
-    if (game.deathState) return; // already dying — one wreck per ship
+    if (game.hulkState) return; // already breached — one hulk per wreck
 
     spawnExplosion(game.ship.x, game.ship.y, '#00ff00',
         game.ship.velocity.x * 60, game.ship.velocity.y * 60);
     playExplosionSound();
     addShake(0.8);
 
-    // The hold doesn't die with the ship: cargo scatters at the wreck as
-    // pods anyone can scoop — hopefully you, racing back from respawn.
+    // The breach takes its share of the hold: ~half scatters at the wreck
+    // as pods anyone can scoop — the victor's reward, and the reason
+    // hostiles disengage. The rest rides out the breach in the core hull.
     // Online the server owns the pods (shared, first-wins like kill loot);
     // offline they're ordinary local drops with a long fuse.
     const wreckX = game.ship.x, wreckY = game.ship.y;
-    const manifest = {};
-    Object.keys(game.ship.cargo).forEach(g => {
-        if (game.ship.cargo[g] > 0) manifest[g] = game.ship.cargo[g];
-    });
-    const unitsLost = Object.values(manifest).reduce((a, b) => a + b, 0);
+    const { scattered, kept } = CombatCore.scatterShare(game.ship.cargo);
+    const unitsLost = Object.values(scattered).reduce((a, b) => a + b, 0);
     if (unitsLost > 0 && hasMod('reliquary_hold')) {
         // Precursor vault-alloy: the one hold that survives its ship
-        showHudFeedback('The Reliquary Hold rides out the wreck — cargo intact', 'success', 6000);
+        showHudFeedback('The Reliquary Hold rides out the breach — cargo intact', 'success', 6000);
     } else if (unitsLost > 0) {
         if (typeof net !== 'undefined' && net.online) {
-            net.send({ t: 'cargo.scatter', x: wreckX, y: wreckY, cargo: manifest });
+            net.send({ t: 'cargo.scatter', x: wreckX, y: wreckY, cargo: scattered });
         } else {
-            Object.keys(manifest).forEach(g => {
-                let qty = manifest[g];
+            Object.keys(scattered).forEach(g => {
+                let qty = scattered[g];
                 while (qty > 0) { // pods of ≤5 so the wreck reads as a debris field
                     const podQty = Math.min(5, qty);
                     qty -= podQty;
@@ -743,19 +746,19 @@ function handlePlayerDestruction() {
                         vx: (Math.random() - 0.5) * 0.8,
                         vy: (Math.random() - 0.5) * 0.8,
                         goodType: g, amount: podQty,
-                        life: 90 // longer than kill loot — the corpse run needs time
+                        life: 90 // outlives the crawl's darkest stretch
                     });
                 }
             });
         }
-        game.ship.cargo = {};
-        showHudFeedback(`${unitsLost} cargo units adrift at the wreck — race back before someone else scoops them!`, 'warning', 8000);
+        game.ship.cargo = kept;
+        showHudFeedback(`${unitsLost} cargo units blown out of the hold — the rest rode out the breach`, 'warning', 8000);
     }
 
-    // Peers see the wreck too (M4 death broadcast): report it once — the
-    // server stamps identity from the socket, validates the cartel, names
-    // the nearest world for the ledger, and tells everyone. Offline solo
-    // has no peers to tell.
+    // Peers see the breach (the M4 wire kinds carry the Crawl unchanged):
+    // report it once — the server stamps identity from the socket, validates
+    // the cartel, names the nearest world for the ledger, marks this pilot
+    // dark, and tells everyone. Offline solo has no peers to tell.
     if (typeof net !== 'undefined' && net.online) {
         net.send({
             t: 'pilot.death', x: wreckX, y: wreckY,
@@ -763,86 +766,68 @@ function handlePlayerDestruction() {
         });
     }
 
-    // Lose some credits (25%) — the tax lands at the moment of death
-    const creditsLost = Math.floor(game.ship.credits * 0.25);
-    game.ship.credits -= creditsLost;
-
-    // Dying ends the bounty streak
+    // A wrecking ends the bounty streak — and costs nothing else you've
+    // earned. Fame will carry the sting (slice 2); progression never does.
     game.combatStreak = 0;
 
-    // Death is a MOMENT now, not a teleport: the ship shatters at the wreck,
-    // the pods drift, and the pilot watches it burn for RESPAWN_DELAY seconds
-    // before the ship comes back. update() runs the sequence.
+    // RUNNING SILENT: dead stop, reactor cold, off every sensor.
+    // updateHulkSequence() owns the scene from here — emergency thrust
+    // after the stop, self-repair to full over the crawl.
     game.ship.velocity.x = 0;
     game.ship.velocity.y = 0;
-    game.deathState = { timer: RESPAWN_DELAY, x: wreckX, y: wreckY, boomTimer: 0 };
+    game.ship.shield = 0;
+    game.hulkState = { t: 0, phase: 'stopped', x: wreckX, y: wreckY, boomTimer: 0 };
 
-    const old = document.getElementById('deathBanner');
-    if (old) old.remove();
-    const banner = document.createElement('div');
-    banner.id = 'deathBanner';
-    banner.style.cssText = `
-        position: fixed; top: 25%; left: 50%; transform: translateX(-50%);
-        background: #1a0000; border: 3px solid #ff4444; padding: 22px 44px;
-        font-family: 'Courier New', monospace; text-align: center;
-        z-index: 2000; box-shadow: 0 0 40px #ff444488;
-    `;
-    banner.innerHTML = `
-        <div style="color:#ff4444; font-size:13px; letter-spacing:4px;">SHIP DESTROYED</div>
-        <div id="deathCountdown" style="color:#ffffff; font-size:22px; margin-top:8px;"></div>
-        <div style="color:#888888; font-size:11px; margin-top:8px;">−$${creditsLost} · the wreck keeps what you carried</div>
-    `;
-    document.body.appendChild(banner);
-
-    console.log(`Ship destroyed. Lost ${creditsLost} credits; respawning in ${RESPAWN_DELAY}s.`);
+    console.log(`Hull breach. Running silent; self-repair over ~${CombatCore.COMBAT_TUNING.hulkRepairSec}s.`);
 }
 
-// Runs each frame while game.deathState is set: secondary blasts ripple
-// through the first stretch (the shatter), the banner counts down, and the
-// respawn fires when the timer runs out.
-function updateDeathSequence(dt) {
-    const ds = game.deathState;
-    ds.timer -= dt;
-    ds.boomTimer -= dt;
-    if (ds.timer > RESPAWN_DELAY - 1.8 && ds.boomTimer <= 0) {
-        ds.boomTimer = 0.22 + Math.random() * 0.2;
+// Runs each frame while game.hulkState is set (both phases): secondary
+// blasts ripple through the first stretch (the shatter), then the scene is
+// a cold hulk knitting itself back together — the repair curve IS the
+// vitals band. Timings live in CombatCore.COMBAT_TUNING (flag-adjustable).
+function updateHulkSequence(dt) {
+    const hs = game.hulkState;
+    hs.t += dt;
+    hs.boomTimer -= dt;
+    if (hs.t < 1.8 && hs.boomTimer <= 0) {
+        hs.boomTimer = 0.22 + Math.random() * 0.2;
         spawnExplosion(
-            ds.x + (Math.random() - 0.5) * 44,
-            ds.y + (Math.random() - 0.5) * 44,
+            hs.x + (Math.random() - 0.5) * 44,
+            hs.y + (Math.random() - 0.5) * 44,
             Math.random() < 0.5 ? '#00ff00' : '#ffaa44',
             (Math.random() - 0.5) * 150, (Math.random() - 0.5) * 150);
         addShake(0.3);
     }
-    const countdown = document.getElementById('deathCountdown');
-    if (countdown) countdown.textContent = `respawning in ${Math.max(0, ds.timer).toFixed(1)}s`;
-    if (ds.timer <= 0) finishPlayerRespawn();
+
+    // Self-repair: hull knits from nothing to full over hulkRepairSec.
+    // Shields stay down the whole way — the reactor is cold, that's the
+    // whole reason nothing can see you.
+    game.ship.hull = Math.max(1, game.ship.hullMax * CombatCore.hulkRepairFrac(hs.t));
+    game.ship.shield = 0;
+
+    const phase = CombatCore.hulkPhase(hs.t);
+    if (hs.phase === 'stopped' && phase === 'crawl') {
+        hs.phase = 'crawl';
+        showHudFeedback('Emergency thrust restored — crawl while the systems knit', 'info', 5000);
+    }
+    if (phase === 'recovered') finishHulkRecovery('repair');
 }
 
-function finishPlayerRespawn() {
-    // Reset hull to 25%, shields to full
-    game.ship.hull = game.ship.hullMax * 0.25;
+// Silence ends (docs/death-design.md): repair completing, or docking.
+// Systems light up, the relay resumes (net.js checks hulkState), and the
+// ship is a target again — wherever the crawl took it. No teleport.
+function finishHulkRecovery(cause) {
+    if (!game.hulkState) return;
+    game.ship.hull = game.ship.hullMax;
     game.ship.shield = game.ship.shieldMax;
-
-    // Move player to a safe location (near starting area)
-    game.ship.x = 1050;
-    game.ship.y = 850;
-    game.ship.velocity.x = 0;
-    game.ship.velocity.y = 0;
-
-    // Clear all enemies to give player a break (online this only clears
-    // client-local ones — server enemies re-merge and keep their grudges)
-    game.enemies = [];
-
-    game.deathState = null;
-    const banner = document.getElementById('deathBanner');
-    if (banner) banner.remove();
-
-    // Belt and braces: if death somehow caught us docked, don't respawn
-    // still flagged docked at a planet we're nowhere near
-    if (game.isDocked) undock();
-
-    // Auto-save the respawn state
-    autoSave('respawn');
+    if (game.ship.systems) {
+        Object.keys(game.ship.systems).forEach(s => { game.ship.systems[s] = 'ok'; });
+    }
+    game.hulkState = null;
+    showHudFeedback(cause === 'dock'
+        ? 'Dockhands swarm the hulk — all systems restored'
+        : 'Reactor relit — all systems restored. You are visible again.', 'success', 6000);
+    autoSave('recovered');
     updateUI();
 }
 
@@ -863,7 +848,10 @@ function updateDamageEffects(deltaTime) {
         }
     }
 
-    // Shield regeneration: 3 points/second after 4 seconds without damage
+    // Shield regeneration: 3 points/second after 4 seconds without damage.
+    // Not while running silent — the reactor is cold; the hulk sequence owns
+    // shields (0) and hull (the repair curve) until recovery.
+    if (game.hulkState) return;
     if (game.damage.shieldRegenDelay > 0) {
         game.damage.shieldRegenDelay -= deltaTime;
     } else if (game.ship.shield < game.ship.shieldMax) {

@@ -119,8 +119,51 @@
         raidBandGateCredits: 8000,  // bands muster once you're worth robbing (was 2500)
         raidBandCadenceSec: [240, 420],
         stationNoSpawnRadius: 600,  // fresh hostiles never spawn this close to a port
-        undockGraceSec: 8           // a just-undocked pilot isn't prey yet
+        undockGraceSec: 8,          // a just-undocked pilot isn't prey yet
+        // The Crawl (docs/death-design.md, pinned 2026-09-04): hull zero is a
+        // breach, not a death — dead stop, then an emergency-thrust crawl
+        // while systems self-repair. All three knobs are flag-adjustable here
+        // (server override via config.mjs combatTuning, same as the rest).
+        hulkStopSec: 8,             // breach → dead stop before emergency thrust returns
+        hulkRepairSec: 105,         // breach → systems restored to full (~90-120s window)
+        hulkScatterFrac: 0.5        // share of the hold that blows out as pods
     };
+
+    // Pure crawl-state math, shared by browser, server, and both gates.
+    // t = seconds since the breach.
+    function hulkPhase(t) {
+        if (t >= COMBAT_TUNING.hulkRepairSec) return 'recovered';
+        return t < COMBAT_TUNING.hulkStopSec ? 'stopped' : 'crawl';
+    }
+
+    function hulkRepairFrac(t) {
+        return Math.max(0, Math.min(1, t / COMBAT_TUNING.hulkRepairSec));
+    }
+
+    // Split a hold for the breach: ~frac of each stack scatters as pods
+    // (rounded per good), the rest rides out the wreck in the core hull.
+    // If anything is held at all, at least one unit scatters — the victor
+    // is owed a pod.
+    function scatterShare(cargo, frac) {
+        const f = frac === undefined ? COMBAT_TUNING.hulkScatterFrac : frac;
+        const scattered = {}, kept = {};
+        let total = 0, biggest = null, biggestQty = 0;
+        Object.keys(cargo || {}).forEach(g => {
+            const qty = Math.floor(Number(cargo[g])) || 0;
+            if (qty <= 0) return;
+            const s = Math.min(qty, Math.round(qty * f));
+            if (s > 0) scattered[g] = s;
+            if (qty - s > 0) kept[g] = qty - s;
+            total += s;
+            if (qty > biggestQty) { biggestQty = qty; biggest = g; }
+        });
+        if (total === 0 && biggest) {
+            scattered[biggest] = 1;
+            if ((kept[biggest] || 0) > 1) kept[biggest] -= 1;
+            else delete kept[biggest];
+        }
+        return { scattered, kept };
+    }
 
     // Tier pick scales with the target's wealth
     function pickEnemyTier(wealth) {
@@ -432,7 +475,44 @@
                     if (dSq < bestSq) { bestSq = dSq; prey = t; }
                 });
             }
-            if (!prey) return; // no targets at all — hold station
+            if (!prey) {
+                // No prey at all — every pilot is dark, docked, or graced.
+                // An enemy mid-fight DISENGAGES (the Crawl: they got what
+                // they came for): nose away from the wreck and burn off for
+                // a stretch, rather than loitering over the hulk waiting
+                // for the lights to come on. One that never engaged holds
+                // station as before — patrol drift toward a docked pilot
+                // would undo the dock-camping fix.
+                if (enemy.ai.state === 'engage' || enemy.ai.state === 'evading') {
+                    enemy.ai.state = 'patrol';
+                    enemy.ai.disengaging = 6 + Math.random() * 4; // seconds of leaving
+                    let near = null, bd = Infinity;
+                    targets.forEach(p => {
+                        const d = Math.pow(enemy.x - p.x, 2) + Math.pow(enemy.y - p.y, 2);
+                        if (d < bd) { bd = d; near = p; }
+                    });
+                    if (near) {
+                        enemy.angle = Math.atan2(enemy.y - near.y, enemy.x - near.x)
+                            + (Math.random() - 0.5) * 0.8;
+                    }
+                }
+                if (enemy.ai.disengaging > 0) {
+                    enemy.ai.disengaging -= deltaTime;
+                    enemy.thrust.current = Math.min(1, enemy.thrust.current + enemy.thrust.acceleration);
+                    enemy.velocity.x += Math.cos(enemy.angle) * enemy.thrust.maxThrust * enemy.thrust.current;
+                    enemy.velocity.y += Math.sin(enemy.angle) * enemy.thrust.maxThrust * enemy.thrust.current;
+                }
+                enemy.velocity.x *= 0.99;
+                enemy.velocity.y *= 0.99;
+                const sp = Math.hypot(enemy.velocity.x, enemy.velocity.y);
+                if (sp > enemy.maxSpeed) {
+                    enemy.velocity.x *= enemy.maxSpeed / sp;
+                    enemy.velocity.y *= enemy.maxSpeed / sp;
+                }
+                enemy.x += enemy.velocity.x * deltaTime * 60;
+                enemy.y += enemy.velocity.y * deltaTime * 60;
+                return;
+            }
 
             const distanceToPlayer = Math.sqrt(
                 Math.pow(enemy.x - prey.x, 2) +
@@ -684,6 +764,7 @@
 
     globalThis.CombatCore = {
         ENEMY_TIERS, PIRATE_FACTIONS, COMBAT_TUNING,
+        hulkPhase, hulkRepairFrac, scatterShare,
         pickEnemyTier, maxEnemiesFor, rollSpawnIntervalSec, rollRaidCadenceSec,
         pickSpawnSpot, makeEnemy, makeNamedWarlord,
         weightedPick, pickRaidFaction, makeRaidBand,

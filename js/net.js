@@ -82,14 +82,11 @@ const net = {
         for (const [pilot, g] of netGhostMap) {
             const ageMs = now - g.at;
             if (ageMs > NET_GHOST_EXPIRY_MS) { netGhostMap.delete(pilot); continue; }
-            // A dead pilot's ghost vanished in the blast; it returns after the
-            // respawn window, wherever its peer.state says it is by then — so
-            // the old corpse-then-teleport-home is invisible.
-            const deadUntil = netDeadPilots.get(pilot);
-            if (deadUntil) {
-                if (now < deadUntil) continue;
-                netDeadPilots.delete(pilot);
-            }
+            // A wrecked pilot's ghost vanished in the breach and stays dark
+            // for as long as they run silent — open-ended, no timer. The
+            // next peer.state from them (recovery re-relays) lifts the veil,
+            // wherever the crawl took them.
+            if (netDarkPilots.has(pilot)) continue;
             const dt = Math.min(ageMs, NET_GHOST_EXTRAP_CAP_MS) / 1000; // seconds
             out.push({
                 pilot: g.pilot,
@@ -214,10 +211,9 @@ const NET_HEARTBEAT_MS = 1000;         // always send at least this often
 const NET_DRIFT_EPSILON = 0.5;         // x/y drift below this = "unchanged"
 const NET_GHOST_EXPIRY_MS = 5000;      // drop ghosts 5s after last update
 const NET_GHOST_EXTRAP_CAP_MS = 500;   // cap dead-reckoning extrapolation
-const NET_GHOST_DEAD_MS = 4500;        // hide a dead ghost through its respawn (4s) + margin
 
 const netGhostMap = new Map();         // pilot -> last peer.state + at timestamp
-const netDeadPilots = new Map();       // pilot -> wall-clock ts when the ghost may return
+const netDarkPilots = new Set();       // pilots running silent (the Crawl): ghost hidden until their relay resumes
 let netSendTimer = null;
 let netLastSent = null;
 let netLastSentAt = 0;
@@ -362,7 +358,7 @@ function netHandleMessage(msg) {
         case 'peer.leave': {
             net.peers = net.peers.filter(p => p !== msg.pilot);
             netGhostMap.delete(msg.pilot);
-            netDeadPilots.delete(msg.pilot);
+            netDarkPilots.delete(msg.pilot);
             if (msg.pilot !== netIdentity.pilot && typeof showHudFeedback === 'function') {
                 showHudFeedback(`${msg.pilot} has left the sector`, 'info', 3000);
             }
@@ -373,6 +369,9 @@ function netHandleMessage(msg) {
             // A peer.state from a pilot we somehow missed the join for still
             // counts as presence (dedup rule covers the reverse case).
             if (!net.peers.includes(msg.pilot)) net.peers.push(msg.pilot);
+            // A relayed frame from a dark pilot means their silence ended —
+            // recovery is signaled by the relay resuming (PROTOCOL.md).
+            netDarkPilots.delete(msg.pilot);
             netGhostMap.set(msg.pilot, {
                 pilot: msg.pilot,
                 x: msg.x, y: msg.y, angle: msg.angle,
@@ -385,12 +384,12 @@ function netHandleMessage(msg) {
             break;
         }
         case 'pilot.died': {
-            // A peer's ship broke up (M4 death broadcast): the wreck blooms
-            // where it happened and the ghost hides through the respawn
-            // window. Before this, peers saw a 4s corpse then a silent
-            // teleport home. Own deaths already play locally — skip self.
+            // A peer's hull breached (the Crawl): the wreck blooms where it
+            // happened and the ghost goes dark — hidden open-ended while
+            // they run silent, back with their next peer.state. Own
+            // breaches already play locally — skip self.
             if (!msg.pilot || msg.pilot === netIdentity.pilot) break;
-            netDeadPilots.set(msg.pilot, Date.now() + NET_GHOST_DEAD_MS);
+            netDarkPilots.add(msg.pilot);
             if (typeof spawnExplosion === 'function' && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
                 spawnExplosion(msg.x, msg.y, '#00ff00', 0, 0);
                 spawnExplosion(msg.x + 22, msg.y - 14, '#ffaa44', 0, 0);
@@ -547,6 +546,10 @@ function netShipStateUnchanged(a, b) {
 
 function netSendShipState() {
     if (!net.online || !netSocket || netSocket.readyState !== 1) return;
+    // Running silent: the dark core hull does not relay (the Crawl). Peers
+    // saw the breach via pilot.died; nothing more leaves this ship until
+    // recovery, when the resumed relay is itself the recovery signal.
+    if (typeof game !== 'undefined' && game.hulkState) return;
     const snap = netShipSnapshot();
     if (!snap) return;
     const now = Date.now();
@@ -1112,7 +1115,7 @@ function netHandleEnemyKilled(msg) {
 // vaporize the crate for everyone).
 function netUpdateServerDrops() {
     if (typeof game === 'undefined' || !game.ship) return;
-    if (game.deathState) return; // a burning wreck claims nothing
+    if (game.hulkState) return; // a dark hulk claims nothing — no interactions while silent
     const now = Date.now();
     for (const d of netDropMap.values()) {
         const dx = d.x - game.ship.x;
