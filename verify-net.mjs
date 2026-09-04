@@ -72,9 +72,15 @@ function chromePath() {
         throw new Error(`no chrome-headless-shell cache at ${base} — run the solo ?verify one-liner once to download it`);
     }
     dirs.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    // Platform-agnostic walk (mac-arm64 / linux64 / win64 subdirs) — CI runs
+    // this on Linux; same shape as verify-solo.mjs's resolver.
     for (let i = dirs.length - 1; i >= 0; i--) {
-        const p = path.join(base, dirs[i], 'chrome-headless-shell-mac-arm64', 'chrome-headless-shell');
-        if (fs.existsSync(p)) return p;
+        const dir = path.join(base, dirs[i]);
+        for (const sub of fs.readdirSync(dir)) {
+            const p = path.join(base, dirs[i], sub,
+                process.platform === 'win32' ? 'chrome-headless-shell.exe' : 'chrome-headless-shell');
+            if (fs.existsSync(p)) return p;
+        }
     }
     throw new Error(`no chrome-headless-shell binary under ${base}`);
 }

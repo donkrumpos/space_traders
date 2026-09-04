@@ -1,0 +1,39 @@
+# The two gates on every push/PR — the repo's only quality bar (CLAUDE.md).
+# npm test = verify-solo.mjs (headless ?verify under virtual time) then
+# verify-net.mjs (two-client multiplayer harness; it spawns its own server
+# with FAMILY_SECRET=verify). Both need chrome-headless-shell, installed
+# into the same ~/.cache/puppeteer layout the resolvers walk.
+name: gates
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache chrome-headless-shell
+        id: chs-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: chs-${{ runner.os }}-stable-v1
+
+      - name: Install chrome-headless-shell
+        if: steps.chs-cache.outputs.cache-hit != 'true'
+        run: npx @puppeteer/browsers install chrome-headless-shell@stable --path ~/.cache/puppeteer
+
+      - run: npm ci
+
+      - name: Run both gates
+        run: npm test
