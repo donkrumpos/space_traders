@@ -126,7 +126,10 @@
         // (server override via config.mjs combatTuning, same as the rest).
         hulkStopSec: 8,             // breach → dead stop before emergency thrust returns
         hulkRepairSec: 105,         // breach → systems restored to full (~90-120s window)
-        hulkScatterFrac: 0.5        // share of the hold that blows out as pods
+        hulkScatterFrac: 0.5,       // share of the hold that blows out as pods
+        hulkFortifiedFrac: 0.25,    // the scattered share with a charged fortified hold
+        hulkTowBase: 200,           // wrecker call-out fee ...
+        hulkTowPerUnit: 0.35        // ... plus this per unit of tow distance
     };
 
     // Pure crawl-state math, shared by browser, server, and both gates.

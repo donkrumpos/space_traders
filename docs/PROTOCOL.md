@@ -303,7 +303,17 @@ recovery is signaled by silence ending, not by a message:
   makes engaged hostiles break off and amble away (the disengage rule).
 - **Tuning flags** (`CombatCore.COMBAT_TUNING`, server override via
   config.mjs `combatTuning` as usual): `hulkStopSec` 8, `hulkRepairSec`
-  105, `hulkScatterFrac` 0.5.
+  105, `hulkScatterFrac` 0.5, `hulkFortifiedFrac` 0.25, `hulkTowBase`
+  200, `hulkTowPerUnit` 0.35.
+- **Economy hatches (slice 3) are client-local by design:** the Fortified
+  Cargo Hold (`fortified_hold` mod, 3 charges tracked in
+  `game.ship.modCharges`, cuts the scattered share to `hulkFortifiedFrac`,
+  burns a charge per breach, removed when spent) only changes WHAT the
+  client puts in its `cargo.scatter` payload; the wreckers' tow (`T` while
+  dark — `callWreckers()`, price = `hulkTowBase + dist × hulkTowPerUnit`
+  to the nearest port) moves an unrelayed dark hull and spends
+  client-authoritative credits, so the wire never sees either. Peers meet
+  the towed pilot at the port when the relay resumes.
 - **Known edge (accepted):** the hulk state is not persisted — reloading
   mid-crawl comes back lit with whatever hull the curve had reached.
   Family trust model; revisit if it ever gets abused.
