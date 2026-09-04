@@ -1492,6 +1492,59 @@ VERIFY_SUITES.escape = (assert) => {
     if (shipBanner) shipBanner.remove();
 };
 
+VERIFY_SUITES.aria = (assert) => {
+    // Screen-reader alarms (Bucket C): shields-down and fuel-out speak through
+    // the #srAlarm live region, once per edge — the Now zone's every-tick
+    // repaints are invisible to assistive tech.
+    const region = document.getElementById('srAlarm');
+    assert('the #srAlarm live region exists with role=alert',
+        !!region && region.getAttribute('role') === 'alert');
+
+    const saved = { shield: game.ship.shield, shieldMax: game.ship.shieldMax,
+        fuel: game.ship.fuel, emergency: game.ship.emergencyFuel };
+
+    // Settle a healthy baseline so the edges below are the ones we cause
+    game.ship.shieldMax = 20; game.ship.shield = 20;
+    game.ship.fuel = 100; game.ship.emergencyFuel = 50;
+    updateAlarmAnnouncements(game.ship);
+    region.textContent = '';
+
+    game.ship.shield = 0;
+    updateUI();
+    assert('shields hitting zero announces through the full UI tick',
+        region.textContent === 'Alarm: shields down');
+
+    region.textContent = '';
+    updateUI();
+    assert('a held alarm does not re-announce every tick',
+        region.textContent === '');
+
+    game.ship.shield = 20;
+    updateAlarmAnnouncements(game.ship);
+    assert('shields coming back announces recovery',
+        region.textContent === 'Shields restored');
+
+    game.ship.fuel = 0;
+    updateAlarmAnnouncements(game.ship);
+    assert('fuel running out announces emergency power',
+        region.textContent === 'Alarm: fuel exhausted, running on emergency power');
+
+    game.ship.emergencyFuel = 0;
+    updateAlarmAnnouncements(game.ship);
+    assert('emergency power dying re-announces as the sail crawl',
+        region.textContent === 'Alarm: fuel exhausted, solar sail crawl only');
+
+    game.ship.fuel = 100;
+    updateAlarmAnnouncements(game.ship);
+    assert('refueling announces recovery',
+        region.textContent === 'Refueled');
+
+    game.ship.shield = saved.shield; game.ship.shieldMax = saved.shieldMax;
+    game.ship.fuel = saved.fuel; game.ship.emergencyFuel = saved.emergency;
+    updateAlarmAnnouncements(game.ship);
+    region.textContent = '';
+};
+
 VERIFY_SUITES.guards = (assert) => {
     // Developer-look fixes (2026-09-03): typing must not fire flight hotkeys,
     // a doc saved docked must restore the docked screen, and every traded

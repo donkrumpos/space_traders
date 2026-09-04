@@ -448,7 +448,39 @@ function nowDetectState(ship) {
     return 'cruise';
 }
 
+// Screen-reader alarm channel: the Now zone rebuilds its innerHTML every tick,
+// so an aria-live region can't sit on it (constant repaints read as silence or
+// spam). Instead #srAlarm (role=alert, visually hidden) gets one write per
+// alarm EDGE — onset and recovery — keyed off the raw ship condition, not the
+// rendered now-state, so leaving combat range with shields still down doesn't
+// falsely announce recovery.
+const srAlarms = { shields: false, fuel: '' };
+
+function srAnnounce(text) {
+    const el = document.getElementById('srAlarm');
+    if (el) el.textContent = text;
+}
+
+function updateAlarmAnnouncements(ship) {
+    const shieldsDown = ship.shieldMax > 0 && ship.shield <= 0;
+    if (shieldsDown !== srAlarms.shields) {
+        srAlarms.shields = shieldsDown;
+        srAnnounce(shieldsDown ? 'Alarm: shields down' : 'Shields restored');
+    }
+
+    const fuelMsg = ship.fuel > 0 ? ''
+        : ship.emergencyFuel <= 0 ? 'fuel exhausted, solar sail crawl only'
+        : 'fuel exhausted, running on emergency power';
+    if (fuelMsg !== srAlarms.fuel) {
+        const wasOut = srAlarms.fuel !== '';
+        srAlarms.fuel = fuelMsg;
+        if (fuelMsg) srAnnounce('Alarm: ' + fuelMsg);
+        else if (wasOut) srAnnounce('Refueled');
+    }
+}
+
 function updateNowZone(els, ship) {
+    updateAlarmAnnouncements(ship);
     const state = nowDetectState(ship);
     vAttr('nowState', els.nowZone, 'data-now', state);
     vText('nowLabel', els.nowLabel, NOW_LABELS[state]);

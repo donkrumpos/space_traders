@@ -131,6 +131,11 @@
                 <div id="nowBody"></div>
             </div>
 
+            <!-- Screen-reader alarm channel: the Now zone repaints every tick,
+                 which live regions can't follow — updateAlarmAnnouncements()
+                 in js/ui.js writes here only on an alarm edge. -->
+            <div id="srAlarm" class="sr-only" role="alert"></div>
+
             <!-- Records: the reference panels (Missions / Crew / Rep / Log /
                  Ledger) collapsed to one tab at a time (UI Slice 2,
                  mockups/sidebar-redesign.html ★ Contextual Hybrid). The page
