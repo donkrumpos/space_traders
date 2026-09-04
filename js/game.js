@@ -123,6 +123,12 @@ function init() {
     initEconomy();
     initAsteroids();
 
+    // Ambient lanes populate at boot, not lazily on the loop's first traffic
+    // tick — headless CI sometimes asserted before that tick ever ran. Going
+    // online later is unaffected: the M4 merge rule replaces the non-escort
+    // population with the server's on every online tick.
+    initTraffic();
+
     // Generate starfield with variety and depth
     const starColors = ['#ffffff', '#aaccff', '#ffffaa', '#ffccaa', '#ffaaaa'];
     const starColorNames = ['white', 'blue', 'yellow', 'orange', 'red'];
