@@ -188,7 +188,12 @@
             <div class="panel" id="tradingPanel" style="display: none;">
                 <div class="dockhead">
                     <h3 id="tradingTitle">Trading</h3>
-                    <button class="district-door" id="districtDoor" onclick="walkDistrict()">⇱ walk to the Shipyard</button>
+                    <div class="dockhead-actions">
+                        <!-- blur on click so a later SPACE (dock key) can't re-activate the link -->
+                        <a class="handbook-link" id="handbookLink" href="manual.html" target="_blank" rel="noopener"
+                           title="the operations manual — property of whoever's flying now" onclick="this.blur()">⎘ Pilot's Handbook</a>
+                        <button class="district-door" id="districtDoor" onclick="walkDistrict()">⇱ walk to the Shipyard</button>
+                    </div>
                 </div>
                 <div id="stationInfo" style="margin-bottom: 12px; color: #00ffff; font-size: 12px;"></div>
 
@@ -296,7 +301,7 @@
     <div id="controls">
         Controls: Arrow Keys to rotate and thrust | Down Arrow for reverse thrust | Space to dock | E for secondary interaction | M for map | ESC to undock<br>
         Combat: X to fire lasers | Z to switch weapon systems | C to fire missiles | R to field-repair with a Repair Kit | 🌟 Random events occur during travel - make choices to earn rewards or avoid risks!<br>
-        <small>Auto-saves on major events | Console: exportCharacter(), importCharacter(), getCharacterStats(), resetCharacter()</small>
+        <small>Auto-saves on major events | Console: exportCharacter(), importCharacter(), getCharacterStats(), resetCharacter() | <a class="handbook-link" href="manual.html" target="_blank" rel="noopener" onclick="this.blur()">⎘ Pilot's Handbook</a></small>
     </div>
 
     <!-- Game Scripts -->

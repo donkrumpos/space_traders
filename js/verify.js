@@ -1327,6 +1327,17 @@ VERIFY_SUITES.districts = (assert) => {
         !!document.querySelector('#servicesStrip use[href="#s-rearm"]') &&
         !!document.querySelector('#servicesStrip use[href="#s-repair"]'));
 
+    // The Pilot's Handbook is one click away from the docked drawer (new-tab
+    // link so the ship is never abandoned mid-dock) and from the footer
+    // (visible before any docking — the closest thing to a join screen).
+    const handbook = id('handbookLink');
+    assert('the docked drawer links the Pilot\'s Handbook in a new tab',
+        !!handbook && handbook.getAttribute('href') === 'manual.html' &&
+        handbook.getAttribute('target') === '_blank' &&
+        (handbook.getAttribute('rel') || '').includes('noopener'));
+    assert('the footer carries the handbook link too',
+        !!document.querySelector('#controls a.handbook-link[href="manual.html"]'));
+
     // The door swaps to the Shipyard, which renders the considered purchases
     walkDistrict();
     assert('the door swaps to the Shipyard',
