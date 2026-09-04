@@ -11,7 +11,7 @@
 // landmark on everyone's map. The reward is granted locally to whoever reaches
 // a site (co-op friendly — every family member gets the discovery moment); the
 // charter naming is the bragging-rights layer on top. (Whether loot should
-// instead be scarce/first-come is a tuning flag — see TEST-PLAN / NEXT-SESSION.)
+// instead be scarce/first-come is a tuning flag — see NEXT-SESSION.)
 //
 // reward schema (all fields optional, forward-compatible with the RPG/quest
 // milestone — grantPOIReward in js/exploration.js applies what's present):
