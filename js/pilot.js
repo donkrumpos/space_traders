@@ -19,7 +19,7 @@ const PILOT_RANKS = [
 // Perks / grudges / crew live here from day one so the save format is stable;
 // the systems that consume them arrive in their own features.
 function createDefaultPilot() {
-    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [], faction: null };
+    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [], faction: null, fame: 0 };
 }
 
 function rankForXP(xp) {

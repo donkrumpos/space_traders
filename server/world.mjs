@@ -51,7 +51,7 @@ function rollBoard(meta) {
 // lowercased name. A row in the same ledger the Rustfang live in: plain data,
 // same world blob, no schema change. Invites are public registry data (family
 // trust model) — the client sees its own standing invite in the snapshot.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, grudgeAmnesty: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {} };
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, grudgeAmnesty: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {}, fame: {} };
 
 // M6 cadence knobs — declared ABOVE the restore block below, which calls the
 // roll helpers at module init (const TDZ would bite otherwise).
@@ -102,6 +102,7 @@ const CLAIM_OCCUPY_WEIGHT = 2;                // claimed sites draw raiders (M7)
     if (saved && saved.poiState) world.poiState = saved.poiState;
     if (saved && saved.nextOccupationAt) world.nextOccupationAt = saved.nextOccupationAt;
     if (saved && saved.factions) world.factions = saved.factions;
+    if (saved && saved.fame) world.fame = saved.fame;
     // Migration: sites charted before caches existed get a cycle seeded now,
     // so a live world's landmarks start regenerating on the next deploy.
     for (const id of Object.keys(world.discoveredPOIs)) {
@@ -305,11 +306,36 @@ export function creditPilotDeed(pilot, kind, amount) {
     creditFactionDeed(factionOfPilot(pilot), kind, amount);
 }
 
+// Fame v1 (docs/death-design.md, the Crawl's ledger): the Reach's memory of
+// a pilot, fed by the very events the chronicle records — the ledger IS the
+// fame feed, so every hook point is this one funnel. Getting wrecked is the
+// one dent; the floor is 0 (the Reach forgets debts, not deeds). Values are
+// v1 tuning; epithet thresholds are a later slice.
+const FAME_DELTAS = {
+    'poi.charted': 10,      // first charter of a site
+    'faction.founded': 10,  // raised a banner (credited to the founder)
+    'poi.liberated': 8,     // drove the squatters out
+    'boss.killed': 5,       // broke a raid band
+    'grudge.settled': 3,    // paid a cartel's debt down
+    'poi.salvaged': 2,      // claimed a ready cache
+    'pilot.died': -5        // got wrecked — the dent
+};
+
+function famePilotOf(kind, detail) {
+    return (kind === 'faction.founded' ? detail.founder : detail.pilot) || null;
+}
+
 export function recordChronicle(kind, detail) {
     const entry = { at: Date.now(), kind, ...detail };
     world.chronicle.push(entry);
     world.chronicle = trimChronicle(world.chronicle);
     broadcast({ t: 'chronicle.add', entry });
+    const delta = FAME_DELTAS[kind];
+    const who = delta ? famePilotOf(kind, detail) : null;
+    if (who) {
+        world.fame[who] = Math.max(0, (world.fame[who] || 0) + delta);
+        broadcast({ t: 'fame.update', fame: world.fame });
+    }
     markDirty();
     return entry;
 }
@@ -428,7 +454,8 @@ export function worldSnapshotMessage() {
         discoveredPOIs: world.discoveredPOIs,
         chronicle: world.chronicle,
         poiState: world.poiState,
-        factions: world.factions
+        factions: world.factions,
+        fame: world.fame
     };
 }
 
