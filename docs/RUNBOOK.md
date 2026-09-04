@@ -42,6 +42,26 @@ crashed node process comes back on its own; systemd also starts it on boot
 (`WantedBy=multi-user.target`). `journalctl -u space-traders` is the crash
 history.
 
+### Health check (added 2026-09-03)
+
+The node server answers `GET /healthz` (no auth) with process + db health:
+
+```bash
+ssh themisto 'curl -s http://127.0.0.1:8378/healthz'
+# {"ok":true,"uptimeSec":123,"db":true,"pilotsOnline":0,"worldSaveAgeSec":42}
+```
+
+`ok:false` + HTTP 503 means SQLite stopped answering. `worldSaveAgeSec` is
+seconds since the world blob last hit disk (`null` until the first flush;
+world saves are debounced, so an idle server's age can legitimately grow —
+alert on `ok`, read the age as context). To give an external uptime pinger
+a target, add one line to the Apache vhost (needs `mod_proxy`, already
+loaded for `/ws`) and reload:
+
+```apache
+ProxyPass /healthz http://127.0.0.1:8378/healthz
+```
+
 ## Backups (added 2026-09-02)
 
 Two layers, no credentials on the VPS:

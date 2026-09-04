@@ -1824,6 +1824,34 @@ async function saveguardSuite(t, { wsUrl, dbPath }) {
     await sleep(200); // let the closes land before the next suite counts peers
 }
 
+// /healthz: the external uptime ping's target — process liveness, db
+// availability, head-count, world-save age. Plain HTTP, no auth, no side
+// effects. Rides the same node http server as the static files.
+async function healthSuite(t, { base, wsUrl }) {
+    const res = await fetch(`${base}/healthz`);
+    t('GET /healthz answers 200', res.status === 200, `status=${res.status}`);
+    const body = await res.json().catch(() => null);
+    t('reports ok + live db', !!body && body.ok === true && body.db === true, JSON.stringify(body));
+    t('uptime is a number', !!body && typeof body.uptimeSec === 'number' && body.uptimeSec >= 0);
+    t('head-count is a number', !!body && typeof body.pilotsOnline === 'number');
+
+    // Force a world flush so the save age is fresh and bounded, and prove
+    // the head-count moves with a live connection.
+    const conn = await rawPilot(wsUrl, 'VerifyHealth');
+    t('probe pilot connects', !!conn);
+    if (!conn) return;
+    conn.raw.send(JSON.stringify({ t: 'debug.snapshot' }));
+    await sleep(400);
+    const body2 = await (await fetch(`${base}/healthz`)).json().catch(() => null);
+    t('head-count reflects the connected pilot',
+        !!body2 && body2.pilotsOnline >= 1, body2 && String(body2.pilotsOnline));
+    t('world-save age is fresh after a flush',
+        !!body2 && typeof body2.worldSaveAgeSec === 'number' && body2.worldSaveAgeSec <= 60,
+        body2 && String(body2.worldSaveAgeSec));
+    conn.raw.close();
+    await sleep(200);
+}
+
 const SUITES = [
     ['solo', soloSuite],
     ['handshake', handshakeSuite],
@@ -1844,6 +1872,7 @@ const SUITES = [
     ['amnesty', amnestySuite],
     ['death', deathSuite],
     ['saveguard', saveguardSuite],
+    ['health', healthSuite],
 ];
 
 // ---------------------------------------------------------------------------

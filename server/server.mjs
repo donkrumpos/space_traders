@@ -7,7 +7,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { getPilot, savePilot, restorePilotFromBackup, closeDb } from './db.mjs';
+import { getPilot, savePilot, restorePilotFromBackup, dbHealth, closeDb } from './db.mjs';
 import config from './config.mjs';
 import { startWorld, worldSnapshotMessage, handleWorldMessage, flushWorld } from './world.mjs';
 import {
@@ -57,7 +57,40 @@ function serveStatic(req, res) {
     });
 }
 
-const httpServer = http.createServer(serveStatic);
+// /healthz — the external uptime ping's target (2026-09-01 durability list).
+// Unauthenticated by design: it exposes only process liveness, db health, a
+// head-count, and the world blob's save age. 503 when SQLite stops answering
+// (prod reachability needs an Apache ProxyPass — see docs/RUNBOOK.md).
+function serveHealthz(res) {
+    const health = {
+        ok: true,
+        uptimeSec: Math.round(process.uptime()),
+        db: true,
+        pilotsOnline: pilots.size,
+        worldSaveAgeSec: null // null until the first world flush hits disk
+    };
+    try {
+        const { worldUpdated } = dbHealth();
+        if (worldUpdated != null) {
+            health.worldSaveAgeSec = Math.max(0, Math.round((Date.now() - worldUpdated) / 1000));
+        }
+    } catch (err) {
+        health.ok = false;
+        health.db = false;
+    }
+    res.writeHead(health.ok ? 200 : 503, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store'
+    });
+    res.end(JSON.stringify(health));
+}
+
+const httpServer = http.createServer((req, res) => {
+    let pathname = null;
+    try { pathname = new URL(req.url, 'http://x').pathname; } catch { /* serveStatic 400s it */ }
+    if (pathname === '/healthz') { serveHealthz(res); return; }
+    serveStatic(req, res);
+});
 // maxPayload: the biggest legitimate frame is a char.push doc (a few KB);
 // ws's 100MiB default would let a stranger stall the event loop pre-auth
 const wss = new WebSocketServer({ server: httpServer, maxPayload: 256 * 1024 });
