@@ -54,6 +54,18 @@ don't build a respawn slice unless the developer re-raises it. Watch
 signal instead: after real deaths, do pilots fly back out (working) or
 log off (revisit)?
 
+**Death-mechanics RESEARCH done (same day, developer-requested):**
+`docs/death-research.md` — deep-research pass, 22 claims verified 3-0.
+Headline: the developer's wild-beacon "save point" idea is the
+strongest evidence-backed shape (the one controlled study on respawn
+location found player-ACTIVATED savepoints and permadeath both beat
+automatic checkpoints on autonomy+curiosity); current respawn-at-start
+is the well-scoring condition at today's map size; distance-as-
+punishment is cautioned against at expansion scale (Gorgon failure
+modes); severity should follow CONSENT not distance; EVE's clone-relay
+lore + our signal canon make beacons diegetic. Still NOT pinned — the
+developer is deliberately thinking; don't build.
+
 **Also riffed same day, awaiting pins (do NOT build unpinned):**
 - **Nomenclature taxonomy PROPOSED**: Region / World / Station / Port
   (capability, not identity) / Site / Contact / Wreck; procgen law =
