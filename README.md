@@ -102,6 +102,12 @@ NEXT-SESSION.md       rolling session log + backlog — read this first
 Never commit game/server code without both green:
 
 ```bash
+npm test    # runs both: the solo suite, then the multiplayer harness
+```
+
+By hand, the two gates are:
+
+```bash
 # solo — headless browser suite (expect VERIFY-PASS n/n)
 python3 -m http.server 8377 &
 CHS=~/.cache/puppeteer/chrome-headless-shell/*/chrome-headless-shell-mac-arm64/chrome-headless-shell
