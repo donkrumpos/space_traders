@@ -588,6 +588,8 @@ live adds. Wire shape is unchanged. Kinds so far:
 |---|-----|---------|
 | `chronicle.add` | s→c *broadcast* | `{ entry }` — one new ledger entry, appended by every `recordChronicle()` call. Clients append to their local copy (no toast — live events already announce themselves via `poi.discovered` / `market.event`) |
 | `fame.update` | s→c *broadcast* | `{ fame: { pilot: n } }` — the whole fame map (tiny at family scale), sent whenever a chronicled event moved somebody's fame. See the Fame bullet below |
+| `karma.update` | s→c *broadcast* | `{ karma: { pilot: n } }` — the whole karma map, sent whenever a chronicled deed moved somebody's judgement (slice 4). See the Karma block below |
+| `escort.arrived` | c→s | `{ freighter }` — a client-local escort made port under this pilot's guns (claim, family trust model; freighter name bounded to 40 chars, markup stripped; 5s spam guard per socket). Chronicled as a MINOR kind + karma +3 |
 | `poi.salvage` | c→s | `{ reqId, id }` — "I'm at this charted site and its cache looks ready." Request/response like `trade` |
 | `poi.salvaged` | s→c | `{ reqId, ok, id, reward?, nextSalvageAt }` — `ok:true` carries the roster's `salvage` table (`{ credits, relics, xp }`, server-owned; the client applies exactly this) and the freshly rolled next window. `ok:false` = not ready / already claimed; `nextSalvageAt` echoes the live window so the loser's map updates |
 | `poi.state` | s→c *broadcast* | `{ id, nextSalvageAt, occupation }` — a site's state moved (charter seeded the first cycle, a salvage claim rolled the next window, raiders dug in, or a pilot drove them out). `occupation` = `{ faction, color, since }` or `null`. Drives the "✦ salvage ready" / "⚑ dug in" map markers |
@@ -624,8 +626,35 @@ live adds. Wire shape is unchanged. Kinds so far:
   from the last-known value — grudges pattern); the rank line in the
   sidebar shows `✦ fame n` once any exists. Offline solo play never
   accrues fame — the Reach's memory is inherently the shared world.
-  Epithet thresholds (fame×karma titles) are a later slice.
   Console hook: `window.netFame()` → `{ all, mine }`.
+- **Karma + epithets (2026-10-05, slice 4 — docs/death-design.md):**
+  `world.karma` `{ pilotName: n }`, persisted in the world blob (additive
+  `world.snapshot.karma`; old clients ignore it), the second axis. Same
+  ONE funnel: `recordChronicle` applies `KARMA_DELTAS` (server/world.mjs
+  — `grudge.settled` +3, `poi.liberated` +3, `escort.arrived` +3,
+  `wreck.looted` **−4**) and broadcasts `karma.update`. No floor, no
+  ceiling; `pilot.died` never touches it ("death never touches karma").
+  The cold lane: `cargo.scatter` pods carry `wreckOf` (the breached
+  pilot) + a per-breach `wreckId` server-side; `world.tick.drops[]` grows
+  an additive `wreckOf` so the claimer's HUD can say whose they were.
+  `drop.claim` on another pilot's wreck pod records `wreck.looted
+  { pilot, victim }` ONCE per (looter, wreckId) — one ledger line and one
+  dent per wreck picked over, never for your own pods. Trader-gutting and
+  smuggling have no mechanic yet; they join `KARMA_DELTAS` when they do.
+  **Minor kinds:** `escort.arrived` shares the market cap on both trims
+  (`CHRONICLE_MINOR_KINDS`, server + client) and stays out of the away
+  digest's headline — a deed worth a line, not a landmark.
+  **Epithets are client-side** (`js/pilot.js epithetFor(fame, karma)`):
+  fame tiers 15/40/80 (known/noted/storied) × karma lanes (≤−8 cold,
+  ≥8 kind, else plain) → "the Picker/Vulture/Dread", "the Seen/Named/
+  Storied", "the Steady/Good Hand/Lodestar". No fame → no epithet
+  (naming law, lore-bible §3: names are earned through chronicled deeds).
+  The own rank line reads `Captain, the Seen · ✦ fame n · ⚖ karma ±n`;
+  peer name tags read `Dad the Seen — Kestrel` (`netEpithetOf`, from the
+  shared maps). **Wrecker courtesy** (client-local like the tow): at
+  karma ≥ `towCourtesyKarma` (8) each tow rolls `towCourtesyChance`
+  (0.34) to wave the fee — both in COMBAT_TUNING, server-overridable.
+  Console hook: `window.netKarma()` → `{ all, mine, epithet }`.
 - **Regenerating caches (`world.snapshot.poiState`)**: `{ id: { nextSalvageAt } }`,
   persisted in the world blob. Seeded at first charter, re-rolled 12–24h out
   after each claim (jitter kills clockwork farming). Readiness is **computed on

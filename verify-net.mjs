@@ -1837,6 +1837,94 @@ async function fameSuite(t, { browser, base, wsUrl }) {
     S.G = S.H = null;
 }
 
+// Karma + epithets (slice 4): the chronicle funnel judges as well as
+// remembers — a site freed and a freighter brought home raise karma, picking
+// a dark hull's pockets dents it (once per wreck, never for your own pods),
+// and the shared map reaches every peer's name tags. Delta-based like fame.
+async function karmaSuite(t, { browser, base, wsUrl }) {
+    S.G = await newGamePage(browser, 'VerifyG', { tap: true, stubPerks: true });
+    S.H = await newGamePage(browser, 'VerifyH', { tap: true, stubPerks: true });
+    await S.G.page.goto(`${base}/index.html?pilot=VerifyG&ws=${wsUrl}`, { waitUntil: 'load' });
+    await S.H.page.goto(`${base}/index.html?pilot=VerifyH&ws=${wsUrl}`, { waitUntil: 'load' });
+    const both = await until(() => S.G.page.evaluate(() => netStatus().online === true))
+        && await until(() => S.H.page.evaluate(() => netStatus().online === true));
+    t('G+H online', !!both);
+
+    const g0 = await S.G.page.evaluate(() => netKarma().mine);
+    const h0 = await S.H.page.evaluate(() => netKarma().mine);
+    t('karma starts as a number on the doc', typeof g0 === 'number' && typeof h0 === 'number');
+
+    // A freighter brought home: the client-local escort's claim → chronicle
+    // escort.arrived (minor kind) → +3 karma, mirrored to the doc, read by H
+    await S.G.page.evaluate(() => net.send({ t: 'escort.arrived', freighter: 'Verify Hauler' }));
+    t('bringing a freighter home pays 3 karma', !!(await until(() =>
+        S.G.page.evaluate(s => netKarma().mine === s + 3, g0))));
+    t('own karma mirrors into the pilot doc',
+        !!(await S.G.page.evaluate(s => game.pilot.karma === s + 3, g0)));
+    t("H reads G's karma from the shared map", !!(await until(() =>
+        S.H.page.evaluate(s => netKarma().all.VerifyG === s + 3, g0))));
+    const escortLine = await until(() => S.H.page.evaluate(() =>
+        netChronicle().latest.find(e => e.kind === 'escort.arrived') || false));
+    t('the arrival is chronicled in the errand\'s words',
+        !!escortLine && escortLine.text === 'VerifyG brought the freighter Verify Hauler home', escortLine && escortLine.text);
+    // A second claim inside the spam window is a loop, not a convoy
+    await S.G.page.evaluate(() => net.send({ t: 'escort.arrived', freighter: 'Verify Hauler' }));
+    await sleep(400);
+    t('a rapid re-claim is swallowed', (await S.G.page.evaluate(() => netKarma().mine)) === g0 + 3);
+
+    // A site freed (harness path for the boss kill): +3 karma on top of fame
+    const poiId = await S.G.page.evaluate(() => {
+        // An uncharted site if one is left (its charter also feeds fame for
+        // the epithet check below); any charted one otherwise.
+        const p = game.pois.find(q => !q.charted) || game.pois[0];
+        return p ? p.id : null;
+    });
+    await S.G.page.evaluate(id => net.send({ t: 'poi.discover', id }), poiId);
+    await S.G.page.evaluate(id => net.send({ t: 'debug.occupyPOI', id }), poiId);
+    await until(() => S.G.page.evaluate(id => !!(netChronicle().latest.find(e => e.kind === 'poi.occupied')), poiId));
+    await S.G.page.evaluate(id => net.send({ t: 'debug.liberatePOI', id }), poiId);
+    t('freeing a site pays 3 karma', !!(await until(() =>
+        S.G.page.evaluate(s => netKarma().mine === s + 6, g0))));
+
+    // The cold deed: G breaches, H picks the pods over. Judged once per wreck.
+    await S.G.page.evaluate(() => net.send({ t: 'pilot.death', x: 3100, y: 2100 }));
+    await S.G.page.evaluate(() => net.send({ t: 'cargo.scatter', x: 3100, y: 2100, cargo: { food: 8 } }));
+    const pods = await until(() => S.H.page.evaluate(() => {
+        const d = netCombat().drops.filter(x => x.wreckOf === 'VerifyG');
+        return d.length >= 2 ? d.map(x => x.id) : false;
+    }, { timeout: 5000 }));
+    t('the wreck\'s pods carry whose they were', !!pods && pods.length === 2, JSON.stringify(pods));
+    const gBefore = await S.G.page.evaluate(() => netKarma().mine);
+    await S.H.page.evaluate(id => net.send({ t: 'drop.claim', dropId: id }), pods[0]);
+    t('picking a dark hull\'s pockets dents karma by 4', !!(await until(() =>
+        S.H.page.evaluate(s => netKarma().mine === s - 4, h0))));
+    const looted = await until(() => S.G.page.evaluate(() =>
+        netChronicle().latest.find(e => e.kind === 'wreck.looted') || false));
+    t('the ledger names the picker and the picked',
+        !!looted && looted.text === 'VerifyH picked VerifyG\'s pockets while the hull was dark', looted && looted.text);
+    await S.H.page.evaluate(id => net.send({ t: 'drop.claim', dropId: id }), pods[1]);
+    await sleep(400);
+    t('the second pod from the same wreck is not judged twice',
+        (await S.H.page.evaluate(() => netKarma().mine)) === h0 - 4);
+    t('the wrecked pilot\'s own karma is untouched by the wreck',
+        (await S.G.page.evaluate(() => netKarma().mine)) === gBefore);
+    t('karma has no floor — the cold lane is real',
+        (await S.H.page.evaluate(() => netKarma().mine)) < 0 || h0 >= 4);
+
+    // The epithet reaches the other side: lift G into the first tier of
+    // memory and H's tag for G wears the name
+    const fameG = await S.G.page.evaluate(() => netFame().mine);
+    t('G has fame to be named by (charter + liberation)', fameG >= 15, `fame ${fameG}`);
+    const epithet = await until(() => S.H.page.evaluate(() => netEpithetOf('VerifyG') || false));
+    t("H's tag for G wears the epithet", epithet === 'the Seen' || epithet === 'the Steady' || epithet === 'the Named' || epithet === 'the Good Hand', epithet);
+    t('G wears the same name on the own rank line', !!(await S.G.page.evaluate(ep =>
+        document.getElementById('pilotRank').textContent.includes(`, ${ep}`), epithet)));
+
+    await S.G.context.close().catch(() => {});
+    await S.H.context.close().catch(() => {});
+    S.G = S.H = null;
+}
+
 // Corrupt-save guard: one bad row in `pilots` must not brick the connect
 // path (unguarded, the JSON.parse throw rode the ws message handler into
 // uncaughtException — one corrupt row = the whole server down on every
@@ -2044,6 +2132,7 @@ const SUITES = [
     ['amnesty', amnestySuite],
     ['crawl', crawlSuite],
     ['fame', fameSuite],
+    ['karma', karmaSuite],
     ['saveguard', saveguardSuite],
     ['health', healthSuite],
     ['bounds', boundsSuite],

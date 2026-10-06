@@ -862,23 +862,34 @@ function wreckerQuote() {
         if (d < best) { best = d; planet = p; }
     });
     const T = CombatCore.COMBAT_TUNING;
-    return { planet, dist: best, price: Math.round(T.hulkTowBase + best * T.hulkTowPerUnit) };
+    // Karma courtesy (slice 4): a pilot the road remembers kindly MAY get the
+    // tow free — the quote says so, the roll happens at the hook.
+    const courtesy = !!(game.pilot && (game.pilot.karma || 0) >= T.towCourtesyKarma);
+    return { planet, dist: best, price: Math.round(T.hulkTowBase + best * T.hulkTowPerUnit), courtesy };
 }
 
 function callWreckers() {
     const quote = wreckerQuote();
     if (!quote) return;
-    if (game.ship.credits < quote.price) {
+    const T = CombatCore.COMBAT_TUNING;
+    // The road remembers kindness: high-karma pilots sometimes ride free
+    const waved = quote.courtesy && Math.random() < T.towCourtesyChance;
+    if (!waved && game.ship.credits < quote.price) {
         showHudFeedback(`The wreckers quote $${quote.price} to ${quote.planet.name} — you can't cover it. Keep crawling.`, 'error', 5000);
         return;
     }
-    game.ship.credits -= quote.price;
+    if (!waved) game.ship.credits -= quote.price;
     game.ship.x = quote.planet.x + 45;
     game.ship.y = quote.planet.y;
     game.ship.velocity.x = 0;
     game.ship.velocity.y = 0;
-    addShipLog(`Towed in dark to ${quote.planet.name} by the wreckers ($${quote.price}).`);
-    showHudFeedback(`The wreckers hook the hulk — towed to ${quote.planet.name} for $${quote.price}`, 'success', 6000);
+    if (waved) {
+        addShipLog(`Towed in dark to ${quote.planet.name} by the wreckers — fee waved, the road remembers.`);
+        showHudFeedback(`The wreckers hook the hulk and wave the fee — "the road remembers." Towed to ${quote.planet.name}`, 'success', 7000);
+    } else {
+        addShipLog(`Towed in dark to ${quote.planet.name} by the wreckers ($${quote.price}).`);
+        showHudFeedback(`The wreckers hook the hulk — towed to ${quote.planet.name} for $${quote.price}`, 'success', 6000);
+    }
     dock(quote.planet); // silence ends on docking; the dockhands finish the job
 }
 window.callWreckers = callWreckers;

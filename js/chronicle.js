@@ -14,7 +14,12 @@
 // fire every few minutes and trim against their own short cap so churn can't
 // pressure charters/foundings/liberations out. Unknown kinds count as history.
 const CHRONICLE_CLIENT_MAX = 100;        // notable history
-const CHRONICLE_CLIENT_MARKET_MAX = 12;  // market churn: roughly the last hour
+const CHRONICLE_CLIENT_MARKET_MAX = 12;  // minor churn (markets, escorts): roughly the last hour
+// Minor kinds: ambiance and routine deeds that share the short cap and stay
+// out of the away digest's headline (slice 4 added escort arrivals — a karma
+// deed worth a line, not a landmark). Mirrors the server's set.
+const CHRONICLE_MINOR_KINDS = new Set(['market.event', 'escort.arrived']);
+const chronicleIsMinor = e => CHRONICLE_MINOR_KINDS.has(e.kind);
 
 const chronicle = {
     entries: [],        // shared ledger, oldest → newest (server order)
@@ -26,12 +31,12 @@ const chronicle = {
 // stays connected across many market events converges on the same entries a
 // fresh snapshot would carry.
 function trimChronicleEntries(list) {
-    let markets = 0;
-    for (const e of list) if (e.kind === 'market.event') markets++;
-    let dropM = markets - CHRONICLE_CLIENT_MARKET_MAX;
-    let dropN = (list.length - markets) - CHRONICLE_CLIENT_MAX;
+    let minor = 0;
+    for (const e of list) if (chronicleIsMinor(e)) minor++;
+    let dropM = minor - CHRONICLE_CLIENT_MARKET_MAX;
+    let dropN = (list.length - minor) - CHRONICLE_CLIENT_MAX;
     if (dropM <= 0 && dropN <= 0) return list;
-    return list.filter(e => (e.kind === 'market.event' ? --dropM < 0 : --dropN < 0));
+    return list.filter(e => (chronicleIsMinor(e) ? --dropM < 0 : --dropN < 0));
 }
 
 // welcome landed: stamp lastSeen and re-arm the digest for this connection.
@@ -125,6 +130,14 @@ function formatChronicleEntry(e) {
             return `${e.pilot} walked from the ${e.faction}`;
         case 'faction.disbanded':
             return `${e.pilot} folded the ${e.faction} banner`;
+        case 'escort.arrived':
+            // Karma's kind lane (slice 4), errand-voiced: the freighter's
+            // errand ended well, and someone's guns are why.
+            return `${e.pilot} brought the freighter ${e.freighter} home`;
+        case 'wreck.looted':
+            // The one cold deed the Reach can witness. No "stole" — the pods
+            // were anyone's; the judgement is in whose they had been.
+            return `${e.pilot} picked ${e.victim}'s pockets while the hull was dark`;
         default:
             return `${e.kind}${e.pilot ? ` — ${e.pilot}` : ''}`;
     }
@@ -139,7 +152,7 @@ function maybeShowChronicleDigest() {
     chronicle.digestShown = true;
     const unseen = chronicleUnseen();
     if (unseen.length === 0 || typeof showHudFeedback !== 'function') return;
-    const notable = unseen.filter(e => e.kind !== 'market.event');
+    const notable = unseen.filter(e => !chronicleIsMinor(e));
     if (notable.length === 0) {
         showHudFeedback('While you were away — only the markets stirred', 'info', 8000);
         return;
@@ -183,7 +196,7 @@ function updateChroniclePanelUI() {
     let marketLines = 2;
     for (let i = chronicle.entries.length - 1; i >= 0 && recent.length < 8; i--) {
         const e = chronicle.entries[i];
-        if (e.kind === 'market.event' && --marketLines < 0) continue;
+        if (chronicleIsMinor(e) && --marketLines < 0) continue;
         recent.push(e);
     }
     list.innerHTML = (recent.length === 0 ? '' : `<div class="log-sect">the reach's chronicle</div>`) +
@@ -211,7 +224,7 @@ window.netChronicle = function () {
         kinds,
         lastSeen: chronicle.lastSeen,
         unseen: unseen.length,
-        unseenNotable: unseen.filter(e => e.kind !== 'market.event').length,
+        unseenNotable: unseen.filter(e => !chronicleIsMinor(e)).length,
         digestShown: chronicle.digestShown,
         latest: chronicle.entries.slice(-8).map(e => ({ at: e.at, kind: e.kind, text: formatChronicleEntry(e) }))
     };

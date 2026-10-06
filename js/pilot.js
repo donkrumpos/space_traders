@@ -19,7 +19,41 @@ const PILOT_RANKS = [
 // Perks / grudges / crew live here from day one so the save format is stable;
 // the systems that consume them arrive in their own features.
 function createDefaultPilot() {
-    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [], faction: null, fame: 0 };
+    return { xp: 0, rank: 0, perks: [], pendingPerkChoices: 0, grudges: {}, crew: [], faction: null, fame: 0, karma: 0 };
+}
+
+// Fame × karma → epithet (docs/death-design.md slice 4, the UO lane
+// Reach-voiced). Fame is how much of the Reach's memory is about you; karma
+// is how that memory judges you. Both are server-fed off the chronicle
+// funnel (js/net.js mirrors them onto the pilot doc). An epithet obeys the
+// naming law (lore-bible §3): a concrete image with a mood, granted only
+// after chronicled deeds — so a nobody stays a nobody however kind, and the
+// first tier needs real history behind it. Thresholds are v1 tuning.
+const FAME_TIERS = [15, 40, 80];          // known / noted / storied
+const KARMA_KIND = 8;                     // at or above: the road remembers kindness
+const KARMA_COLD = -8;                    // at or below: the road remembers that too
+const EPITHETS = {
+    //          known            noted             storied
+    cold:  ['the Picker',   'the Vulture',   'the Dread'],
+    plain: ['the Seen',     'the Named',     'the Storied'],
+    kind:  ['the Steady',   'the Good Hand', 'the Lodestar']
+};
+
+function fameTierOf(fame) {
+    let tier = -1;
+    for (const t of FAME_TIERS) if ((fame || 0) >= t) tier++;
+    return tier; // -1 = unremembered
+}
+
+function karmaLaneOf(karma) {
+    const k = karma || 0;
+    return k >= KARMA_KIND ? 'kind' : k <= KARMA_COLD ? 'cold' : 'plain';
+}
+
+// null until the Reach has enough to say about you
+function epithetFor(fame, karma) {
+    const tier = fameTierOf(fame);
+    return tier < 0 ? null : EPITHETS[karmaLaneOf(karma)][tier];
 }
 
 function rankForXP(xp) {

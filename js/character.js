@@ -177,6 +177,7 @@ class CharacterManager {
         if (!game.pilot.crew) game.pilot.crew = [];
         if (!Array.isArray(game.pilot.discoveredPOIs)) game.pilot.discoveredPOIs = [];
         if (typeof game.pilot.fame !== 'number') game.pilot.fame = 0; // fame v1 migration
+        if (typeof game.pilot.karma !== 'number') game.pilot.karma = 0; // karma (slice 4) migration
         reapplyPerkEffects();
         updateFactionUI();
 

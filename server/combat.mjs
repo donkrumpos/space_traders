@@ -57,6 +57,11 @@ const newId = prefix => `${prefix}${seq++}`;
 // (the M2 relay path), credits/cargo from the last char doc
 const pilots = new Map();
 
+// "looter|wreckId" pairs already judged (slice 4): one karma dent per wreck
+// picked over, however many pods it took. Pods expire in 90s, so the set
+// only ever holds a session's worth; cleared when it grows past that.
+const lootedWrecks = new Set();
+
 let broadcast = () => {};   // injected by startCombat
 let tickN = 0;
 let simNow = 0;             // accumulated sim seconds (frozen while asleep)
@@ -347,7 +352,8 @@ function tick() {
             name: t.name, fleeing: !!t.fleeing // additive fields, clients may ignore
         })),
         drops: state.drops.map(d => ({
-            id: d.id, x: d.x, y: d.y, kind: d.kind, goodType: d.goodType, qty: d.qty
+            id: d.id, x: d.x, y: d.y, kind: d.kind, goodType: d.goodType, qty: d.qty,
+            wreckOf: d.wreckOf || null // additive (slice 4): whose breach these pods are
         })),
         shots: shots.map(s => ({
             enemyId: s.enemyId, targetPilot: nearestPilotName(s.x, s.y, targets),
@@ -418,10 +424,23 @@ export function handleCombatMessage(ws, msg, send) {
             // (The old wreck-pod owner-lock died with the respawn: under the
             // Crawl the wrecked pilot can't claim while dark, and the pods
             // are the victor's reward — first scoop wins, no exceptions.)
+            // Karma (slice 4) is the only judge: scooping a family member's
+            // scattered share while their hull is dark is the one cold deed
+            // the Reach can witness. Judged ONCE per (looter, wreck) — the
+            // ledger gets a line, not one per pod — and never for your own
+            // pods (a recovered pilot reclaiming their hold owes nothing).
             const idx = state.drops.findIndex(d => d.id === msg.dropId);
             if (idx === -1) return true;
-            state.drops.splice(idx, 1);
+            const [drop] = state.drops.splice(idx, 1);
             broadcast({ t: 'drop.taken', dropId: msg.dropId, by: ws.pilot });
+            if (drop.wreckOf && drop.wreckOf !== ws.pilot) {
+                const key = `${ws.pilot}|${drop.wreckId}`;
+                if (!lootedWrecks.has(key)) {
+                    if (lootedWrecks.size > 500) lootedWrecks.clear(); // pods expire in 90s; this is a session's worth
+                    lootedWrecks.add(key);
+                    recordChronicle('wreck.looted', { pilot: ws.pilot, victim: drop.wreckOf });
+                }
+            }
             return true;
         }
 
@@ -434,6 +453,7 @@ export function handleCombatMessage(ws, msg, send) {
             const x = Number(msg.x), y = Number(msg.y);
             if (!Number.isFinite(x) || !Number.isFinite(y) || !msg.cargo) return true;
             let budget = 150; // cap total units against a malformed client
+            const wreckId = newId('w'); // one breach = one wreck for the karma judge
             for (const g of Object.keys(msg.cargo).slice(0, 12)) {
                 let qty = Math.min(Math.floor(Number(msg.cargo[g])) || 0, budget);
                 budget -= qty;
@@ -445,6 +465,7 @@ export function handleCombatMessage(ws, msg, send) {
                         x: x + (Math.random() - 0.5) * 240,
                         y: y + (Math.random() - 0.5) * 240,
                         kind: 'cargo', goodType: g, qty: podQty,
+                        wreckOf: ws.pilot, wreckId, // whose hold this was (slice 4: the karma judge reads it)
                         expiresAt: simNow + 90 // outlives the crawl's darkest stretch
                     });
                 }

@@ -88,6 +88,10 @@ function escortArrived(t) {
         addXP(40, 'escort');
         updateMissionsUI();
         autoSave('escort');
+        // Karma (slice 4): a freighter brought home is the kind lane's
+        // clearest deed. Escorts are client-local (M3), so this is a claim
+        // — the server chronicles it and the karma rides back on the wire.
+        if (trafficNetOnline()) net.send({ t: 'escort.arrived', freighter: t.name });
     }
     // The contract ends; the freighter melts back into ordinary traffic
     t.isEscort = false;
