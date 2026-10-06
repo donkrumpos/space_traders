@@ -214,6 +214,8 @@ function updateMiniMap() {
 
     // Points of interest: charted landmarks + uncharted "?" contacts
     if (typeof renderPOIMinimap === 'function') renderPOIMinimap(ctx, centerX, centerY, scale, range);
+    // The Singing Reactor's song: a fading pip, edge-clamped as a bearing
+    if (typeof renderExpeditionMinimap === 'function') renderExpeditionMinimap(ctx, centerX, centerY, scale, range);
 
     // Draw ship (center) - more prominent
     ctx.fillStyle = '#00ff00';
@@ -377,6 +379,8 @@ function updateFullMap() {
 
     // Charted points of interest (landmarks). Uncharted sites stay hidden.
     if (typeof renderPOIFullMap === 'function') renderPOIFullMap(ctx, scale, offsetX, offsetY);
+    // Expedition fixes (personal; never extends the map bounds — the site stays hidden)
+    if (typeof renderExpeditionFullMap === 'function') renderExpeditionFullMap(ctx, scale, offsetX, offsetY);
 
     // Asteroid fields
     if (game.asteroids) {

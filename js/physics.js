@@ -44,6 +44,9 @@ function update() {
     // (js/exploration.js). Not while running silent — the Crawl's rule is
     // no interactions while dark: the ghost state is recovery, not passage.
     if (!game.hulkState && typeof updatePOIDetection === 'function') updatePOIDetection();
+    // The Singing Reactor's pulse + arrival (js/expedition.js). Fixed-step
+    // dt, so headless virtual time hears the same song.
+    if (typeof updateExpedition === 'function') updateExpedition(1 / 60);
 
     // Variable rotation system for combat precision
     updateRotationSystem();

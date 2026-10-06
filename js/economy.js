@@ -236,6 +236,7 @@ function updateMissionsUI() {
             return `<div class="ledger-row"><span>☠ ${m.name} — near ${m.nearPlanet}</span>
                 <span style="color:#ff6666;">$${m.reward}</span></div>`;
         }
+        if (m.type === 'expedition') return expeditionMissionRow(m);
         if (m.type === 'escort') {
             return `<div class="ledger-row"><span>⛡ ${m.traderName} → ${m.dest}</span>
                 <span style="color:#44ddff;">$${m.reward}</span></div>`;
@@ -253,7 +254,8 @@ function updateMissionBoardUI(planet) {
     if (!el) return;
     const logFull = game.missions.length >= 3;
 
-    let html = '';
+    // The Lastlight dispatcher (js/expedition.js) — per-pilot, never a shared slot
+    let html = typeof expeditionDispatchHtml === 'function' ? expeditionDispatchHtml(planet) : '';
     if (planet.bountyOffer) {
         const b = planet.bountyOffer;
         html += `<div class="trade-item" style="border-color:#883344;">

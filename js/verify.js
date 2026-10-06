@@ -991,6 +991,117 @@ VERIFY_SUITES.exploration = (assert) => {
     updateUI();
 };
 
+// The Singing Reactor, slice 1 (docs/expedition-design.md): the Lastlight
+// dispatcher, the preparation check, the hidden hauler, and the signal pulse.
+VERIFY_SUITES.expedition = (assert) => {
+    const EC = ExpeditionCore, T = EC.EXPEDITION_TUNING, H = EC.HAULER;
+    const saved = {
+        x: game.ship.x, y: game.ship.y, cargo: { ...game.ship.cargo },
+        missions: (game.missions || []).slice(), mods: (game.ship.mods || []).slice(),
+        log: (game.ship.log || []).slice(), currentPlanet: game.currentPlanet,
+        isDocked: game.isDocked, hulkState: game.hulkState, expedition: game.expedition
+    };
+
+    // Pure rules
+    assert('jitter is widest far out and tightest close in',
+        EC.pulseJitter(99999) === T.jitterFar && EC.pulseJitter(0) === T.jitterNear &&
+        EC.pulseJitter(1500) > T.jitterNear && EC.pulseJitter(1500) < T.jitterFar);
+    let inside = true;
+    for (let i = 0; i < 60; i++) {
+        const f = EC.pulseFix(H.x - 2000, H.y);
+        const dx = f.x - H.x, dy = f.y - H.y;
+        if (Math.sqrt(dx * dx + dy * dy) > f.jitter + 0.001) inside = false;
+    }
+    assert('every pulse lands inside its jitter disk', inside);
+    assert('signal words climb as you close',
+        EC.signalWord(3000) === 'faint' && EC.signalWord(2000) === 'clear' &&
+        EC.signalWord(800) === 'strong' && EC.signalWord(100) === 'loud');
+    assert('offer withheld while a reactor is held in any form',
+        EC.offerAvailable([], {}, []) &&
+        !EC.offerAvailable([{ type: 'expedition' }], {}, []) &&
+        !EC.offerAvailable([], { reactor: 4 }, []) &&
+        !EC.offerAvailable([], {}, ['singing_reactor']));
+    const lastlight = game.planets.find(p => p.name === EC.DISPATCH_PORT);
+    assert('the hauler sits outside the settled core, Lastlight inside it',
+        EC.outsideCore(H.x, H.y, game.planets) && !EC.outsideCore(lastlight.x, lastlight.y, game.planets));
+
+    // Hidden: not a POI, and off the minimap from the dispatch port
+    assert('the hauler is not a shared POI', !(game.pois || []).some(p => p.id === H.id));
+    assert('the hauler is beyond minimap range from Lastlight',
+        EC.distToHauler(lastlight.x, lastlight.y) > game.map.miniMapRange);
+
+    // Dispatcher: only at Lastlight, prep gates the accept
+    game.missions = [];
+    game.ship.mods = (game.ship.mods || []).filter(id => id !== 'singing_reactor');
+    game.ship.cargo = {};
+    game.currentPlanet = game.planets.find(p => p.name !== EC.DISPATCH_PORT);
+    updateMissionBoardUI(game.currentPlanet);
+    assert('no dispatch at other ports', !document.getElementById('missionBoard').textContent.includes('SINGING REACTOR'));
+    game.currentPlanet = lastlight;
+    updateMissionBoardUI(lastlight);
+    assert('Lastlight posts the dispatch with its prep list',
+        document.getElementById('missionBoard').textContent.includes('SINGING REACTOR') &&
+        document.getElementById('missionBoard').textContent.includes('Repair Kits'));
+    acceptExpedition();
+    assert('no kits → the dispatcher refuses', !game.missions.some(m => m.type === 'expedition'));
+
+    game.ship.cargo = { parts: T.kitsRequired };
+    acceptExpedition();
+    const m = game.missions.find(x => x.type === 'expedition');
+    assert('prepared → the contract is taken', !!m && m.stage === 'outbound' && m.found === false);
+    assert('mission log shows the expedition', document.getElementById('missionList').textContent.includes('Singing reactor'));
+    updateMissionBoardUI(lastlight);
+    assert('dispatch flips to under-contract with an abandon', document.getElementById('missionBoard').textContent.includes('under contract'));
+
+    // The pulse: a fix arrives on the period, wide far out, tight close in
+    game.isDocked = false; game.hulkState = null;
+    game.ship.x = H.x - 2800; game.ship.y = H.y;
+    game.expedition.t = 0; game.expedition.pips = [];
+    for (let i = 0; i < Math.ceil(T.pulsePeriodSec * 60) - 2; i++) updateExpedition(1 / 60);
+    assert('no pulse before the period', game.expedition.pips.length === 0);
+    for (let i = 0; i < 4; i++) updateExpedition(1 / 60);
+    const far = game.expedition.pips[game.expedition.pips.length - 1];
+    assert('a pulse lands on the period', !!far && far.jitter > 600);
+    game.ship.x = H.x - 350;
+    game.expedition.t = T.pulsePeriodSec;
+    updateExpedition(1 / 60);
+    const near = game.expedition.pips[game.expedition.pips.length - 1];
+    assert('close in, the fix is tight', near !== far && near.jitter <= T.jitterNear + 0.001);
+    assert('only the last few fixes are kept', game.expedition.pips.length <= 3);
+    assert('the Now zone carries the song', expeditionNowHtml().includes('the song is loud'));
+
+    // A docked ship hears nothing
+    game.isDocked = true;
+    const tDocked = game.expedition.t;
+    updateExpedition(1 / 60);
+    assert('docked → the pulse clock holds', game.expedition.t === tDocked);
+    game.isDocked = false;
+
+    // Arrival: not while dark, then personal knowledge
+    game.ship.x = H.x - 50; game.ship.y = H.y;
+    game.hulkState = { phase: 'crawl', t: 20 };
+    updateExpedition(1 / 60);
+    assert('running silent does not find the hauler', m.found === false);
+    game.hulkState = null;
+    updateExpedition(1 / 60);
+    assert('inside the ring → the hauler is found', m.found === true);
+    assert('the mission row says so', document.getElementById('missionList').textContent.includes('hauler found'));
+    assert('the save carries the expedition',
+        (JSON.parse(characterManager.exportCharacter()).world.missions || []).some(x => x.type === 'expedition' && x.found));
+
+    abandonExpedition();
+    assert('abandon frees the slot and re-offers', !expeditionMission() &&
+        EC.offerAvailable(game.missions, game.ship.cargo, game.ship.mods));
+
+    // Restore
+    game.ship.x = saved.x; game.ship.y = saved.y; game.ship.cargo = saved.cargo;
+    game.missions = saved.missions; game.ship.mods = saved.mods; game.ship.log = saved.log;
+    game.currentPlanet = saved.currentPlanet; game.isDocked = saved.isDocked;
+    game.hulkState = saved.hulkState; game.expedition = saved.expedition;
+    updateMissionsUI();
+    updateUI();
+};
+
 VERIFY_SUITES.starfield = (assert) => {
     assert('stars carry a tiling field', game.stars.length > 0 &&
         game.stars.every(s => s.fieldW > 0 && s.fieldH > 0));

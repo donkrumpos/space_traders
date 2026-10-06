@@ -647,6 +647,11 @@ function updateNowZone(els, ship) {
         html += `<div class="now-keys"><b>M</b> for map</div>`;
     }
 
+    // The Singing Reactor rides along in every flight state (not docked,
+    // not dark, not mid-event) — the song is always the second line you read.
+    if (state !== 'silent' && state !== 'docked' && state !== 'engaged' &&
+        typeof expeditionNowHtml === 'function') html += expeditionNowHtml();
+
     vHtml('nowBody', els.nowBody, html);
 }
 // ---------------------------------------------------------------------------
