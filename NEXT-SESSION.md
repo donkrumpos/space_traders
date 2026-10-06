@@ -39,9 +39,18 @@ probe, per docs/RUNBOOK.md — explicit go only).
    beacons as the far harbor) and a tuning question (dock repair is free
    and instant). Not acted on this session — the developer has ideas
    queued (see NEXT below).
-3. **Prod progression read was blocked** by the auto-mode classifier
-   ("production reads" — any ssh into themisto, even read-only). The
-   recipe still works from the developer's own shell:
+3. **Prod progression (developer ran the read by hand, 2026-10-05):**
+   ONE pilot on themisto — **Dad: rank 8 Living Legend (the top rung,
+   4000 XP), XP 6892, credits 1916, fame 84.** Findings: the rank ladder
+   is EXHAUSTED (~2900 XP past the ceiling earning nothing); fame 84 is
+   already the storied tier, so the deploy will read "Living Legend, the
+   Storied" with zero karma deeds — 80 is a low ceiling for a one-pilot
+   world with seven 10-fame charters; credits 1916 puts a maxed pilot in
+   the LIGHT pirate-pressure band (wealth bands key off credits, which go
+   into the ship) — that, plus free instant dock repair, is why nothing
+   threatens them near the ports. All three point the same way as item 2.
+   The classifier blocks my ssh reads ("production reads"); the recipe
+   works from the developer's own shell (`!` prefix in the prompt):
    `ssh themisto 'cd /var/www/siegeperilous && node -e "const D=require(\"better-sqlite3\");const db=new D(\"/var/lib/space-traders/world.db\",{readonly:true});for(const r of db.prepare(\"SELECT name,doc FROM pilots\").all()){const d=JSON.parse(r.doc);console.log(r.name,d.pilot&&d.pilot.rank,d.pilot&&d.pilot.xp,d.ship&&d.ship.credits,d.pilot&&d.pilot.fame)}"'`
    (typed with the `!` prefix in a Claude Code prompt it lands in the
    conversation). In-game: `exportCharacter()`.
@@ -55,10 +64,15 @@ solo +15 [karma], net +17 [karma]).
    Then the family meets karma: first `wreck.looted` line in the ledger
    is the thing to watch — does the −4 read as a fair price for the scoop
    race or as a scold? One `KARMA_DELTAS` edit either way.
-2. **The developer's ideas** (deferred this session at their request —
-   "my ideas can wait"). Hear them BEFORE picking the next slice; the
-   overpowered/quick-dock note above is the open design pressure they
-   likely address.
+2. **The developer's ideas FIRST** (deferred this session — "my ideas
+   can wait"). Hear them before picking a slice. The design pressure they
+   land on, from items 2–3: a maxed pilot (rank capped, light pressure
+   band, free quick-dock repair) has nothing to progress toward and
+   nothing pulling them past the ports. Candidate levers if the ideas
+   don't cover it: rank ladder past Living Legend or a prestige layer;
+   pressure keyed to rank/fame as well as credits; dock repair with a
+   cost or a wait; fame thresholds above 80; the expansion ladder's
+   frontier (R-slices, pinned only).
 3. **External uptime pinger** (carried a FOURTH time, developer's step —
    needs an account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
