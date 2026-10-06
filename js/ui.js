@@ -273,9 +273,14 @@ function updateUI() {
         const next = PILOT_RANKS[pilot.rank + 1];
         // Fame v1: how much of the Reach's memory is about you (server-fed
         // off the chronicle; dented by wreckings). Shown once you have any.
+        // Karma (slice 4) rides beside it once it moves either way, and the
+        // two together earn the epithet after the rank — "Captain, the Seen".
         const fame = typeof pilot.fame === 'number' && pilot.fame > 0
             ? ` · ✦ fame ${pilot.fame}` : '';
-        vText('rank', els.pilotRank, `${rank.icon} ${rank.title}${fame}`);
+        const karma = typeof pilot.karma === 'number' && pilot.karma !== 0
+            ? ` · ⚖ karma ${pilot.karma > 0 ? '+' : ''}${pilot.karma}` : '';
+        const epithet = (typeof epithetFor === 'function') ? epithetFor(pilot.fame, pilot.karma) : null;
+        vText('rank', els.pilotRank, `${rank.icon} ${rank.title}${epithet ? `, ${epithet}` : ''}${fame}${karma}`);
         vText('xp', els.xpLine, next
             ? `XP ${pilot.xp} / ${next.xp}`
             : `XP ${pilot.xp} — highest rank`);
@@ -520,7 +525,7 @@ function updateNowZone(els, ship) {
         html += `<div class="now-big" style="color:#88ddff">self-repair ${pct}%</div>`;
         const tow = typeof wreckerQuote === 'function' ? wreckerQuote() : null;
         html += tow
-            ? `<div class="now-keys"><b>T</b> wreckers tow to ${tow.planet.name} ($${tow.price}) · or dock to end it early</div>`
+            ? `<div class="now-keys"><b>T</b> wreckers tow to ${tow.planet.name} ($${tow.price}${tow.courtesy ? ', the road may remember you' : ''}) · or dock to end it early</div>`
             : `<div class="now-keys">Dock anywhere to end the silence early</div>`;
 
     } else if (state === 'engaged') {

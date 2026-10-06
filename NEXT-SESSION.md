@@ -1,92 +1,95 @@
 # Next Session Roadmap
 
-State as of 2026-09-04 (nineteenth session — **THE CRAWL BUILT + DEPLOYED,
-all three slices in one day**). Main `5d0cc5b` (pushed); **themisto runs
-main's tip** (deployed + restarted this session, verified outside-in).
-Death is gone from the game: no one ever dies in the Reach now.
+State as of 2026-10-05 (twentieth session — **slice 4 KARMA + EPITHETS
+built, merged, NOT deployed**). Main at the merge of `feat/karma-epithets`
+(`ba1cd16`); **themisto still runs `5d0cc5b`** (server/world.mjs +
+server/combat.mjs changed → deploy = pull + npm install + restart + wss
+probe, per docs/RUNBOOK.md — explicit go only).
 
-1. **Slice 1 — CRAWL CORE (867637b, merged 8a154bb).** Hulk state
-   replaces respawn end-to-end per docs/death-design.md (pinned): hull
-   zero = breach (boom + 50% cargo scatter as pods; Reliquary keeps all)
-   → running silent (~8s dead stop, then emergency-thrust crawl at the
-   sail floor, no fuel burn — no stuck states) → self-repair to full
-   over ~105s, progress on the vitals band + Now zone RUNNING SILENT
-   state + `#srAlarm` edges. Dark hull is untargetable, undamageable,
-   interaction-free, and UNRELAYED (peers see the breach, then nothing
-   until recovery — `netDarkPilots`, open-ended; recovery IS the relay
-   resuming, self-healing both sides). Server marks the pilot dark (off
-   the prey list); combat-core grew a disengage: mid-fight hostiles nose
-   away from the wreck (never-engaged ones still hold station — the
-   dock-camping rule survives). Killed: deathBanner, countdown, teleport
-   respawn, 25% credit tax, pod owner-lock (pods are the victor's
-   reward now — first scoop wins immediately). No new wire kinds:
-   pilot.death/pilot.died carry the Crawl; PROTOCOL.md grew "The Crawl —
-   hulk + recovery"; handbook §08 is now "When you fall silent".
-   Timings flag-adjustable: COMBAT_TUNING hulkStopSec 8 / hulkRepairSec
-   105 / hulkScatterFrac 0.5 (server-overridable via config.combatTuning).
-2. **Slice 2 — FAME v1 (57edf84, merged 502def0).** `world.fame` hangs
-   off the ONE chronicle funnel (recordChronicle applies FAME_DELTAS:
-   charter +10, founding +10, liberation +8, boss +5, settlement +3,
-   salvage +2, wrecked −5; floor 0 — "the Reach forgets debts, not
-   deeds"). Broadcast `fame.update` + snapshot field; client mirrors own
-   fame into game.pilot.fame (rides the char doc, works offline); rank
-   line shows `· ✦ fame n` once any exists; `netFame()` hook. Offline
-   play never accrues fame (the Reach's memory is the shared world).
-3. **Slice 3 — ECONOMY HATCHES (071de42, merged 5d0cc5b).** Fortified
-   Cargo Hold ($2800, 3 charges in game.ship.modCharges, persisted):
-   a charged breach scatters 25% not 50%, burns a charge, strips itself
-   when spent; Reliquary outranks it. The wreckers v1: **T while dark**
-   tows to the nearest port for $200 + 0.35/unit (quote live on the Now
-   zone); docking completes recovery. Both client-local by design (the
-   wire never sees them) — PROTOCOL.md documents why.
-4. **Deployed to themisto** (explicit go in the session prompt): pulled
-   `a19c8f7..5d0cc5b`, npm install, restart at 15:28 CDT with 0 pilots
-   online. Verified outside-in: wrong-secret wss probe → `reject: bad
-   secret` (in the journal too); /healthz 200 `ok:true db:true` via the
-   public proxy; statics 200 and carrying the new code (hulkState in
-   live combat.js, "When you fall silent" in the live manual); journal
-   clean (graceful stop, clean boot). **NOT verified: an authenticated
-   in-prod wrecking** — the permission classifier (rightly) blocked
-   every path that touches FAMILY_SECRET, so the "get wrecked on purpose
-   and watch yourself go dark" check is open. The wire behaviors are
-   gate-proven ([crawl] net suite); the first REAL Crawl wrecking
-   belongs to the family — Dad flew 06:15–09:33 on the old code and
-   will meet the Crawl next login. Ask him how the silence feels.
+1. **Slice 4 — KARMA + EPITHETS (ba1cd16).** `world.karma` hangs off the
+   same `recordChronicle` funnel as fame: KARMA_DELTAS grudge.settled +3,
+   poi.liberated +3, escort.arrived +3, wreck.looted −4. No floor/ceiling;
+   `pilot.died` never touches it. New wire: `karma.update` broadcast +
+   snapshot field; `escort.arrived` c→s claim (escorts are client-local
+   per M3; 5s spam guard; freighter name bounded). **The cold lane:**
+   `cargo.scatter` pods carry `wreckOf` + per-breach `wreckId`;
+   `drop.claim` on another pilot's wreck pod chronicles `wreck.looted`
+   ONCE per (looter, wreck) — the scoop race is still real, it now has a
+   price the ledger names ("X picked Y's pockets while the hull was
+   dark"); the scooper's HUD says so the first time. Epithets are
+   client-side (`js/pilot.js epithetFor`): fame tiers 15/40/80 × karma
+   lanes ≤−8 cold / ≥8 kind / plain → the Picker/Vulture/Dread, the
+   Seen/Named/Storied, the Steady/Good Hand/Lodestar; no fame → no name
+   (naming law). Own rank line: `Captain, the Seen · ✦ fame n · ⚖ karma
+   ±n`; peer tags: `Dad the Seen — Kestrel` (`netEpithetOf`). **Wrecker
+   courtesy:** karma ≥ towCourtesyKarma (8) rolls towCourtesyChance
+   (0.34) to wave the tow fee (COMBAT_TUNING, server-overridable); the
+   Now-zone quote says "the road may remember you" when eligible.
+   `escort.arrived` joins `market.event` as a MINOR chronicle kind
+   (shared 12-cap, out of the digest headline) on server + client.
+   Handbook: §Fame → "Fame, karma, and the name they earn you", §08 notes
+   the courtesy. PROTOCOL.md grew the karma block + two wire rows.
+   `netKarma()` → `{ all, mine, epithet }`.
+2. **Playtest note logged (developer, 2026-10-05):** "I'm a bit
+   overpowered since I've been playing a while. I stay around the planets
+   so if I need a repair I quick dock — haven't died yet." Diagnosis: the
+   Crawl, the hatches, and the courtesy only bite for a pilot who LEAVES
+   the ports — right now nothing pulls a strong pilot out past the quick-
+   dock radius. That is the expansion ladder's argument (frontier regions,
+   beacons as the far harbor) and a tuning question (dock repair is free
+   and instant). Not acted on this session — the developer has ideas
+   queued (see NEXT below).
+3. **Prod progression read was blocked** by the auto-mode classifier
+   ("production reads" — any ssh into themisto, even read-only). The
+   recipe still works from the developer's own shell:
+   `ssh themisto 'cd /var/www/siegeperilous && node -e "const D=require(\"better-sqlite3\");const db=new D(\"/var/lib/space-traders/world.db\",{readonly:true});for(const r of db.prepare(\"SELECT name,doc FROM pilots\").all()){const d=JSON.parse(r.doc);console.log(r.name,d.pilot&&d.pilot.rank,d.pilot&&d.pilot.xp,d.ship&&d.ship.credits,d.pilot&&d.pilot.fame)}"'`
+   (typed with the `!` prefix in a Claude Code prompt it lands in the
+   conversation). In-game: `exportCharacter()`.
 
-**Gates at tip: solo ?verify 311/311 · verify-net 244/244** (was 272/231 —
-solo +21 [crawl] +4 [fame] +14 [hatches], net +16 [crawl-rewrite] +7
-[fame]; the old cargoScatter/death suites were rewritten into them).
+**Gates at tip: solo ?verify 326/326 · verify-net 261/261** (was 311/244 —
+solo +15 [karma], net +17 [karma]).
 
 **NEXT (ordered):**
-1. **Crawl ladder continues** (docs/death-design.md, pinned): slice 4
-   karma + epithets (second axis, fame×karma title matrix, wrecker
-   karma courtesy — free tows for the kind); slice 5 beacons/hyperspace
-   stays R-gated with the expansion ladder.
-2. **External uptime pinger** (carried AGAIN, developer's step — needs
-   an account): point UptimeRobot-or-similar at
+1. **Deploy slice 4 to themisto** (explicit go): pull, npm install,
+   restart, wrong-secret wss probe, /healthz, statics carry `epithetFor`.
+   Then the family meets karma: first `wreck.looted` line in the ledger
+   is the thing to watch — does the −4 read as a fair price for the scoop
+   race or as a scold? One `KARMA_DELTAS` edit either way.
+2. **The developer's ideas** (deferred this session at their request —
+   "my ideas can wait"). Hear them BEFORE picking the next slice; the
+   overpowered/quick-dock note above is the open design pressure they
+   likely address.
+3. **External uptime pinger** (carried a FOURTH time, developer's step —
+   needs an account): point UptimeRobot-or-similar at
    https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
-3. **Ask Dad TWO things**: (a) the carried question — how the 06:13 old
-   -system death felt (it's now the LAST death the old system will ever
-   own); (b) fresh — how the first Crawl wrecking feels when it happens
-   (stop length, repair pace, the tow price). Both feed the tuning
-   flags, which are one config.combatTuning edit away.
-4. **Graphic split slice** (world/station/ruin) and **nomenclature
-   canon docs** — still awaiting the developer's go/pins.
-5. **Bucket C stays opportunistic**; expansion R-slices only when pinned.
+4. **Ask Dad** (carried): how the old 06:13 death felt, and how the first
+   Crawl wrecking feels (stop length, repair pace, tow price). Both feed
+   `config.combatTuning`.
+5. **Graphic split slice** (world/station/ruin) and **nomenclature canon
+   docs** — still awaiting the developer's pins. **Slice 5
+   beacons/hyperspace** stays R-gated with the expansion ladder.
+6. **Bucket C stays opportunistic**; expansion R-slices only when pinned.
 
 **Watchlist (carried + updated):** dock feel under the re-tuned pressure;
 Settlement tribute pricing; poi-over-combat tease line; perk picker
 re-pops per dock; ×2 occupation weight cadence; invite-while-offline UX;
 12-entry market cap (holding); manual.html public; pilot-name rules live;
-`#srAlarm` single-channel rule (the Crawl routed its breach/recovery
-edges through it — keep doing that); NEW: **crawl tuning in the wild**
-(8s stop / 105s repair / 50% scatter / $200+0.35 tow — first family
-wreckings will say if the scene drags or the tow gouges); NEW: **hulk
-state is not persisted** (reload mid-crawl comes back lit at curve hull —
-accepted family-trust edge, documented in PROTOCOL.md; revisit if
-abused); NEW: **fame deltas are v1 guesses** (10/8/5/3/2/−5) — retune
-when epithet thresholds land in slice 4; NEW: pods unlock immediately
-(owner-lock removed) — tell the family the scoop race is real now.
+`#srAlarm` single-channel rule; crawl tuning in the wild (8s / 105s / 50%
+/ $200+0.35 — no family wrecking has happened yet under the Crawl); hulk
+state not persisted (accepted edge); fame deltas v1 guesses — epithet
+thresholds (15/40/80) now exist, so the retune has targets: a pilot
+charting two sites and freeing one is "the Seen" (28); NEW: **karma
+deltas v1 guesses** (+3/+3/+3/−4; kind lane at 8 = three good deeds,
+cold at −8 = two wrecks picked over); NEW: **wreck.looted is the only
+negative lane** — there's no trader fire, no contraband, no PvP, so a
+pilot who never scoops a family member's pods can never go cold; NEW:
+**the courtesy roll is pure chance** (0.34) — if a kind pilot gets
+towed three times paying full freight it will feel broken, consider a
+pity counter; NEW: **escort.arrived is a trusted claim** (like
+damage.claim) — a looping client could farm karma; family-trust model
+accepts it, the 5s guard caps the rate; NEW: **epithets on ghost tags
+widen the label** — long pilot names + "the Good Hand" + a ship name may
+crowd at the 10px font, nobody has seen it in the wild yet.
 
 ---
 

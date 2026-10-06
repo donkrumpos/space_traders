@@ -116,6 +116,10 @@ R-slices; the beacon is designed dual-purpose from day one.
 2. **Fame v1** — counter + chronicle hooks + death dent + HUD line.
 3. **Economy hatches** — fortified hold charges + wrecker paid tow.
 4. **Karma + epithets** — second axis, title matrix, wrecker courtesy.
+   BUILT 2026-10-05 (feat/karma-epithets): lanes the Reach can see today
+   are tributes settled, sites freed, escorts brought home (+3 each) and
+   the one cold deed it can witness — picking a dark hull's pockets (−4,
+   once per wreck). Trader-gutting/smuggling join when they exist.
 5. **Beacons/hyperspace** — with the expansion R-ladder.
 
 Handbook rule applies at every slice: the Crawl changes what a player

@@ -127,8 +127,11 @@ function renderGhosts(ctx, camera) {
 
         // Label above the ship: "Pilot — Shipname", dark backing for
         // readability against the starfield. Drawn unrotated.
-        const label = ghost.shipName
-            ? `${ghost.pilot} — ${ghost.shipName}` : `${ghost.pilot}`;
+        // Slice 4: the epithet the Reach gave them rides the tag — "Dad the
+        // Seen — Kestrel". Null until the shared fame/karma maps say so.
+        const epithet = (typeof netEpithetOf === 'function') ? netEpithetOf(ghost.pilot) : null;
+        const who = epithet ? `${ghost.pilot} ${epithet}` : ghost.pilot;
+        const label = ghost.shipName ? `${who} — ${ghost.shipName}` : who;
         const labelY = screenY - shape.shield - 10;
         ctx.font = '10px Courier New';
         ctx.textAlign = 'center';

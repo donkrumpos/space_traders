@@ -459,6 +459,9 @@ function netHandleMessage(msg) {
         case 'fame.update':
             netApplyFame(msg.fame);
             break;
+        case 'karma.update':
+            netApplyKarma(msg.karma);
+            break;
         // --- M7: player factions ----------------------------------------
         case 'faction.update':
             if (typeof applyFactionRegistry === 'function') applyFactionRegistry(msg.factions);
@@ -668,6 +671,8 @@ function netApplySnapshot(snap) {
     }
     // Fame v1: the Reach's memory of every pilot (server-fed, chronicle-hung).
     if (snap.fame) netApplyFame(snap.fame);
+    // Karma (slice 4): the second axis of the epithet, same funnel.
+    if (snap.karma) netApplyKarma(snap.karma);
     // M6: cache windows for charted sites (salvage-ready markers).
     if (snap.poiState && typeof applyPOIState === 'function') {
         applyPOIState(snap.poiState);
@@ -970,6 +975,7 @@ function netUpsertDrop(w) {
     d.x = w.x; d.y = w.y;
     d.goodType = w.goodType || d.goodType || null;
     d.amount = w.qty || d.amount || 1;
+    d.wreckOf = w.wreckOf || null; // a breached pilot's scattered share (slice 4: karma reads it)
     return d;
 }
 
@@ -1158,7 +1164,17 @@ function netHandleDropTaken(msg) {
     spawnFloater(d.x, d.y - 12, `+${taken} ${goods[d.goodType].name}`, goods[d.goodType].color);
     playPickupSound();
     updateMissionsUI();
+    // Slice 4: a family member's scattered share. The server judges it once
+    // per wreck (karma −4, chronicled); the HUD says so the first time the
+    // pods from this wreck land in your hold — the choice should be felt.
+    if (d.wreckOf && d.wreckOf !== netIdentity.pilot && !netLootWarned.has(d.wreckOf)) {
+        netLootWarned.add(d.wreckOf);
+        if (typeof showHudFeedback === 'function') {
+            showHudFeedback(`Those pods were ${d.wreckOf}'s — the Reach saw you pick a dark hull's pockets`, 'warning', 6000);
+        }
+    }
 }
+const netLootWarned = new Set(); // wrecked pilots already warned about this session
 
 // Mirror shared grudges into game.pilot.grudges. Direct assignment on
 // grudge.update (server is authority); max-merge on snapshot (see
@@ -1276,7 +1292,7 @@ window.netCombat = function() {
         })),
         drops: net.getServerDrops().map(d => ({
             id: d.id, x: d.x, y: d.y, kind: d.kind || 'cargo',
-            goodType: d.goodType, qty: d.amount
+            goodType: d.goodType, qty: d.amount, wreckOf: d.wreckOf || null
         })),
         lastTickN: netLastTickN
     };
@@ -1286,6 +1302,35 @@ window.netFame = function() {
     return {
         all: { ...netFameAll },
         mine: (typeof game !== 'undefined' && game.pilot && game.pilot.fame) || 0
+    };
+};
+
+// Karma (slice 4): the Reach's judgement, mirrored exactly like fame. Own
+// karma lands on game.pilot.karma (rides the char doc, works offline from
+// the last-known value); the shared map feeds peers' epithets on their
+// name tags (js/render.js via netEpithetOf).
+let netKarmaAll = {};
+function netApplyKarma(karma) {
+    if (!karma) return;
+    netKarmaAll = karma;
+    if (typeof game === 'undefined' || !game.pilot) return;
+    game.pilot.karma = karma[netIdentity.pilot] || 0;
+    if (typeof updateUI === 'function') updateUI();
+}
+
+// A peer's epithet from the shared fame/karma maps (null until the Reach
+// has enough to say about them) — the same matrix the own rank line uses.
+function netEpithetOf(pilot) {
+    if (typeof epithetFor !== 'function') return null;
+    return epithetFor(netFameAll[pilot] || 0, netKarmaAll[pilot] || 0);
+}
+
+window.netKarma = function() {
+    return {
+        all: { ...netKarmaAll },
+        mine: (typeof game !== 'undefined' && game.pilot && game.pilot.karma) || 0,
+        epithet: (typeof game !== 'undefined' && game.pilot && typeof epithetFor === 'function')
+            ? epithetFor(game.pilot.fame, game.pilot.karma) : null
     };
 };
 

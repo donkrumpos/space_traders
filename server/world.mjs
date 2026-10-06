@@ -51,7 +51,7 @@ function rollBoard(meta) {
 // lowercased name. A row in the same ledger the Rustfang live in: plain data,
 // same world blob, no schema change. Invites are public registry data (family
 // trust model) — the client sees its own standing invite in the snapshot.
-const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, grudgeAmnesty: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {}, fame: {} };
+const world = { markets: {}, marketEvent: null, missionBoards: {}, grudges: {}, grudgeAmnesty: {}, discoveredPOIs: {}, chronicle: [], poiState: {}, nextOccupationAt: 0, factions: {}, fame: {}, karma: {} };
 
 // M6 cadence knobs — declared ABOVE the restore block below, which calls the
 // roll helpers at module init (const TDZ would bite otherwise).
@@ -64,17 +64,20 @@ const SALVAGE_JITTER_MS = 12 * 3600 * 1000;
 // so under one shared cap they turned the whole ledger over in ~9 hours and
 // every charter/founding/liberation was pressured out. They trim against
 // their own short cap instead — recent market news keeps its value, the real
-// history keeps its room. Unknown future kinds count as history.
+// history keeps its room. Unknown future kinds count as history. Escort
+// arrivals (slice 4) are the same shape of churn: a karma deed worth a line,
+// not a landmark — they share the short cap.
 const CHRONICLE_MAX = 100;        // notable history
-const CHRONICLE_MARKET_MAX = 12;  // market churn: roughly the last hour
+const CHRONICLE_MARKET_MAX = 12;  // minor churn (markets, escorts): roughly the last hour
+const CHRONICLE_MINOR_KINDS = new Set(['market.event', 'escort.arrived']);
 
 function trimChronicle(list) {
-    let markets = 0;
-    for (const e of list) if (e.kind === 'market.event') markets++;
-    let dropM = markets - CHRONICLE_MARKET_MAX;
-    let dropN = (list.length - markets) - CHRONICLE_MAX;
+    let minor = 0;
+    for (const e of list) if (CHRONICLE_MINOR_KINDS.has(e.kind)) minor++;
+    let dropM = minor - CHRONICLE_MARKET_MAX;
+    let dropN = (list.length - minor) - CHRONICLE_MAX;
     if (dropM <= 0 && dropN <= 0) return list;
-    return list.filter(e => (e.kind === 'market.event' ? --dropM < 0 : --dropN < 0));
+    return list.filter(e => (CHRONICLE_MINOR_KINDS.has(e.kind) ? --dropM < 0 : --dropN < 0));
 }
 const OCCUPATION_MIN_MS = 12 * 3600 * 1000;   // occupation roll: 12-24h apart
 const OCCUPATION_JITTER_MS = 12 * 3600 * 1000;
@@ -103,6 +106,7 @@ const CLAIM_OCCUPY_WEIGHT = 2;                // claimed sites draw raiders (M7)
     if (saved && saved.nextOccupationAt) world.nextOccupationAt = saved.nextOccupationAt;
     if (saved && saved.factions) world.factions = saved.factions;
     if (saved && saved.fame) world.fame = saved.fame;
+    if (saved && saved.karma) world.karma = saved.karma;
     // Migration: sites charted before caches existed get a cycle seeded now,
     // so a live world's landmarks start regenerating on the next deploy.
     for (const id of Object.keys(world.discoveredPOIs)) {
@@ -321,6 +325,25 @@ const FAME_DELTAS = {
     'pilot.died': -5        // got wrecked — the dent
 };
 
+// Karma (slice 4): how the Reach's memory judges you — the second axis of
+// the epithet matrix (js/pilot.js epithetFor). Same funnel, same rule: only
+// chronicled deeds move it. No floor and no ceiling: the road remembers
+// kindness and it remembers the other thing. A wrecking never touches karma
+// (death-design: "Death never touches karma").
+//
+// The lanes the Reach can see today: tributes settled, sites freed, escorts
+// brought home (a client claim — escorts are client-local per the M3 rule,
+// family trust model) — and the one cold deed the world can witness,
+// picking a dark hull's pockets (combat.mjs drop.claim on a wreckOf pod).
+// Trader-gutting and smuggling have no mechanic yet; they land here when
+// they do.
+const KARMA_DELTAS = {
+    'grudge.settled': 3,    // tribute paid — a cartel's debt eased for everyone
+    'poi.liberated': 3,     // drove the squatters out of a site the family shares
+    'escort.arrived': 3,    // brought a freighter home under your guns
+    'wreck.looted': -4      // picked a dark hull's pockets — the Reach saw
+};
+
 function famePilotOf(kind, detail) {
     return (kind === 'faction.founded' ? detail.founder : detail.pilot) || null;
 }
@@ -335,6 +358,12 @@ export function recordChronicle(kind, detail) {
     if (who) {
         world.fame[who] = Math.max(0, (world.fame[who] || 0) + delta);
         broadcast({ t: 'fame.update', fame: world.fame });
+    }
+    const kDelta = KARMA_DELTAS[kind];
+    const judged = kDelta ? detail.pilot : null;
+    if (judged) {
+        world.karma[judged] = (world.karma[judged] || 0) + kDelta;
+        broadcast({ t: 'karma.update', karma: world.karma });
     }
     markDirty();
     return entry;
@@ -455,7 +484,8 @@ export function worldSnapshotMessage() {
         chronicle: world.chronicle,
         poiState: world.poiState,
         factions: world.factions,
-        fame: world.fame
+        fame: world.fame,
+        karma: world.karma
     };
 }
 
@@ -738,6 +768,25 @@ export function handleWorldMessage(ws, msg, send) {
                 pilot: ws.pilot, faction: f.name, good: f.amnesty.good, units, remaining
             });
             markDirty();
+            return true;
+        }
+
+        case 'escort.arrived': {
+            // A freighter made port under this pilot's guns. Escorts are
+            // client-local (M3 rule — they touch game.traders), so this is a
+            // claim like damage.claim: trusted, identity from the socket,
+            // the freighter's name bounded because it reaches every ledger.
+            // Chronicled as a minor kind (shares the market cap) and fed to
+            // karma (+3) through the one funnel.
+            const freighter = typeof msg.freighter === 'string'
+                ? msg.freighter.replace(/[<>&]/g, '').trim().slice(0, 40) : '';
+            if (!freighter) return true;
+            // A real escort takes minutes; a claim a second after the last is
+            // a loop, not a convoy — same spam guard shape as pilot.death.
+            const now = Date.now();
+            if (ws.lastEscortAt && now - ws.lastEscortAt < 5000) return true;
+            ws.lastEscortAt = now;
+            recordChronicle('escort.arrived', { pilot: ws.pilot, freighter });
             return true;
         }
 

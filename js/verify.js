@@ -810,6 +810,92 @@ VERIFY_SUITES.fame = (assert) => {
     updateUI();
 };
 
+VERIFY_SUITES.karma = (assert) => {
+    // Karma + epithets (docs/death-design.md slice 4): accrual is server-fed
+    // off the chronicle funnel (net gate); solo owns the pilot-doc mirror,
+    // the fame×karma matrix, the HUD surface, and the wreckers' courtesy.
+    const T = CombatCore.COMBAT_TUNING;
+    const saved = { fame: game.pilot.fame, karma: game.pilot.karma,
+        courtesyChance: T.towCourtesyChance };
+    assert('a pilot carries a karma counter', typeof game.pilot.karma === 'number');
+    assert('a fresh pilot starts unjudged', createDefaultPilot().karma === 0);
+
+    // The matrix: fame gates the name, karma picks the lane
+    assert('no fame, no epithet — however kind', epithetFor(0, 50) === null && epithetFor(14, 0) === null);
+    assert('the first tier of memory earns "the Seen"', epithetFor(15, 0) === 'the Seen');
+    assert('kindness colors the name', epithetFor(15, 8) === 'the Steady');
+    assert('one point short of kind stays plain', epithetFor(15, 7) === 'the Seen');
+    assert('the cold lane has its own names', epithetFor(40, -8) === 'the Vulture');
+    assert('the storied tiers crown the matrix',
+        epithetFor(80, 0) === 'the Storied' && epithetFor(120, 30) === 'the Lodestar' && epithetFor(80, -20) === 'the Dread');
+
+    // The rank line: epithet after the rank, karma chip once it moves
+    const rankEl = document.getElementById('pilotRank');
+    game.pilot.fame = 40; game.pilot.karma = -9;
+    updateUI();
+    assert('the rank line wears the epithet and both chips',
+        !!rankEl && /, the Vulture · ✦ fame 40 · ⚖ karma -9/.test(rankEl.textContent), rankEl && rankEl.textContent);
+    game.pilot.fame = 0; game.pilot.karma = 0;
+    updateUI();
+    assert('zero karma stays off the rank line', !!rankEl && !/karma/.test(rankEl.textContent));
+
+    // The wreckers' courtesy: a kind pilot's tow may be waved; nobody else's
+    const ship = { cargo: { ...game.ship.cargo }, credits: game.ship.credits,
+        x: game.ship.x, y: game.ship.y, hull: game.ship.hull, shield: game.ship.shield,
+        mods: (game.ship.mods || []).slice(), streak: game.combatStreak, grace: game.undockGraceTimer };
+    const guards = { invuln: game.testInvulnerable, docked: game.isDocked };
+    game.testInvulnerable = false; game.isDocked = false;
+    game.ship.mods = ['reliquary_hold']; // nothing scatters — the hulk is all we want
+    const dropsBefore = game.drops.length;
+    const visited = characterManager.character && characterManager.character.progress.planetsVisited;
+    const markVisited = name => { if (visited && !visited.includes(name)) visited.push(name); };
+
+    handlePlayerDestruction();
+    game.pilot.karma = T.towCourtesyKarma - 1;
+    let q = wreckerQuote();
+    assert('one point short of kind buys no courtesy', !!q && q.courtesy === false);
+    game.pilot.karma = T.towCourtesyKarma;
+    q = wreckerQuote();
+    assert('a kind pilot is quoted with the road\'s memory', !!q && q.courtesy === true);
+    T.towCourtesyChance = 0;
+    markVisited(q.planet.name);
+    game.ship.credits = q.price + 300;
+    callWreckers();
+    assert('a courtesy that doesn\'t roll still charges the quote',
+        game.isDocked && !game.hulkState && game.ship.credits === 300);
+    undock();
+
+    T.towCourtesyChance = 1;
+    handlePlayerDestruction();
+    q = wreckerQuote();
+    game.ship.credits = 0; // broke AND kind: the crew waves the fee anyway
+    callWreckers();
+    assert('the road remembers — the fee is waved for the kind',
+        game.isDocked && !game.hulkState && game.ship.credits === 0 && game.currentPlanet === q.planet);
+    undock();
+
+    game.pilot.karma = 0;
+    handlePlayerDestruction();
+    q = wreckerQuote();
+    game.ship.credits = q.price - 1;
+    callWreckers();
+    assert('an unjudged pilot pays full freight even on a sure roll', !!game.hulkState);
+    finishHulkRecovery('repair');
+
+    // Restore
+    T.towCourtesyChance = saved.courtesyChance;
+    game.pilot.fame = saved.fame; game.pilot.karma = saved.karma;
+    game.testInvulnerable = guards.invuln; game.isDocked = guards.docked;
+    game.drops.length = dropsBefore;
+    game.ship.cargo = ship.cargo; game.ship.credits = ship.credits;
+    game.ship.x = ship.x; game.ship.y = ship.y;
+    game.ship.hull = ship.hull; game.ship.shield = ship.shield;
+    game.ship.mods = ship.mods; game.combatStreak = ship.streak;
+    game.undockGraceTimer = ship.grace;
+    game.currentPlanet = null;
+    updateUI();
+};
+
 VERIFY_SUITES.exploration = (assert) => {
     assert('POIs loaded from the shared roster', Array.isArray(game.pois) && game.pois.length >= 1);
     const poi = game.pois.find(p => p.id === 'wraith_cache') || game.pois[0];

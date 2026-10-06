@@ -129,7 +129,11 @@
         hulkScatterFrac: 0.5,       // share of the hold that blows out as pods
         hulkFortifiedFrac: 0.25,    // the scattered share with a charged fortified hold
         hulkTowBase: 200,           // wrecker call-out fee ...
-        hulkTowPerUnit: 0.35        // ... plus this per unit of tow distance
+        hulkTowPerUnit: 0.35,       // ... plus this per unit of tow distance
+        // Wrecker courtesy (slice 4): the road remembers kindness. At or above
+        // this karma, each tow has this chance of the crew waving the fee.
+        towCourtesyKarma: 8,
+        towCourtesyChance: 0.34
     };
 
     // Pure crawl-state math, shared by browser, server, and both gates.
