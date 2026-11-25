@@ -9,7 +9,9 @@ need to deviate, update this file in the same commit.
 - **VPS:** themisto (the cal.yonderartland.com box — Apache + Let's Encrypt,
   Debian-family, runs Radicale). **Deploy adapts from the Caddy plan to an
   Apache vhost + `mod_proxy_wstunnel`.** Ssh details TBD before M5.
-- **Domain:** `siegeperilousstudio.com` (root — the game's whole home).
+- **Domain:** `spacetraders.siegeperilousstudio.com` since 2026-11-19. It was
+  first the root, `siegeperilousstudio.com`, which is now the game Siege
+  Perilous.
 - **Friendly fire:** OFF. Ghosts are render-only; player projectiles never
   collide with peers. Do not add ghost collision.
 - **Raid scaling:** scale to pilots online. Solo pilot → base-size bands;
@@ -21,7 +23,7 @@ need to deviate, update this file in the same commit.
 ## Topology
 
 ```
-prod:   browser ── wss://siegeperilousstudio.com/ws ── Apache ── ws://127.0.0.1:8378 (node, systemd)
+prod:   browser ── wss://spacetraders.siegeperilousstudio.com/ws ── Apache ── ws://127.0.0.1:8378 (node, systemd)
         static game files: Apache DocumentRoot /var/www/siegeperilous (git checkout)
 dev:    browser ── ws://127.0.0.1:8378 ── node server.mjs (also serves static when STATIC_DIR set)
 verify: verify-net.mjs spawns server on a scratch port w/ temp SQLite + STATIC_DIR=repo root,

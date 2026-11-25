@@ -75,7 +75,7 @@ solo +15 [karma], net +17 [karma]).
    frontier (R-slices, pinned only).
 3. **External uptime pinger** (carried a FOURTH time, developer's step —
    needs an account): point UptimeRobot-or-similar at
-   https://siegeperilousstudio.com/healthz, alert on non-200/ok:false.
+   https://spacetraders.siegeperilousstudio.com/healthz, alert on non-200/ok:false.
 4. **Ask Dad** (carried): how the old 06:13 death felt, and how the first
    Crawl wrecking feels (stop length, repair pace, tow price). Both feed
    `config.combatTuning`.

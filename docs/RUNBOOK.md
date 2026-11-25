@@ -1,12 +1,14 @@
 # Themisto Runbook — Space Traders Deploy (M5)
 
-Deployed 2026-07-08. The game lives at **https://siegeperilousstudio.com**.
+Deployed 2026-07-08. The game lives at
+**https://spacetraders.siegeperilousstudio.com**. It moved there from the root
+of the domain on 2026-11-19, when the root became the game Siege Perilous.
 
 ## The one-screen version
 
 | What | Where |
 |---|---|
-| Game URL | https://siegeperilousstudio.com (first visit asks pilot name + family secret) |
+| Game URL | https://spacetraders.siegeperilousstudio.com (first visit asks pilot name + family secret) |
 | Family secret | NOT in this public repo — read it on themisto: `grep FAMILY_SECRET /etc/systemd/system/space-traders.service` (change it there, then `daemon-reload` + restart). Since 2026-09-02 the server **refuses to start** if the env var is missing (no more dev-secret fallback) |
 | VPS | themisto = ServaRica, `162.250.190.20`, ssh port `3465`, user `don` |
 | Ssh from any of Foggy's machines | `ssh themisto` (Host block in `~/.ssh/config`; key auth only) |
@@ -145,7 +147,7 @@ connected.
 
 ## First-visit setup on a family machine
 
-1. Open https://siegeperilousstudio.com
+1. Open https://spacetraders.siegeperilousstudio.com
 2. Pilot name: `Dad` or `Arthur` (this is the save identity — pick once, keep it)
 3. Family secret: the one in the systemd unit (see table above — Dad knows it)
 4. An existing local save uploads as that pilot's server character on first

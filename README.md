@@ -5,9 +5,9 @@ flight over a living economic sim, played on a shared persistent
 multiplayer server. Vanilla HTML/CSS/JS with no build step; a Node
 (`ws` + `better-sqlite3`) server owns the shared world.
 
-**Play it:** the game lives at https://siegeperilousstudio.com (family
+**Play it:** the game lives at https://spacetraders.siegeperilousstudio.com (family
 server, secret required). The full in-world game manual — the Pilot's
-Handbook — is public at https://siegeperilousstudio.com/manual.html
+Handbook — is public at https://spacetraders.siegeperilousstudio.com/manual.html
 (also in this repo as [`manual.html`](manual.html)).
 
 ## What's in the game

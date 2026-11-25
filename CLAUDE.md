@@ -2,7 +2,7 @@
 
 Browser-based space trading/combat game, physics flight over an economic sim,
 played by the family on a shared multiplayer server (deployed to
-siegeperilousstudio.com, VPS nicknamed "themisto"). Vanilla HTML/CSS/JS, no
+spacetraders.siegeperilousstudio.com, VPS nicknamed "themisto"). Vanilla HTML/CSS/JS, no
 build step; Node + ws + better-sqlite3 server. Direction: a persistent online
 world you log into anytime and progress in — exploration as reward, RPG layers,
 a living shared world (see the `space-traders-direction` memory).
